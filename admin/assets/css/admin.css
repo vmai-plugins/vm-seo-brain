@@ -1556,7 +1556,11 @@
 
 /* ---------------------------------------------------------------- keyword elements */
 
-.vmsb-keyword-insights { display: grid; grid-template-columns: 1fr 300px; gap: 20px; margin-bottom: 30px; }
+/* align-items: start - without it, CSS Grid's default "stretch" forces the
+   left column (three short stat cards) to match the height of the taller
+   Position Distribution/Cluster Health card on the right, leaving each
+   stat card's number and label stranded at the top over a large dead gap. */
+.vmsb-keyword-insights { display: grid; grid-template-columns: 1fr 300px; gap: 20px; margin-bottom: 30px; align-items: start; }
 
 @media (max-width: 1024px) {
 	.vmsb-keyword-insights { grid-template-columns: 1fr; }
