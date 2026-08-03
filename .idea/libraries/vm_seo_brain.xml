@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="vm-seo-brain">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/vm-seo-brain.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
