@@ -207,7 +207,11 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 				<section class="vmsb-panel" data-panel="google">
 					<section class="vmsb-fieldset">
 						<h2>Google Cloud Connectivity</h2>
-						<?php if ( $google->is_connected() ) : ?><p class="vmsb-verdict vmsb-verdict-good">✅ Search Console & Sheets Connected</p><?php endif; ?>
+						<?php if ( $google->is_connected() ) : ?>
+							<p class="vmsb-status-line is-good">✅ Search Console & Sheets Connected</p>
+						<?php else : ?>
+							<p class="vmsb-status-line is-warning">⚠️ Not connected — authorize below to enable Sheets sync and Search Console data.</p>
+						<?php endif; ?>
 						<div class="vmsb-form-grid">
 							<label>Client ID<input type="text" name="<?php echo esc_attr( $field( 'google_client_id' ) ); ?>" value="<?php echo esc_attr( $s['google_client_id'] ); ?>"></label>
 							<label>Client Secret<input type="password" name="<?php echo esc_attr( $field( 'google_client_secret' ) ); ?>" value="<?php echo esc_attr( $s['google_client_secret'] ); ?>" autocomplete="new-password"></label>

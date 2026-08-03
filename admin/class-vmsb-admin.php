@@ -344,6 +344,19 @@ class VMSB_Admin {
 			58
 		);
 
+		// WordPress auto-creates a first submenu item that duplicates the
+		// parent's label ("SEO Brain") if we don't claim that slug ourselves -
+		// registering it explicitly with a distinct "Dashboard" label avoids
+		// the confusing "SEO Brain > SEO Brain" repetition in the sidebar.
+		add_submenu_page(
+			'vmsb',
+			'VM SEO Brain — Dashboard',
+			'Dashboard',
+			VMSB_CAP,
+			'vmsb',
+			array( $this, 'render_dashboard' )
+		);
+
 		$pages = array(
 			'vmsb-issues'     => 'Issues',
 			'vmsb-keywords'   => 'Keywords',

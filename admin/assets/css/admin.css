@@ -244,6 +244,7 @@
 .vmsb-btn-gold:hover { background: var(--gold-soft); color: #000; box-shadow: 0 6px 20px rgba(212, 175, 55, 0.5); }
 
 .vmsb-mini-btn {
+	font: inherit;
 	font-size: 11px;
 	padding: 5px 12px;
 	border-radius: 6px;
@@ -253,7 +254,7 @@
 	cursor: pointer;
 	transition: all 0.2s;
 }
-.vmsb-mini-btn:hover { border-color: var(--gold); color: var(--text); background: var(--panel); }
+.vmsb-mini-btn:hover { border-color: var(--gold); color: var(--gold-soft); background: var(--panel); }
 
 .vmsb-mini-btn.vmsb-sync-models {
 	border-color: rgba(212, 175, 55, 0.3);
@@ -268,18 +269,6 @@
 
 .vmsb-btn-block { width: 100%; margin-top: 14px; }
 .vmsb-btn[disabled] { opacity: .45; cursor: progress; }
-
-.vmsb-mini-btn {
-	font: inherit;
-	font-size: 11px;
-	padding: 4px 10px;
-	background: transparent;
-	border: 1px solid var(--line);
-	border-radius: 2px;
-	color: var(--muted);
-	cursor: pointer;
-}
-.vmsb-mini-btn:hover { color: var(--gold-soft); border-color: var(--gold); }
 
 /* ---------------------------------------------------------------- cards */
 
@@ -334,9 +323,9 @@
 	transition: width .6s ease;
 }
 
-.vmsb-verdict { font-size: 13px; line-height: 1.6; margin: 0 0 16px; color: var(--muted); }
-.vmsb-verdict-good    { color: var(--good); }
-.vmsb-verdict-warning { color: var(--high); }
+.vmsb-status-line { font-size: 13px; line-height: 1.6; margin: 0 0 16px; color: var(--muted); }
+.vmsb-status-line.is-good    { color: var(--good); }
+.vmsb-status-line.is-warning { color: var(--high); }
 
 .vmsb-note { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 8px 0; }
 .vmsb-error { color: var(--crit); font-size: 12px; }
@@ -1767,5 +1756,27 @@
 
 @media (max-width: 480px) {
 	.vmsb-hub-grid { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------------------------- WP admin
+   sidebar accent. The dark/gold "SEO Brain" panels sit inside the plain
+   default WP menu with zero visual link between them - jumping from a
+   generic dashicon and stock highlight color straight into the branded
+   pages reads as two different products. This scopes a gold accent to just
+   the SEO Brain top-level item and its submenu, using the plugin's own
+   --gold (#d4af37) hardcoded since #adminmenu lives outside .vmsb's scope
+   for CSS custom properties. */
+#adminmenu #toplevel_page_vmsb .wp-menu-image:before { color: #d4af37; }
+#adminmenu #toplevel_page_vmsb.wp-has-current-submenu .wp-menu-image:before,
+#adminmenu #toplevel_page_vmsb:hover .wp-menu-image:before { color: #f4cf6d; }
+
+#adminmenu #toplevel_page_vmsb.wp-has-current-submenu > a.wp-has-current-submenu {
+	border-left: 3px solid #d4af37;
+}
+
+#adminmenu #toplevel_page_vmsb .wp-submenu a.wp-has-current-submenu,
+#adminmenu #toplevel_page_vmsb .wp-submenu li.current a,
+#adminmenu #toplevel_page_vmsb .wp-submenu a:focus {
+	color: #f4cf6d !important;
 }
 
