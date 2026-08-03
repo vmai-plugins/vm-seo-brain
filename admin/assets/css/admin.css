@@ -276,6 +276,13 @@
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);
 	gap: 20px;
+	/* Grid's default "stretch" force-matches every row's shortest card to its
+	   tallest sibling - harmless when cards happen to be equal height already,
+	   but on rows with genuinely different content lengths (e.g. Silo map's
+	   wide radar card next to the shorter Structural Health card) it leaves
+	   a large dead gap under the shorter card's content. "start" lets each
+	   card size to its own content instead. */
+	align-items: start;
 }
 
 @media (max-width: 1400px) {
