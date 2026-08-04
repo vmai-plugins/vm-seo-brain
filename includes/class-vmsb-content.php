@@ -1089,11 +1089,15 @@ class VMSB_Content {
 			}
 		}
 
-		// 4. Social Media Automation (VM Social AI)
-		if ( class_exists('VMSB_Social_Recycler') ) {
-			( new VMSB_Social_Recycler() )->generate_social_pack( $post_id );
-			$this->log->info( 'content', "Triggered Social Distribution Pack generation for post #{$post_id}." );
-		}
+		// 4. Social Media Automation - deliberately NOT triggered here. This
+		// method runs when sync_external_publications() catches up on a post
+		// that already went live (e.g. published by AI Puffer's own
+		// automation) via Sheet-polling, which happens after the fact.
+		// WordPress's publish_post hook already fired the moment that post
+		// actually went live, and VM Social AI listens for it directly - so
+		// by the time this catch-up sequence runs, VM Social AI has already
+		// handled distribution. Generating a second pack here paid for the
+		// same social copy twice for every externally-detected publish.
 
 		// 5. Apply Persona E-E-A-T
 		if ( class_exists('VMSB_Persona') ) {

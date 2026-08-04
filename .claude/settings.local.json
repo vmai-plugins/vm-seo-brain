@@ -73,7 +73,9 @@
       "Bash(tail -n 30 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")",
       "Bash(tail -n 15 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")",
       "Bash(git status *)",
-      "Bash(git commit -q -m 'Group each AI provider'\\\\''s settings fields into their own row instead of a flat 3-col flow *)"
+      "Bash(git commit -q -m 'Group each AI provider'\\\\''s settings fields into their own row instead of a flat 3-col flow *)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-social-recycler.php)",
+      "Bash(git commit -q -m 'Fix redundant social-generation trigger between VM SEO Brain and VM Social AI *)"
     ]
   }
 }

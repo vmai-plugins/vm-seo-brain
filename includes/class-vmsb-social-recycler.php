@@ -18,49 +18,39 @@ class VMSB_Social_Recycler {
 	}
 
 	/**
-	 * Process recently published posts and "Golden Oldies" for social distribution.
-	 * Advanced 2026: Automatic authority recycling.
+	 * Process "Golden Oldies" for social distribution.
+	 *
+	 * Used to also cover freshly-published posts (last 24h), but that's
+	 * exactly what VM Social AI's own publish_post hook already handles -
+	 * it fires on any post publish regardless of source (VM SEO Brain,
+	 * an external automation, or a human editor) and has done so since
+	 * before this scheduled task next runs. Running our own AI call for
+	 * the same fresh post paid for social copy twice and risked two
+	 * uncoordinated posts on the same channels. Recycling old content is
+	 * the part VM Social AI's one-time, publish-moment hook can never
+	 * reach on its own, so that's what this is scoped to now.
 	 */
 	public function process_recent( $limit = 3 ) {
 		$done = 0;
 
-		// 1. Fresh Content (Last 24 hours)
-		$fresh = get_posts( array(
-			'posts_per_page' => 2,
-			'meta_query'     => array( array( 'key' => '_vmsb_social_done', 'compare' => 'NOT EXISTS' ) ),
+		// Golden Oldies (High traffic, older than 90 days, not shared recently)
+		$oldies = get_posts( array(
+			'posts_per_page' => $limit,
 			'post_status'    => 'publish',
 			'post_type'      => 'post',
-			'date_query'     => array( 'after' => '24 hours ago' )
+			'date_query'     => array( 'before' => '90 days ago' ),
+			'meta_query'     => array(
+				'relation' => 'OR',
+				array( 'key' => '_vmsb_social_last_recycle', 'compare' => 'NOT EXISTS' ),
+				array( 'key' => '_vmsb_social_last_recycle', 'value' => date( 'Y-m-d', strtotime( '-30 days' ) ), 'compare' => '<' )
+			)
 		) );
 
-		foreach ( $fresh as $post ) {
-			if ( $done >= $limit ) break;
+		foreach ( $oldies as $post ) {
 			$this->generate_social_pack( $post->ID );
-			update_post_meta( $post->ID, '_vmsb_social_done', current_time( 'mysql' ) );
+			update_post_meta( $post->ID, '_vmsb_social_last_recycle', current_time( 'mysql' ) );
+			$this->log->info( 'social', "Recycling Golden Oldie: {$post->post_title}" );
 			$done++;
-		}
-
-		// 2. Golden Oldies (High traffic, older than 90 days, not shared recently)
-		if ( $done < $limit ) {
-			$oldies = get_posts( array(
-				'posts_per_page' => 1,
-				'post_status'    => 'publish',
-				'post_type'      => 'post',
-				'date_query'     => array( 'before' => '90 days ago' ),
-				'meta_query'     => array(
-					'relation' => 'OR',
-					array( 'key' => '_vmsb_social_last_recycle', 'compare' => 'NOT EXISTS' ),
-					array( 'key' => '_vmsb_social_last_recycle', 'value' => date( 'Y-m-d', strtotime( '-30 days' ) ), 'compare' => '<' )
-				)
-			) );
-
-			foreach ( $oldies as $post ) {
-				if ( $done >= $limit ) break;
-				$this->generate_social_pack( $post->ID );
-				update_post_meta( $post->ID, '_vmsb_social_last_recycle', current_time( 'mysql' ) );
-				$this->log->info( 'social', "Recycling Golden Oldie: {$post->post_title}" );
-				$done++;
-			}
 		}
 
 		return $done;
