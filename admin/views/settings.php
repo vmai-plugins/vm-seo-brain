@@ -106,81 +106,91 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 								</span>
 							</label>
 
-							<label>AI Puffer URL<input type="url" name="<?php echo esc_attr( $field( 'aipuffer_url' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_url'] ); ?>" placeholder="Leave empty for local AI Power / AI Engine"></label>
-							<label>AI Puffer Key<input type="password" name="<?php echo esc_attr( $field( 'aipuffer_key' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_key'] ); ?>" autocomplete="new-password"></label>
-							<label>AI Puffer KB ID<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_kb_id' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_kb_id'] ); ?>"></label>
-							<label>AI Puffer Bot ID
-								<div class="vmsb-input-group">
-									<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_bot_id' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_bot_id'] ); ?>" id="vmsb-aipuffer-bot-id">
-									<button type="button" class="vmsb-mini-btn" id="vmsb-sync-bots">Sync</button>
-									<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="aipuffer">Test</button>
-								</div>
-								<select id="vmsb-bot-selector" style="display: none; margin-top: 4px;"></select>
-							</label>
+							<div class="vmsb-full vmsb-provider-row">
+								<label>AI Puffer URL<input type="url" name="<?php echo esc_attr( $field( 'aipuffer_url' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_url'] ); ?>" placeholder="Leave empty for local AI Power / AI Engine"></label>
+								<label>AI Puffer Key<input type="password" name="<?php echo esc_attr( $field( 'aipuffer_key' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_key'] ); ?>" autocomplete="new-password"></label>
+								<label>AI Puffer KB ID<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_kb_id' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_kb_id'] ); ?>"></label>
+								<label>AI Puffer Bot ID
+									<div class="vmsb-input-group">
+										<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_bot_id' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_bot_id'] ); ?>" id="vmsb-aipuffer-bot-id">
+										<button type="button" class="vmsb-mini-btn" id="vmsb-sync-bots">Sync</button>
+										<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="aipuffer">Test</button>
+									</div>
+									<select id="vmsb-bot-selector" style="display: none; margin-top: 4px;"></select>
+								</label>
+							</div>
 
-							<label>OpenRouter Key<input type="password" name="<?php echo esc_attr( $field( 'openrouter_key' ) ); ?>" value="<?php echo esc_attr( $s['openrouter_key'] ); ?>" autocomplete="new-password"></label>
-							<label>OpenRouter Model
-								<div class="vmsb-input-group">
-									<input type="text" name="<?php echo esc_attr( $field( 'openrouter_model' ) ); ?>" value="<?php echo esc_attr( $s['openrouter_model'] ); ?>" id="vmsb-openrouter-model">
-									<button type="button" class="vmsb-mini-btn vmsb-sync-models" data-provider="openrouter">Sync</button>
-									<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="openrouter">Test</button>
-								</div>
-								<?php $or_models = VMSB_Model_Sync::get_models('openrouter'); ?>
-								<select class="vmsb-model-selector" data-target="vmsb-openrouter-model" style="<?php echo empty($or_models) ? 'display:none;' : ''; ?> margin-top: 4px;">
-									<option value="">Select a model...</option>
-									<?php foreach ($or_models as $m) : ?>
-										<option value="<?php echo esc_attr($m['id']); ?>" <?php selected($s['openrouter_model'], $m['id']); ?>><?php echo esc_html($m['name']); ?></option>
-									<?php endforeach; ?>
-								</select>
-							</label>
+							<div class="vmsb-full vmsb-provider-row">
+								<label>OpenRouter Key<input type="password" name="<?php echo esc_attr( $field( 'openrouter_key' ) ); ?>" value="<?php echo esc_attr( $s['openrouter_key'] ); ?>" autocomplete="new-password"></label>
+								<label>OpenRouter Model
+									<div class="vmsb-input-group">
+										<input type="text" name="<?php echo esc_attr( $field( 'openrouter_model' ) ); ?>" value="<?php echo esc_attr( $s['openrouter_model'] ); ?>" id="vmsb-openrouter-model">
+										<button type="button" class="vmsb-mini-btn vmsb-sync-models" data-provider="openrouter">Sync</button>
+										<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="openrouter">Test</button>
+									</div>
+									<?php $or_models = VMSB_Model_Sync::get_models('openrouter'); ?>
+									<select class="vmsb-model-selector" data-target="vmsb-openrouter-model" style="<?php echo empty($or_models) ? 'display:none;' : ''; ?> margin-top: 4px;">
+										<option value="">Select a model...</option>
+										<?php foreach ($or_models as $m) : ?>
+											<option value="<?php echo esc_attr($m['id']); ?>" <?php selected($s['openrouter_model'], $m['id']); ?>><?php echo esc_html($m['name']); ?></option>
+										<?php endforeach; ?>
+									</select>
+								</label>
+							</div>
 
-							<label>Gemini Key<input type="password" name="<?php echo esc_attr( $field( 'gemini_key' ) ); ?>" value="<?php echo esc_attr( $s['gemini_key'] ); ?>" autocomplete="new-password"></label>
-							<label>Gemini Model
-								<div class="vmsb-input-group">
-									<input type="text" name="<?php echo esc_attr( $field( 'gemini_model' ) ); ?>" value="<?php echo esc_attr( $s['gemini_model'] ); ?>" id="vmsb-gemini-model">
-									<button type="button" class="vmsb-mini-btn vmsb-sync-models" data-provider="gemini">Sync</button>
-									<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="gemini">Test</button>
-								</div>
-								<?php $ge_models = VMSB_Model_Sync::get_models('gemini'); ?>
-								<select class="vmsb-model-selector" data-target="vmsb-gemini-model" style="<?php echo empty($ge_models) ? 'display:none;' : ''; ?> margin-top: 4px;">
-									<option value="">Select a model...</option>
-									<?php foreach ($ge_models as $m) : ?>
-										<option value="<?php echo esc_attr($m['id']); ?>" <?php selected($s['gemini_model'], $m['id']); ?>><?php echo esc_html($m['name']); ?></option>
-									<?php endforeach; ?>
-								</select>
-							</label>
+							<div class="vmsb-full vmsb-provider-row">
+								<label>Gemini Key<input type="password" name="<?php echo esc_attr( $field( 'gemini_key' ) ); ?>" value="<?php echo esc_attr( $s['gemini_key'] ); ?>" autocomplete="new-password"></label>
+								<label>Gemini Model
+									<div class="vmsb-input-group">
+										<input type="text" name="<?php echo esc_attr( $field( 'gemini_model' ) ); ?>" value="<?php echo esc_attr( $s['gemini_model'] ); ?>" id="vmsb-gemini-model">
+										<button type="button" class="vmsb-mini-btn vmsb-sync-models" data-provider="gemini">Sync</button>
+										<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="gemini">Test</button>
+									</div>
+									<?php $ge_models = VMSB_Model_Sync::get_models('gemini'); ?>
+									<select class="vmsb-model-selector" data-target="vmsb-gemini-model" style="<?php echo empty($ge_models) ? 'display:none;' : ''; ?> margin-top: 4px;">
+										<option value="">Select a model...</option>
+										<?php foreach ($ge_models as $m) : ?>
+											<option value="<?php echo esc_attr($m['id']); ?>" <?php selected($s['gemini_model'], $m['id']); ?>><?php echo esc_html($m['name']); ?></option>
+										<?php endforeach; ?>
+									</select>
+								</label>
+							</div>
 
-							<label>OpenAI Key<input type="password" name="<?php echo esc_attr( $field( 'openai_key' ) ); ?>" value="<?php echo esc_attr( $s['openai_key'] ); ?>" autocomplete="new-password"></label>
-							<label>OpenAI Model
-								<div class="vmsb-input-group">
-									<input type="text" name="<?php echo esc_attr( $field( 'openai_model' ) ); ?>" value="<?php echo esc_attr( $s['openai_model'] ); ?>" id="vmsb-openai-model">
-									<button type="button" class="vmsb-mini-btn vmsb-sync-models" data-provider="openai">Sync</button>
-									<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="openai">Test</button>
-								</div>
-								<?php $oa_models = VMSB_Model_Sync::get_models('openai'); ?>
-								<select class="vmsb-model-selector" data-target="vmsb-openai-model" style="<?php echo empty($oa_models) ? 'display:none;' : ''; ?> margin-top: 4px;">
-									<option value="">Select a model...</option>
-									<?php foreach ($oa_models as $m) : ?>
-										<option value="<?php echo esc_attr($m['id']); ?>" <?php selected($s['openai_model'], $m['id']); ?>><?php echo esc_html($m['name']); ?></option>
-									<?php endforeach; ?>
-								</select>
-							</label>
+							<div class="vmsb-full vmsb-provider-row">
+								<label>OpenAI Key<input type="password" name="<?php echo esc_attr( $field( 'openai_key' ) ); ?>" value="<?php echo esc_attr( $s['openai_key'] ); ?>" autocomplete="new-password"></label>
+								<label>OpenAI Model
+									<div class="vmsb-input-group">
+										<input type="text" name="<?php echo esc_attr( $field( 'openai_model' ) ); ?>" value="<?php echo esc_attr( $s['openai_model'] ); ?>" id="vmsb-openai-model">
+										<button type="button" class="vmsb-mini-btn vmsb-sync-models" data-provider="openai">Sync</button>
+										<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="openai">Test</button>
+									</div>
+									<?php $oa_models = VMSB_Model_Sync::get_models('openai'); ?>
+									<select class="vmsb-model-selector" data-target="vmsb-openai-model" style="<?php echo empty($oa_models) ? 'display:none;' : ''; ?> margin-top: 4px;">
+										<option value="">Select a model...</option>
+										<?php foreach ($oa_models as $m) : ?>
+											<option value="<?php echo esc_attr($m['id']); ?>" <?php selected($s['openai_model'], $m['id']); ?>><?php echo esc_html($m['name']); ?></option>
+										<?php endforeach; ?>
+									</select>
+								</label>
+							</div>
 
-							<label>Ollama URL<input type="url" name="<?php echo esc_attr( $field( 'ollama_url' ) ); ?>" value="<?php echo esc_attr( $s['ollama_url'] ); ?>"></label>
-							<label>Ollama Model
-								<div class="vmsb-input-group">
-									<input type="text" name="<?php echo esc_attr( $field( 'ollama_model' ) ); ?>" value="<?php echo esc_attr( $s['ollama_model'] ); ?>" id="vmsb-ollama-model">
-									<button type="button" class="vmsb-mini-btn vmsb-sync-models" data-provider="ollama">Sync</button>
-									<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="ollama">Test</button>
-								</div>
-								<?php $ol_models = VMSB_Model_Sync::get_models('ollama'); ?>
-								<select class="vmsb-model-selector" data-target="vmsb-ollama-model" style="<?php echo empty($ol_models) ? 'display:none;' : ''; ?> margin-top: 4px;">
-									<option value="">Select a model...</option>
-									<?php foreach ($ol_models as $m) : ?>
-										<option value="<?php echo esc_attr($m['id']); ?>" <?php selected($s['ollama_model'], $m['id']); ?>><?php echo esc_html($m['name']); ?></option>
-									<?php endforeach; ?>
-								</select>
-							</label>
+							<div class="vmsb-full vmsb-provider-row">
+								<label>Ollama URL<input type="url" name="<?php echo esc_attr( $field( 'ollama_url' ) ); ?>" value="<?php echo esc_attr( $s['ollama_url'] ); ?>"></label>
+								<label>Ollama Model
+									<div class="vmsb-input-group">
+										<input type="text" name="<?php echo esc_attr( $field( 'ollama_model' ) ); ?>" value="<?php echo esc_attr( $s['ollama_model'] ); ?>" id="vmsb-ollama-model">
+										<button type="button" class="vmsb-mini-btn vmsb-sync-models" data-provider="ollama">Sync</button>
+										<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="ollama">Test</button>
+									</div>
+									<?php $ol_models = VMSB_Model_Sync::get_models('ollama'); ?>
+									<select class="vmsb-model-selector" data-target="vmsb-ollama-model" style="<?php echo empty($ol_models) ? 'display:none;' : ''; ?> margin-top: 4px;">
+										<option value="">Select a model...</option>
+										<?php foreach ($ol_models as $m) : ?>
+											<option value="<?php echo esc_attr($m['id']); ?>" <?php selected($s['ollama_model'], $m['id']); ?>><?php echo esc_html($m['name']); ?></option>
+										<?php endforeach; ?>
+									</select>
+								</label>
+							</div>
 						</div>
 					</section>
 

@@ -503,7 +503,7 @@
 	margin-top: 24px;
 }
 
-.vmsb-form-grid > label {
+.vmsb-form-grid label {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
@@ -511,6 +511,19 @@
 	font-weight: 600;
 	color: var(--muted);
 	min-width: 0;
+}
+
+/* Each provider (AI Puffer, OpenRouter, Gemini, OpenAI, Ollama...) gets its
+   own isolated 3-column row instead of flowing into the shared grid - with
+   a plain flow, providers whose field count isn't a multiple of 3 spill
+   into their neighbor's row (e.g. OpenAI Key was landing next to Gemini's
+   fields while OpenAI Model landed next to Ollama's, splitting a provider's
+   own key/model pair across two unrelated rows). */
+.vmsb-form-grid .vmsb-provider-row {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 20px;
 }
 
 .vmsb-input-group {
@@ -809,6 +822,7 @@
 	.vmsb-grid { grid-template-columns: repeat(2, 1fr); }
 	.vmsb-silos { grid-template-columns: repeat(2, 1fr); }
 	.vmsb-form-grid { grid-template-columns: repeat(2, 1fr); }
+	.vmsb-form-grid .vmsb-provider-row { grid-template-columns: repeat(2, 1fr); }
 	.vmsb-orphans { columns: 2; }
 	.vmsb-pipeline-grid { grid-template-columns: repeat(3, 1fr); }
 }
@@ -824,6 +838,7 @@
 	.vmsb { margin: 12px 12px 30px 0; padding: 22px 18px 30px; }
 	.vmsb h1 { font-size: 28px; }
 	.vmsb-grid, .vmsb-silos, .vmsb-form-grid, .vmsb-cards, .vmsb-pipeline-grid { grid-template-columns: 1fr; }
+	.vmsb-form-grid .vmsb-provider-row { grid-template-columns: 1fr; }
 	.vmsb-card-wide { grid-column: span 1; }
 	.vmsb-orphans { columns: 1; }
 	.vmsb-inline-form, .vmsb-inline-filters { flex-direction: column; align-items: stretch; }
