@@ -52,7 +52,26 @@
       "mcp__claude-in-chrome__resize_window",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l admin/class-vmsb-admin.php)",
+      "Bash(awk '$1>1')",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l admin/views/settings.php)",
+      "mcp__claude-in-chrome__javascript_tool",
+      "Bash(grep -rln \"Cannot load %s\\\\|Cannot load '\" \"/c/Users/tripc/Local Sites/test/app/public/wp-content/\" \"/c/Users/tripc/Local Sites/test/app/public/wp-admin/\" 2>/dev/null | head -20)",
+      "Bash(grep -n \"Cannot load\" \"/c/Users/tripc/Local Sites/test/app/public/wp-admin/admin.php\")",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l admin/views/issues.php)",
+      "mcp__claude-in-chrome__read_page",
+      "mcp__claude-in-chrome__form_input",
+      "Bash(tail -n 100 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")",
+      "Bash(grep -rn '\\\\$google->request\\\\|\\\\$this->google->request\\\\|VMSB_Google\\(\\)\\)->request' includes/ admin/)",
+      "Bash(wc -l \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")",
+      "mcp__claude-in-chrome__find",
+      "mcp__claude-in-chrome__read_network_requests",
+      "Bash(sleep 20; tail -n 40 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")",
+      "Bash(grep -n \"function request\\(\" \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/includes/class-vmsb-google.php\")",
+      "Bash(stat -c '%y' \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/includes/class-vmsb-google.php\" *)",
+      "Bash(tail -n 30 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")",
+      "Bash(tail -n 15 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")"
     ]
   }
 }
