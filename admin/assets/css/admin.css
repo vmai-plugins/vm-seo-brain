@@ -1568,11 +1568,13 @@
    left column (three short stat cards) to match the height of the taller
    Position Distribution/Cluster Health card on the right, leaving each
    stat card's number and label stranded at the top over a large dead gap. */
-.vmsb-keyword-insights { display: grid; grid-template-columns: 1fr 300px; gap: 20px; margin-bottom: 30px; align-items: start; }
-
-@media (max-width: 1024px) {
-	.vmsb-keyword-insights { grid-template-columns: 1fr; }
-}
+/* Stacked, not side-by-side: the 3 stat cards and the Position Distribution/
+   Cluster Health panel have genuinely different content lengths, and any
+   shared-row layout (grid or flex) reserves row height for the taller one
+   regardless of align-items - the shorter column still leaves a dead gap
+   before the row ends. Stacking removes the mismatch instead of just
+   repositioning content within it. */
+.vmsb-keyword-insights { display: grid; grid-template-columns: 1fr; gap: 20px; margin-bottom: 30px; }
 
 .vmsb-kw-main { min-width: 180px; }
 .vmsb-pos-badge { font-weight: 700; font-family: var(--mono); }
