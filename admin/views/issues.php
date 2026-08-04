@@ -6,8 +6,14 @@ $fixer   = new VMSB_Fixer();
 $counts  = $fixer->counts();
 $pending = ( new VMSB_Content() )->pending_reviews( 50 );
 
+// The filter field below is named vmsb_post_type, not post_type - WordPress
+// core treats any `post_type` query var on admin.php as a signal that the
+// page is a post-type-scoped submenu (like edit.php?post_type=post) and
+// resolves the menu hook differently for it. Since this plugin page isn't
+// registered that way, a bare `post_type` param here made admin.php fail to
+// find the page hook entirely and white-screen with "Cannot load vmsb-issues."
 $current_severity  = isset( $_GET['severity'] ) ? sanitize_key( $_GET['severity'] ) : '';
-$current_post_type = isset( $_GET['post_type'] ) ? sanitize_key( $_GET['post_type'] ) : '';
+$current_post_type = isset( $_GET['vmsb_post_type'] ) ? sanitize_key( $_GET['vmsb_post_type'] ) : '';
 $current_rule      = isset( $_GET['rule'] ) ? sanitize_key( $_GET['rule'] ) : '';
 
 $issues = $fixer->open_issues( 300, $current_severity, $current_post_type, $current_rule );
@@ -126,7 +132,7 @@ foreach ( $exclude_types as $et ) {
 				<?php endforeach; ?>
 			</select>
 
-			<select name="post_type">
+			<select name="vmsb_post_type">
 				<option value="">All Post Types</option>
 				<?php foreach ( $post_types as $pt ) : ?>
 					<option value="<?php echo esc_attr( $pt->name ); ?>" <?php selected( $current_post_type, $pt->name ); ?>><?php echo esc_html( $pt->label ); ?></option>
