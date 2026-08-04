@@ -176,8 +176,12 @@ $sheet  = VMSB_Settings::get( 'sheet_id' );
 						<tr><td colspan="7" class="vmsb-note">Nothing planned yet.</td></tr>
 					<?php endif; ?>
 					<?php foreach ( $rows as $row ) :
-						$q_report = $row->post_id ? get_post_meta($row->post_id, '_vmsb_quality_report', true) : null;
-						$score = $q_report ? ($q_report['score'] ?? 0) : 0;
+						// VMSB_Quality_Gate::attach_report() saves to '_vmsb_quality', not
+						// '_vmsb_quality_report' - this was reading a meta key that never
+						// gets written, so the Quality column always showed "-".
+						$q_report = $row->post_id ? get_post_meta($row->post_id, '_vmsb_quality', true) : null;
+						$score    = $q_report ? ($q_report['score'] ?? 0) : 0;
+						$claims   = $q_report['checks']['alignment']['unverified_claims'] ?? array();
 					?>
 						<tr data-id="<?php echo (int) $row->id; ?>">
 							<td><input type="checkbox" class="vmsb-row-cb" value="<?php echo (int) $row->id; ?>"></td>
@@ -198,6 +202,16 @@ $sheet  = VMSB_Settings::get( 'sheet_id' );
 								<?php endif; ?>
 								<?php if ( $row->last_error ) : ?>
 									<br><span class="vmsb-error"><?php echo esc_html( $row->last_error ); ?></span>
+								<?php endif; ?>
+								<?php if ( $claims ) : ?>
+									<div class="vmsb-claims-flag" title="Flagged by the quality gate before this could publish unattended">
+										⚠ Needs a source check:
+										<ul>
+											<?php foreach ( array_slice( $claims, 0, 5 ) as $claim ) : ?>
+												<li><?php echo esc_html( $claim ); ?></li>
+											<?php endforeach; ?>
+										</ul>
+									</div>
 								<?php endif; ?>
 							</td>
 							<td>

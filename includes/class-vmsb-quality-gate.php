@@ -82,7 +82,16 @@ class VMSB_Quality_Gate {
 		//    own understanding of the business. A writer grading itself is
 		//    worthless, so this reads the brain profile, not the draft's promise.
 		$alignment = self::alignment_check( $text, $context );
-		$checks['alignment'] = array( 'weight' => 25, 'score' => $alignment['score'], 'detail' => $alignment['detail'] );
+		$checks['alignment'] = array(
+			'weight'             => 25,
+			'score'              => $alignment['score'],
+			'detail'             => $alignment['detail'],
+			// Previously computed only to decide the verdict, then discarded -
+			// a reviewer saw "contains claims that need checking" with no way
+			// to see what those claims actually were, short of re-reading the
+			// whole article hunting for anything that looked unsourced.
+			'unverified_claims'  => $alignment['unverified_claims'],
+		);
 		if ( $alignment['score'] > 0 && $alignment['score'] < (int) VMSB_Settings::get( 'quality_min_alignment' ) ) {
 			$blocking[] = 'Does not match the business: ' . $alignment['detail'];
 		}
@@ -183,7 +192,11 @@ class VMSB_Quality_Gate {
 		$ai     = new VMSB_AI_Router();
 		$prompt = "You are the final check before this draft is published. Be strict.\n\n"
 			. "TITLE: {$context['title']}\nTARGET QUERY: {$context['keyword']}\n\n"
-			. "DRAFT (first 6000 chars):\n" . mb_substr( $text, 0, 6000 ) . "\n\n"
+			// 12000 chars covers a full ~1600-2000 word article (this
+			// plugin's typical target_words) - 6000 was cutting the claim
+			// check off partway through most articles, so anything in the
+			// back half never got checked at all.
+			. "DRAFT (first 12000 chars):\n" . mb_substr( $text, 0, 12000 ) . "\n\n"
 			. "Assess against the business you know:\n"
 			. "1. Does this read like it was written by THIS business with its real expertise, or like generic filler on the topic?\n"
 			. "2. Does it answer the query in the first paragraph?\n"
