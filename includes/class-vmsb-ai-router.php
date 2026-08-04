@@ -265,7 +265,17 @@ class VMSB_AI_Router {
 			// The call succeeded but the reply wasn't valid/salvageable JSON -
 			// this is a different failure than a provider error, so don't leave
 			// get_last_error() pointing at a stale or empty message.
-			$this->last_error = 'Model reply was not valid JSON: ' . mb_substr( (string) $res['text'], 0, 200 );
+			// Show both ends of the reply, not just the head: a head-only
+			// snippet can't distinguish "the model produced garbage" from
+			// "the model hit its token limit mid-article and got cut off
+			// inside a string" - which look identical from the first 200
+			// characters but need completely different fixes (one's a
+			// prompt/parsing problem, the other's a max_tokens problem).
+			$full    = (string) $res['text'];
+			$snippet = mb_strlen( $full ) > 400
+				? mb_substr( $full, 0, 200 ) . ' … ' . mb_substr( $full, -200 )
+				: $full;
+			$this->last_error = 'Model reply was not valid JSON: ' . $snippet;
 		}
 		return $parsed;
 	}
