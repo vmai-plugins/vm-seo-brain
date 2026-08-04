@@ -71,7 +71,8 @@
       "Bash(grep -n \"function request\\(\" \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/includes/class-vmsb-google.php\")",
       "Bash(stat -c '%y' \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/includes/class-vmsb-google.php\" *)",
       "Bash(tail -n 30 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")",
-      "Bash(tail -n 15 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")"
+      "Bash(tail -n 15 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")",
+      "Bash(git status *)"
     ]
   }
 }
