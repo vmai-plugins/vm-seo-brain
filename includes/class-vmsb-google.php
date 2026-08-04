@@ -103,7 +103,13 @@ class VMSB_Google {
 		return $data['access_token'];
 	}
 
-	private function request( $url, $method = 'GET', $body = null ) {
+	// Public - VMSB_Indexing calls this directly to hit the Google Indexing
+	// API, which reuses this class's OAuth/token-refresh handling rather
+	// than duplicating it. It was private, which fatals (PHP visibility
+	// error) on every post publish/update once the Indexing bridge tries to
+	// call it - see the "Call to private method" crash in god-fix-90 and
+	// any normal wp_insert_post on a published post/page.
+	public function request( $url, $method = 'GET', $body = null ) {
 		$token = $this->access_token();
 		if ( is_wp_error( $token ) ) {
 			return $token;
