@@ -3,7 +3,10 @@ defined( 'ABSPATH' ) || exit;
 
 global $wpdb;
 $content = new VMSB_Content();
-$rows    = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vmsb_plan ORDER BY FIELD(status,'planned','approved','writing','drafted','published','failed'), priority DESC LIMIT 200" );
+// 'failed' sorts first, not last - a technical failure needs attention now,
+// while a 200-row table previously buried it at the very bottom where it
+// was easy to never notice at all.
+$rows    = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vmsb_plan ORDER BY FIELD(status,'failed','writing','approved','planned','drafted','published','rejected'), priority DESC LIMIT 200" );
 $sheet  = VMSB_Settings::get( 'sheet_id' );
 ?>
 <div class="wrap vmsb">
@@ -58,6 +61,18 @@ $sheet  = VMSB_Settings::get( 'sheet_id' );
 					<p class="vmsb-stage-desc"><?php echo esc_html( $data['desc'] ); ?></p>
 				</div>
 			<?php endforeach; ?>
+
+			<?php $failed_count = (int) ( $stats['failed'] ?? 0 ); ?>
+			<div class="vmsb-pipeline-stage vmsb-failed-stage<?php echo $failed_count ? ' has-failures' : ''; ?>"<?php echo $failed_count ? ' id="vmsb-filter-failed" style="cursor:pointer;" title="Show only failed items"' : ''; ?>>
+				<div class="vmsb-stage-head">
+					<span class="vmsb-stage-icon">⚠️</span>
+					<div class="vmsb-stage-meta">
+						<span class="vmsb-stage-count"><?php echo $failed_count; ?></span>
+						<span class="vmsb-stage-label">Failed</span>
+					</div>
+				</div>
+				<p class="vmsb-stage-desc"><?php echo $failed_count ? 'Technical failures - click to filter the pipeline below.' : 'Nothing has failed to write.'; ?></p>
+			</div>
 
 			<div class="vmsb-pipeline-stage vmsb-health-stage">
 				<div class="vmsb-stage-head">
@@ -297,6 +312,13 @@ jQuery(function($) {
 			const text = $(this).text().toLowerCase();
 			$(this).toggle(text.indexOf(val) !== -1);
 		});
+	});
+
+	// Clicking the Failed stat card reuses the same search filter rather
+	// than a separate filtering code path - types "failed" into the search
+	// box, which matches the status badge text every failed row already has.
+	$('#vmsb-filter-failed').on('click', function() {
+		$('#vmsb-plan-search').val('failed').trigger('input').get(0).scrollIntoView({ behavior: 'smooth', block: 'center' });
 	});
 });
 </script>

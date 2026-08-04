@@ -744,6 +744,16 @@
 .vmsb-health-stage { border-color: rgba(201,162,39,0.3); background: rgba(201,162,39,0.02); }
 .vmsb-mini-bar { margin: 10px 0 !important; }
 
+/* Only flagged red once there's actually something to look at - an empty
+   failed-count card in alarm red on every visit would just be noise. */
+.vmsb-failed-stage.has-failures {
+	border-color: rgba(255,77,77,0.35);
+	background: rgba(255,77,77,0.04);
+	cursor: pointer;
+}
+.vmsb-failed-stage.has-failures .vmsb-stage-count { color: var(--crit); }
+.vmsb-failed-stage.has-failures:hover { border-color: var(--crit); }
+
 /* ---------------------------------------------------------------- layout */
 
 /* Was a 2-column grid (pipeline + a 300px sticky sidebar) - now a plain
