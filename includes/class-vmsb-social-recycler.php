@@ -95,13 +95,33 @@ class VMSB_Social_Recycler {
 
 	/**
 	 * Bridge to VM Social AI: Injects the generated pack directly into the social queue.
+	 *
+	 * VM Social AI has no REST or PHP API for external plugins to hand it
+	 * already-written content - its routes (queue/list, queue/update, ...)
+	 * are for its own admin UI to manage rows that already exist, not to
+	 * create new ones from outside. VMSAI_Install::table() is the one part
+	 * of its structure that IS a stable, public surface (a public static
+	 * method, not a guessed table-name string), so that's what this uses
+	 * instead of hand-rolling `$wpdb->prefix . 'vmsai_queue'`. Rows also now
+	 * carry the real active campaign_id instead of being left at the
+	 * schema's default 0, so they don't look orphaned to any of VM Social
+	 * AI's own reporting that assumes a queue row belongs to a real
+	 * campaign.
 	 */
 	private function push_to_vmsai( $post_id, $data ) {
-		if ( ! class_exists( 'VMSAI_Plugin' ) ) return;
+		if ( ! class_exists( 'VMSAI_Install' ) ) {
+			return;
+		}
 
 		global $wpdb;
-		$table = $wpdb->prefix . 'vmsai_queue';
-		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) return;
+		$table = VMSAI_Install::table( 'queue' );
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			$this->log->warn( 'social', 'VM Social AI is active but its queue table is missing - skipped the bridge.' );
+			return;
+		}
+
+		$campaign    = class_exists( 'VMSAI_Planner' ) ? VMSAI_Planner::active_campaign() : null;
+		$campaign_id = $campaign['id'] ?? 0;
 
 		$post = get_post( $post_id );
 		$now  = current_time( 'mysql' );
@@ -109,6 +129,7 @@ class VMSB_Social_Recycler {
 		// 1. LinkedIn
 		if ( ! empty( $data['linkedin']['post'] ) ) {
 			$wpdb->insert( $table, array(
+				'campaign_id'  => $campaign_id,
 				'channel'      => 'linkedin',
 				'format'       => 'image',
 				'title'        => $post->post_title,
@@ -125,6 +146,7 @@ class VMSB_Social_Recycler {
 		if ( ! empty( $data['x']['thread'] ) ) {
 			$thread = (array) $data['x']['thread'];
 			$wpdb->insert( $table, array(
+				'campaign_id'  => $campaign_id,
 				'channel'      => 'x',
 				'format'       => 'text',
 				'title'        => $post->post_title,
@@ -139,6 +161,7 @@ class VMSB_Social_Recycler {
 		// 3. Facebook
 		if ( ! empty( $data['facebook']['post'] ) ) {
 			$wpdb->insert( $table, array(
+				'campaign_id'  => $campaign_id,
 				'channel'      => 'facebook',
 				'format'       => 'image',
 				'title'        => $post->post_title,
