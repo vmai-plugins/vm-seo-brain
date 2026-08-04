@@ -211,17 +211,28 @@ foreach ( $exclude_types as $et ) {
 						</td>
 						<td>
 							<div class="vmsb-issue-detail"><?php echo esc_html( $issue->detail ); ?></div>
-							<?php if ( $issue->suggested ) : $sug = json_decode($issue->suggested, true); if ($sug) : ?>
+							<?php
+							// Only a handful of rules stash a $suggested payload shaped like
+							// seo_title/meta_description/type/query - most record() calls
+							// don't pass one at all. Building the string first and only
+							// rendering the box when it's non-empty avoids a "Recommendation:"
+							// label with nothing after it on every other issue type.
+							$rec = '';
+							if ( $issue->suggested ) {
+								$sug = json_decode( $issue->suggested, true );
+								if ( $sug ) {
+									if ( isset( $sug['seo_title'] ) ) $rec .= "Set SEO Title to '" . esc_html( $sug['seo_title'] ) . "'. ";
+									if ( isset( $sug['meta_description'] ) ) $rec .= "Update Meta Description. ";
+									if ( isset( $sug['type'] ) ) $rec .= "Apply " . esc_html( $sug['type'] ) . " Schema. ";
+									if ( isset( $sug['query'] ) ) $rec .= "Target '" . esc_html( $sug['query'] ) . "' cluster. ";
+								}
+							}
+							if ( $rec ) : ?>
 								<div class="vmsb-suggested-fix">
 									<strong>Recommendation:</strong>
-									<?php
-										if (isset($sug['seo_title'])) echo "Set SEO Title to '" . esc_html($sug['seo_title']) . "'. ";
-										if (isset($sug['meta_description'])) echo "Update Meta Description. ";
-										if (isset($sug['type'])) echo "Apply " . esc_html($sug['type']) . " Schema. ";
-										if (isset($sug['query'])) echo "Target '" . esc_html($sug['query']) . "' cluster. ";
-									?>
+									<?php echo $rec; ?>
 								</div>
-							<?php endif; endif; ?>
+							<?php endif; ?>
 						</td>
 						<td class="vmsb-row-actions">
 							<div class="vmsb-action-stack">
