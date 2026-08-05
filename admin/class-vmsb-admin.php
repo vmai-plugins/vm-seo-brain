@@ -446,6 +446,7 @@ class VMSB_Admin {
 			'huggingface_model', 'cloudflare_account_id', 'cloudflare_model',
 			'comfy_url', 'image_style', 'google_client_id', 'gsc_property', 'ga4_property_id',
 			'sheet_id', 'sheet_tab', 'bulk_topics_tab', 'theme_mode', 'aipuffer_image_provider', 'aipuffer_image_model',
+			'webhook_url',
 		);
 		foreach ( $text_keys as $key ) {
 			if ( isset( $fields[ $key ] ) ) {
@@ -467,7 +468,7 @@ class VMSB_Admin {
 			}
 		}
 
-		foreach ( array( 'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl', 'thief_auto_plan' ) as $key ) {
+		foreach ( array( 'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl', 'thief_auto_plan', 'webhook_enabled' ) as $key ) {
 			$clean[ $key ] = empty( $fields[ $key ] ) ? 0 : 1;
 		}
 
@@ -482,6 +483,12 @@ class VMSB_Admin {
 		}
 		if ( isset( $fields['safe_post_types'] ) ) {
 			$clean['safe_post_types'] = array_map( 'sanitize_key', (array) $fields['safe_post_types'] );
+		}
+		// Checkbox group: absent entirely from $_POST when every box is
+		// unchecked, same reasoning as ai_fallbacks/image_chain above - only
+		// overwrite the saved value when the field was actually on the form.
+		if ( isset( $fields['webhook_events'] ) ) {
+			$clean['webhook_events'] = array_intersect( array_map( 'sanitize_key', (array) $fields['webhook_events'] ), array_keys( VMSB_Webhooks::EVENTS ) );
 		}
 		if ( isset( $fields['comfy_workflow'] ) ) {
 			$clean['comfy_workflow'] = wp_kses_post( $fields['comfy_workflow'] );

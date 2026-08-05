@@ -122,6 +122,9 @@ $cal_is_active = (bool) $cal_param;
 			<div id="vmsb-bulk-topics-form" class="vmsb-stack-form" style="flex:1; min-width:280px; max-width:520px; margin:0;">
 				<label>Paste topics <small>(one per line)</small></label>
 				<textarea name="topics" data-list rows="6" placeholder="Best plumbers in Austin&#10;How much does a kitchen remodel cost&#10;Signs you need a new water heater"></textarea>
+				<label style="margin-top:10px;">Language <small>(optional — blank uses the site default set in Settings)</small>
+					<input type="text" name="language" placeholder="e.g. Spanish, French — blank = site default" style="max-width:320px;">
+				</label>
 				<button class="vmsb-btn vmsb-btn-gold" data-vmsb="import-topics" data-vmsb-form="vmsb-bulk-topics-form" style="margin-top:14px; align-self:flex-start;">Import Topics</button>
 			</div>
 			<div style="flex:0 0 auto;">
@@ -247,7 +250,12 @@ $cal_is_active = (bool) $cal_param;
 									<span class="vmsb-note">—</span>
 								<?php endif; ?>
 							</td>
-							<td><code><?php echo esc_html( $row->primary_keyword ); ?></code></td>
+							<td>
+								<code><?php echo esc_html( $row->primary_keyword ); ?></code>
+								<?php if ( ! empty( $row->content_language ) ) : ?>
+									<span class="vmsb-tag vmsb-tag-purple" title="Overrides the site default for this piece only" style="margin-left:4px;"><?php echo esc_html( $row->content_language ); ?></span>
+								<?php endif; ?>
+							</td>
 							<td><span class="vmsb-tag vmsb-tag-blue"><?php echo esc_html( $row->cluster ); ?></span></td>
 							<td class="vmsb-row-actions">
 								<?php if ( ! $row->post_id ) : ?>

@@ -185,7 +185,8 @@ class VMSB_Content {
 	 *
 	 * @return array{imported:int,skipped:int,processed:int,submitted:int}
 	 */
-	public function import_topics( array $topics, $priority = 5.0 ) {
+	public function import_topics( array $topics, $priority = 5.0, $language = '' ) {
+		$language = sanitize_text_field( $language );
 		global $wpdb;
 		// array_unique on the raw strings first - catches the literal "pasted
 		// the same list twice" case before it burns an AI call on each copy.
@@ -223,6 +224,7 @@ class VMSB_Content {
 				. "which existing content cluster it belongs to (or name a sensible new one), the search intent, "
 				. "the best content format, and a brief telling the writer exactly what to cover, what to avoid, "
 				. "and what the reader should be able to do afterwards.\n\n"
+				. ( $language ? "LANGUAGE: the title, keyword, and brief must all be in {$language}, not English.\n\n" : '' )
 				. 'Return JSON: {"title":"","primary_keyword":"","secondary_keywords":[],"cluster":"","intent":"informational|commercial|transactional|navigational","content_type":"blog|comparison|guide|faq","target_words":1600,"brief":""}',
 				array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 700, 'temperature' => 0.5, 'persona' => 'strategist' )
 			);
@@ -240,8 +242,8 @@ class VMSB_Content {
 			$uid = substr( md5( $data['primary_keyword'] . '|' . $topic ), 0, 24 );
 
 			$wpdb->query( $wpdb->prepare(
-				"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, secondary_keywords, cluster, intent, content_type, brief, internal_links, target_words, priority, status, created_at, updated_at)
-				 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%f,'planned',%s,%s)
+				"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, secondary_keywords, cluster, intent, content_language, content_type, brief, internal_links, target_words, priority, status, created_at, updated_at)
+				 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%f,'planned',%s,%s)
 				 ON DUPLICATE KEY UPDATE title = VALUES(title), brief = VALUES(brief), updated_at = VALUES(updated_at)",
 				$uid,
 				sanitize_text_field( $data['title'] ),
@@ -249,6 +251,7 @@ class VMSB_Content {
 				wp_json_encode( array_slice( (array) ( $data['secondary_keywords'] ?? array() ), 0, 6 ) ),
 				sanitize_text_field( $data['cluster'] ?? '' ),
 				sanitize_key( $data['intent'] ?? 'informational' ),
+				$language ?: null,
 				sanitize_key( $data['content_type'] ?? 'blog' ),
 				wp_kses_post( $data['brief'] ?? '' ),
 				wp_json_encode( array() ),
@@ -508,6 +511,12 @@ class VMSB_Content {
 		}
 
 		$prompt = "Write the article.\n\n"
+			// A plan row's own content_language overrides the site-wide
+			// "Write in: X" line already in the system prompt (context_prompt())
+			// - this is what makes it possible to plan individual pieces in a
+			// different language from the rest of the site, rather than every
+			// piece being locked to one global setting.
+			. ( $item->content_language ? "LANGUAGE: Write this article in {$item->content_language}, overriding any other language instruction.\n\n" : '' )
 			. "TITLE: {$item->title}\n"
 			. "PRIMARY KEYWORD: {$item->primary_keyword}\n"
 			. 'SECONDARY KEYWORDS: ' . implode( ', ', $secondary ) . "\n"
@@ -559,6 +568,9 @@ class VMSB_Content {
 		if ( empty( $data['content_html'] ) ) {
 			$reason = $this->ai->get_last_error() ?: 'No content returned by the AI chain.';
 			$wpdb->update( $this->table(), array( 'status' => 'failed', 'last_error' => $reason ), array( 'id' => $item->id ) );
+			if ( class_exists( 'VMSB_Webhooks' ) ) {
+				VMSB_Webhooks::dispatch( 'content_failed', array( 'plan_id' => $item->id, 'title' => $item->title, 'reason' => $reason ) );
+			}
 			return new WP_Error( 'vmsb_content', $reason );
 		}
 
@@ -583,6 +595,9 @@ class VMSB_Content {
 			$brain->remember( 'ai_training', 'recent_mistakes', array_slice( array_unique($mistakes), -10 ) );
 
 			( new VMSB_Logger() )->warn( 'gate', 'Draft rejected before publish.', array( 'plan' => $item->id, 'why' => $report['summary'] ) );
+			if ( class_exists( 'VMSB_Webhooks' ) ) {
+				VMSB_Webhooks::dispatch( 'content_failed', array( 'plan_id' => $item->id, 'title' => $item->title, 'reason' => $report['summary'] ) );
+			}
 			return new WP_Error( 'vmsb_gate', $report['summary'] );
 		}
 
@@ -612,6 +627,18 @@ class VMSB_Content {
 		if ( is_wp_error( $post_id ) ) {
 			$wpdb->update( $this->table(), array( 'status' => 'failed', 'last_error' => $post_id->get_error_message() ), array( 'id' => $item->id ) );
 			return $post_id;
+		}
+
+		if ( $item->content_language ) {
+			update_post_meta( $post_id, '_vmsb_content_language', $item->content_language );
+		}
+
+		if ( $held && class_exists( 'VMSB_Webhooks' ) ) {
+			VMSB_Webhooks::dispatch( 'content_review', array(
+				'post_id' => $post_id,
+				'title'   => $post_id ? get_the_title( $post_id ) : $item->title,
+				'reason'  => $report['summary'] ?? '',
+			) );
 		}
 
 		// Record the gate report and, for a new autonomous page, file an outcome

@@ -53,7 +53,7 @@ spl_autoload_register(
  */
 final class VMSB_Install {
 
-	const DB_VERSION = '1.6.0';
+	const DB_VERSION = '1.7.0'; // 1.7.0: + vmsb_plan.content_language (per-item language override)
 
 	public static function activate() {
 		self::tables();
@@ -137,6 +137,7 @@ final class VMSB_Install {
 			secondary_keywords LONGTEXT NULL,
 			cluster VARCHAR(191) NULL,
 			intent VARCHAR(32) NULL,
+			content_language VARCHAR(10) NULL,
 			is_pillar TINYINT(1) NOT NULL DEFAULT 0,
 			content_type VARCHAR(32) NOT NULL DEFAULT 'blog',
 			brief LONGTEXT NULL,

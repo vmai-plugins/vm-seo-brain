@@ -53,6 +53,7 @@ final class VMSB_Core {
 			'agents'      => new VMSB_Agents(),
 			'graph'       => new VMSB_Graph(),
 			'aipuffer'    => new VMSB_AIPuffer(),
+			'webhooks'    => new VMSB_Webhooks(),
 		);
 
 		new VMSB_Scheduler();

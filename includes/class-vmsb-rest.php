@@ -52,6 +52,7 @@ class VMSB_REST {
 			'pending-reject'  => 'pending_reject',
 			'alt-backfill'    => 'alt_backfill',
 			'test-provider'   => 'test_provider',
+			'webhook-test'    => 'webhook_test',
 			'index-vectors'   => 'index_vectors',
 			'rebuild-index'   => 'rebuild_index',
 			'measure-outcomes'=> 'measure_outcomes',
@@ -274,8 +275,9 @@ class VMSB_REST {
 	}
 
 	public function import_topics( $request ) {
-		$topics = array_map( 'sanitize_text_field', (array) $request->get_param( 'topics' ) );
-		return rest_ensure_response( ( new VMSB_Content() )->import_topics( $topics ) );
+		$topics   = array_map( 'sanitize_text_field', (array) $request->get_param( 'topics' ) );
+		$language = sanitize_text_field( (string) $request->get_param( 'language' ) );
+		return rest_ensure_response( ( new VMSB_Content() )->import_topics( $topics, 5.0, $language ) );
 	}
 
 	public function pull_bulk_topics( $request ) {
@@ -359,6 +361,31 @@ class VMSB_REST {
 		$provider = sanitize_key( $request->get_param( 'provider' ) );
 		$res      = ( new VMSB_AI_Router() )->generate( 'Reply with exactly: OK', array( 'provider' => $provider, 'max_tokens' => 10, 'bypass_circuit' => true ) );
 		return rest_ensure_response( array( 'ok' => ! empty( $res['ok'] ), 'message' => ! empty( $res['ok'] ) ? trim( $res['text'] ) : $res['error'] ) );
+	}
+
+	public function webhook_test( $request ) {
+		$url = trim( (string) VMSB_Settings::get( 'webhook_url' ) );
+		if ( ! $url || ! wp_http_validate_url( $url ) ) {
+			return rest_ensure_response( array( 'ok' => false, 'message' => 'No valid webhook URL saved yet - save Settings first.' ) );
+		}
+
+		// Deliberately blocking, unlike VMSB_Webhooks::dispatch() - this is
+		// the one case where the admin explicitly wants to wait and see
+		// whether the URL is actually reachable, not fire-and-forget.
+		$res = wp_remote_post( $url, array(
+			'timeout' => 8,
+			'headers' => array( 'Content-Type' => 'application/json' ),
+			'body'    => wp_json_encode( array( 'event' => 'test', 'site' => home_url(), 'time' => current_time( 'mysql', true ) ) ),
+		) );
+
+		if ( is_wp_error( $res ) ) {
+			return rest_ensure_response( array( 'ok' => false, 'message' => $res->get_error_message() ) );
+		}
+		$code = wp_remote_retrieve_response_code( $res );
+		return rest_ensure_response( array(
+			'ok'      => $code >= 200 && $code < 300,
+			'message' => "Receiver responded with HTTP {$code}.",
+		) );
 	}
 
 	public function index_vectors( $request ) {

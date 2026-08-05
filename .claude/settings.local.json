@@ -77,7 +77,11 @@
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-social-recycler.php)",
       "Bash(git commit -q -m 'Fix redundant social-generation trigger between VM SEO Brain and VM Social AI *)",
       "Bash(git commit -q -m 'Surface the quality gate'\\\\''s fact-check output instead of discarding it; fix dead Quality-column meta key *)",
-      "Bash(git commit -q -m 'Add an editorial calendar view to Content Plan *)"
+      "Bash(git commit -q -m 'Add an editorial calendar view to Content Plan *)",
+      "Bash(cd \"C:\\\\Users\\\\tripc\\\\Local Sites\\\\test\\\\app\\\\public\\\\wp-content\\\\plugins\\\\vm-seo-brain\")",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-webhooks.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-core.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-settings.php)"
     ]
   }
 }

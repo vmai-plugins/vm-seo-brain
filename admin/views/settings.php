@@ -41,6 +41,7 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 			<button class="vmsb-nav-item" data-tab="google">🌐 Google Cloud</button>
 			<button class="vmsb-nav-item" data-tab="autonomy">⚡ God Mode</button>
 			<button class="vmsb-nav-item" data-tab="appearance">🎨 Appearance</button>
+			<button class="vmsb-nav-item" data-tab="webhooks">🔌 Webhooks</button>
 		</aside>
 
 		<div class="vmsb-settings-panels">
@@ -208,7 +209,21 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 								</span>
 							</label>
 							<label>House Photography Style<input type="text" name="<?php echo esc_attr( $field( 'image_style' ) ); ?>" value="<?php echo esc_attr( $s['image_style'] ); ?>" placeholder="Professional 35mm photography, soft lighting"></label>
+
 							<label>Pexels Key<input type="password" name="<?php echo esc_attr( $field( 'pexels_key' ) ); ?>" value="<?php echo esc_attr( $s['pexels_key'] ); ?>" autocomplete="new-password"></label>
+
+							<label>Hugging Face Key<input type="password" name="<?php echo esc_attr( $field( 'huggingface_key' ) ); ?>" value="<?php echo esc_attr( $s['huggingface_key'] ); ?>" autocomplete="new-password"></label>
+							<label>Hugging Face Model<input type="text" name="<?php echo esc_attr( $field( 'huggingface_model' ) ); ?>" value="<?php echo esc_attr( $s['huggingface_model'] ); ?>"></label>
+
+							<label>Cloudflare Account ID<input type="text" name="<?php echo esc_attr( $field( 'cloudflare_account_id' ) ); ?>" value="<?php echo esc_attr( $s['cloudflare_account_id'] ); ?>"></label>
+							<label>Cloudflare API Token<input type="password" name="<?php echo esc_attr( $field( 'cloudflare_api_token' ) ); ?>" value="<?php echo esc_attr( $s['cloudflare_api_token'] ); ?>" autocomplete="new-password"></label>
+							<label>Cloudflare Model<input type="text" name="<?php echo esc_attr( $field( 'cloudflare_model' ) ); ?>" value="<?php echo esc_attr( $s['cloudflare_model'] ); ?>"></label>
+
+							<label>AI Puffer Image Provider<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_image_provider' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_image_provider'] ); ?>" placeholder="openai|google|azure|replicate"></label>
+							<label>AI Puffer Image Model<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_image_model' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_image_model'] ); ?>"></label>
+
+							<label class="vmsb-full">ComfyUI URL<input type="url" name="<?php echo esc_attr( $field( 'comfy_url' ) ); ?>" value="<?php echo esc_attr( $s['comfy_url'] ); ?>"></label>
+							<label class="vmsb-full">ComfyUI Workflow (JSON)<textarea name="<?php echo esc_attr( $field( 'comfy_workflow' ) ); ?>" rows="5"><?php echo esc_textarea( $s['comfy_workflow'] ); ?></textarea></label>
 						</div>
 					</section>
 				</section>
@@ -247,6 +262,25 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<label>Publishing Velocity (Posts/Day)<input type="number" name="<?php echo esc_attr( $field( 'posts_per_day' ) ); ?>" value="<?php echo esc_attr( $s['posts_per_day'] ); ?>" min="0" max="24"></label>
 							<label>Growth Target (Traffic)<input type="number" name="<?php echo esc_attr( $field( 'growth_target' ) ); ?>" value="<?php echo esc_attr( $s['growth_target'] ); ?>"></label>
 						</div>
+
+						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
+							<h3 style="margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold);">Optimization Guardrails</h3>
+							<p class="vmsb-note" style="margin-bottom: 20px;">Select the post types the Brain is allowed to optimize. We recommend starting with just 'Posts'.</p>
+
+							<div class="vmsb-checks" style="display: flex; gap: 20px; flex-wrap: wrap;">
+								<?php
+								$all_types = get_post_types( array( 'public' => true ), 'objects' );
+								$excluded  = array( 'attachment', 'elementor_library', 'ae_global_templates' );
+								foreach ( $all_types as $type ) :
+									if ( in_array( $type->name, $excluded ) ) continue;
+								?>
+									<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+										<input type="checkbox" name="<?php echo esc_attr( $field( 'safe_post_types' ) ); ?>[]" value="<?php echo esc_attr( $type->name ); ?>" <?php checked( in_array( $type->name, (array) $s['safe_post_types'], true ) ); ?>>
+										<?php echo esc_html( $type->label ); ?>
+									</label>
+								<?php endforeach; ?>
+							</div>
+						</div>
 					</section>
 				</section>
 
@@ -261,8 +295,35 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 									<option value="lite" <?php selected( $s['theme_mode'], 'lite' ); ?>>Professional (Light)</option>
 								</select>
 							</label>
-							<label>Language Context<input type="text" name="<?php echo esc_attr( $field( 'language' ) ); ?>" value="<?php echo esc_attr( $s['language'] ); ?>"></label>
+							<label>Language Context<input type="text" name="<?php echo esc_attr( $field( 'language' ) ); ?>" value="<?php echo esc_attr( $s['language'] ); ?>">
+								<small class="vmsb-note">The site-wide default every generated piece writes in. Content Plan's Bulk Import can override this per batch.</small>
+							</label>
 							<label>Country Target<input type="text" name="<?php echo esc_attr( $field( 'country' ) ); ?>" value="<?php echo esc_attr( $s['country'] ); ?>"></label>
+						</div>
+					</section>
+				</section>
+
+				<!-- WEBHOOKS PANEL -->
+				<section class="vmsb-panel" data-panel="webhooks">
+					<section class="vmsb-fieldset">
+						<h2>Outbound Webhooks</h2>
+						<p class="vmsb-note">Notify an external tool (Zapier, Make, a custom script) when the brain publishes, holds, or fails a piece of content — instead of it having to poll the REST API.</p>
+						<div class="vmsb-form-grid">
+							<label class="vmsb-check"><input type="checkbox" name="<?php echo esc_attr( $field( 'webhook_enabled' ) ); ?>" value="1" <?php checked( $s['webhook_enabled'], 1 ); ?>> Enable outbound webhooks</label>
+							<label class="vmsb-full">Webhook URL
+								<div class="vmsb-input-group">
+									<input type="url" name="<?php echo esc_attr( $field( 'webhook_url' ) ); ?>" value="<?php echo esc_attr( $s['webhook_url'] ); ?>" placeholder="https://hooks.zapier.com/hooks/catch/...">
+									<button type="button" class="vmsb-mini-btn" data-vmsb="webhook-test">Send Test</button>
+								</div>
+								<small class="vmsb-note">Save Settings first, then test - the test sends to whatever URL is currently saved, not what's still unsaved in the box above.</small>
+							</label>
+							<label class="vmsb-full">Events to send
+								<span class="vmsb-checks">
+									<?php foreach ( VMSB_Webhooks::EVENTS as $event => $description ) : ?>
+										<label><input type="checkbox" name="<?php echo esc_attr( $field( 'webhook_events' ) ); ?>[]" value="<?php echo esc_attr( $event ); ?>" <?php checked( in_array( $event, (array) $s['webhook_events'], true ) ); ?>> <?php echo esc_html( $description ); ?></label>
+									<?php endforeach; ?>
+								</span>
+							</label>
 						</div>
 					</section>
 				</section>
@@ -273,4 +334,6 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 			</form>
 		</div>
 	</div>
+
+	<div id="vmsb-output" class="vmsb-output" hidden></div>
 </div>

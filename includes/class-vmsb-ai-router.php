@@ -171,34 +171,34 @@ class VMSB_AI_Router {
 					set_transient( $cache_key, $result, (int) $args['cache_ttl'] );
 				}
 
-		// Quality Recursive Correction (from Autopilot)
-		if ( $args['persona'] === 'wordsmith' && $args['max_tokens'] > 2000 && $args['attempt'] < 2 ) {
-			// World-Class Critque Logic: EEAT, Specificity, and Human-Like Flow.
-			// This is a plain "REVISE: ..." / "PASS" verdict, not JSON - use
-			// generate() directly, generate_json() forces a JSON-only system
-			// prompt that contradicts the format asked for here and made the
-			// verdict fail to parse on every call.
-			$quality_check = $this->generate(
-				"Act as a Senior Editor. Review this generated content for EEAT and High-End quality. "
-				. "Criteria: 1. Is it specific to the brand? 2. Does it avoid AI filler? 3. Is the tone truly expert? "
-				. "If score < 85, reply with 'REVISE: [Specific technical critique]'. Otherwise reply 'PASS'.\n\n"
-				. "CONTENT: " . wp_trim_words($result['text'], 600),
-				array('max_tokens' => 200, 'persona' => 'auditor')
-			);
+				// Quality Recursive Correction (from Autopilot)
+				if ( $args['persona'] === 'wordsmith' && $args['max_tokens'] > 2000 && $args['attempt'] < 2 ) {
+					// World-Class Critque Logic: EEAT, Specificity, and Human-Like Flow.
+					// This is a plain "REVISE: ..." / "PASS" verdict, not JSON - use
+					// generate() directly, generate_json() forces a JSON-only system
+					// prompt that contradicts the format asked for here and made the
+					// verdict fail to parse on every call.
+					$quality_check = $this->generate(
+						"Act as a Senior Editor. Review this generated content for EEAT and High-End quality. "
+						. "Criteria: 1. Is it specific to the brand? 2. Does it avoid AI filler? 3. Is the tone truly expert? "
+						. "If score < 85, reply with 'REVISE: [Specific technical critique]'. Otherwise reply 'PASS'.\n\n"
+						. "CONTENT: " . wp_trim_words($result['text'], 600),
+						array('max_tokens' => 200, 'persona' => 'auditor')
+					);
 
-			$verdict = ! empty( $quality_check['ok'] ) ? trim( $quality_check['text'] ) : '';
-			if ( 0 === stripos( $verdict, 'REVISE' ) ) {
-				$critique = trim( preg_replace( '/^REVISE:\s*/i', '', $verdict ) ) ?: 'Content lacks sufficient expert depth and brand alignment.';
-				( new VMSB_Logger() )->warn( 'ai', 'Content Quality Refiner: Re-writing with technical critique: ' . $critique );
-				$args['attempt']++;
-				// Reset to the caller's original system prompt before retrying -
-				// $args['system'] has already had the persona instruction and
-				// mistakes-memory block folded in once; recursing with it as-is
-				// would fold them in a second time on top of themselves.
-				$args['system'] = $original_system;
-				return $this->generate( $prompt . "\n\nCRITICAL EDITOR FEEDBACK: {$critique}\nFocus on providing more technical specifics and brand-first expertise.", $args );
-			}
-		}
+					$verdict = ! empty( $quality_check['ok'] ) ? trim( $quality_check['text'] ) : '';
+					if ( 0 === stripos( $verdict, 'REVISE' ) ) {
+						$critique = trim( preg_replace( '/^REVISE:\s*/i', '', $verdict ) ) ?: 'Content lacks sufficient expert depth and brand alignment.';
+						( new VMSB_Logger() )->warn( 'ai', 'Content Quality Refiner: Re-writing with technical critique: ' . $critique );
+						$args['attempt']++;
+						// Reset to the caller's original system prompt before retrying -
+						// $args['system'] has already had the persona instruction and
+						// mistakes-memory block folded in once; recursing with it as-is
+						// would fold them in a second time on top of themselves.
+						$args['system'] = $original_system;
+						return $this->generate( $prompt . "\n\nCRITICAL EDITOR FEEDBACK: {$critique}\nFocus on providing more technical specifics and brand-first expertise.", $args );
+					}
+				}
 
 				return $result;
 			}

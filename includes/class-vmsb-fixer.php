@@ -277,6 +277,11 @@ class VMSB_Fixer {
 				break;
 			}
 
+			// World-Class Safety: Only audit post types explicitly enabled by the user
+			if ( ! in_array( $post->post_type, $safe_types, true ) ) {
+				continue;
+			}
+
 			update_post_meta( $post->ID, '_vmsb_last_audit', current_time( 'timestamp' ) );
 
 			// Skip very short titles or obviously placeholder content
@@ -284,17 +289,13 @@ class VMSB_Fixer {
 				continue;
 			}
 
-			// Meta fixes are generally safe for all types
+			// Meta fixes (Title, Description, Focus Keyword)
 			foreach ( $this->rankmath->audit( $post->ID ) as $issue ) {
 				$this->record( 'post', $post->ID, $issue['rule'], $issue['severity'], $issue['detail'] );
 				$n++;
 			}
 
-			// CONTENT-HEAVY AUDITS: Only run for safe types (e.g. blog posts)
-			if ( ! in_array( $post->post_type, $safe_types, true ) ) {
-				continue;
-			}
-
+			// CONTENT-HEAVY AUDITS
 			$text  = wp_strip_all_tags( strip_shortcodes( $post->post_content ) );
 			$words = str_word_count( $text );
 
@@ -546,11 +547,17 @@ class VMSB_Fixer {
 		$post = get_post( $post_id );
 		if ( ! $post ) return new WP_Error( 'vmsb_fix', 'Post not found.' );
 
-		// SAFETY CHECK
+		// SAFETY CHECK: System Pages and Safe Post Types
 		$front = (int) get_option( 'page_on_front' );
 		$blog  = (int) get_option( 'page_for_posts' );
+		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
+
 		if ( $post_id === $front || $post_id === $blog ) {
 			return new WP_Error( 'vmsb_fix', 'Safety: Cannot auto-rewrite system pages.' );
+		}
+
+		if ( ! in_array( $post->post_type, $safe_types, true ) ) {
+			return new WP_Error( 'vmsb_fix', 'Safety: This post type is not enabled for deep optimization in Settings.' );
 		}
 
 		$keyword = $this->rankmath->get_focus_keyword( $post_id );

@@ -160,6 +160,11 @@ class VMSB_Settings {
 			'theme_mode'            => 'dark', // dark|lite
 			'insecure_ssl'          => 0, // skip SSL verification (for local/dev)
 			'safe_post_types'       => self::detect_safe_defaults(),
+
+			// Outbound webhooks (Zapier/Make/custom scripts).
+			'webhook_enabled' => 0,
+			'webhook_url'     => '',
+			'webhook_events'  => array( 'content_published' ),
 		);
 	}
 

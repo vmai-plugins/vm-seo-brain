@@ -121,6 +121,8 @@
 		}
 		if ( route === 'tasks-process' ) { return data.ran + ' task(s) run: ' + Object.keys( data.results || {} ).join( ', ' ); }
 		if ( route === 'test-provider' ) { return data.ok ? 'Success: ' + data.message : 'Failed: ' + data.message; }
+		if ( route === 'webhook-test' ) { return ( data.ok ? 'Success: ' : 'Failed: ' ) + data.message; }
+		if ( route === 'health-reset' ) { return 'Circuit breakers reset.'; }
 		if ( route === 'test-image-provider' ) { return data.ok ? 'Success: Image generated with ' + data.provider : 'Failed: ' + data.error; }
 		if ( route === 'pending-approve' ) { return 'Draft approved and published.'; }
 		if ( route === 'pending-reject' )  { return 'Draft discarded — issue reopened.'; }
