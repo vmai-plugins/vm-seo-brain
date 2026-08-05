@@ -405,6 +405,68 @@
 .state-failed { color: var(--crit); }
 .state-planned, .state-approved, .state-writing { color: var(--muted); }
 
+/* ---------------------------------------------------------------- editorial calendar */
+
+.vmsb-cal-head {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 20px;
+	margin-bottom: 16px;
+}
+.vmsb-cal-head h2 { font-family: var(--serif); font-size: 20px; font-weight: 400; min-width: 180px; text-align: center; }
+
+.vmsb-cal-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 1px;
+	background: var(--line);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	overflow: hidden;
+}
+.vmsb-cal-dow {
+	background: var(--panel-2);
+	padding: 8px 0;
+	text-align: center;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: .08em;
+	color: var(--muted);
+}
+.vmsb-cal-cell {
+	background: var(--panel);
+	min-height: 96px;
+	padding: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.vmsb-cal-cell.is-outside { background: var(--ink); }
+.vmsb-cal-cell.is-today { box-shadow: inset 0 0 0 1px var(--gold); }
+.vmsb-cal-daynum { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.vmsb-cal-cell.is-today .vmsb-cal-daynum { color: var(--gold-soft); font-weight: 700; }
+
+.vmsb-cal-item {
+	font-size: 11px;
+	line-height: 1.3;
+	padding: 2px 5px;
+	border-left: 2px solid currentColor;
+	background: rgba(255,255,255,0.03);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.vmsb-cal-item a { color: inherit; text-decoration: none; }
+.vmsb-cal-item a:hover { text-decoration: underline; }
+.vmsb-cal-more { font-size: 10px; color: var(--muted); padding: 0 5px; }
+
+@media (max-width: 782px) {
+	.vmsb-cal-grid { grid-template-columns: repeat(7, minmax(38px, 1fr)); font-size: 10px; }
+	.vmsb-cal-cell { min-height: 64px; padding: 4px; }
+	.vmsb-cal-item { font-size: 9.5px; }
+}
+
 /* ---------------------------------------------------------------- tags */
 
 .vmsb-tag {

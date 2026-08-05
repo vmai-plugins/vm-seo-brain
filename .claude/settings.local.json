@@ -76,7 +76,8 @@
       "Bash(git commit -q -m 'Group each AI provider'\\\\''s settings fields into their own row instead of a flat 3-col flow *)",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-social-recycler.php)",
       "Bash(git commit -q -m 'Fix redundant social-generation trigger between VM SEO Brain and VM Social AI *)",
-      "Bash(git commit -q -m 'Surface the quality gate'\\\\''s fact-check output instead of discarding it; fix dead Quality-column meta key *)"
+      "Bash(git commit -q -m 'Surface the quality gate'\\\\''s fact-check output instead of discarding it; fix dead Quality-column meta key *)",
+      "Bash(git commit -q -m 'Add an editorial calendar view to Content Plan *)"
     ]
   }
 }

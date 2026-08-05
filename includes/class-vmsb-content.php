@@ -1117,6 +1117,34 @@ class VMSB_Content {
 		return $out;
 	}
 
+	/**
+	 * Every plan row scheduled within a given month, grouped by day-of-month.
+	 * scheduled_for is stored in UTC (current_time('mysql', true) elsewhere
+	 * in this class), so the range is built the same way for consistency.
+	 *
+	 * @return array<int,array> day-of-month (1-31) => list of row objects
+	 */
+	public function calendar_month( $year, $month ) {
+		global $wpdb;
+		$start = sprintf( '%04d-%02d-01 00:00:00', $year, $month );
+		$end   = gmdate( 'Y-m-d H:i:s', strtotime( $start . ' +1 month' ) );
+
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT id, title, status, primary_keyword, cluster, priority, post_id, scheduled_for
+			 FROM {$this->table()}
+			 WHERE scheduled_for >= %s AND scheduled_for < %s
+			 ORDER BY scheduled_for ASC, priority DESC",
+			$start, $end
+		) );
+
+		$by_day = array();
+		foreach ( $rows as $row ) {
+			$day = (int) gmdate( 'j', strtotime( $row->scheduled_for ) );
+			$by_day[ $day ][] = $row;
+		}
+		return $by_day;
+	}
+
 	public function clear_rejected() {
 		global $wpdb;
 		return $wpdb->delete( $this->table(), array( 'status' => 'rejected' ) );

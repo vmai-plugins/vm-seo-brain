@@ -8,6 +8,29 @@ $content = new VMSB_Content();
 // was easy to never notice at all.
 $rows    = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vmsb_plan ORDER BY FIELD(status,'failed','writing','approved','planned','drafted','published','rejected'), priority DESC LIMIT 200" );
 $sheet  = VMSB_Settings::get( 'sheet_id' );
+
+// Calendar tab: month navigable via ?cal=YYYY-MM, defaulting to the
+// current month. gmdate/strtotime throughout this file already treats
+// scheduled_for as UTC, so the calendar range matches that.
+$cal_param = isset( $_GET['cal'] ) ? sanitize_text_field( wp_unslash( $_GET['cal'] ) ) : '';
+if ( $cal_param && preg_match( '/^(\d{4})-(\d{2})$/', $cal_param, $cm ) ) {
+	$cal_year  = (int) $cm[1];
+	$cal_month = (int) $cm[2];
+} else {
+	$cal_year  = (int) gmdate( 'Y' );
+	$cal_month = (int) gmdate( 'n' );
+}
+$cal_days      = $content->calendar_month( $cal_year, $cal_month );
+$cal_first_ts  = mktime( 0, 0, 0, $cal_month, 1, $cal_year );
+$cal_days_in   = (int) gmdate( 't', $cal_first_ts );
+$cal_start_dow = (int) gmdate( 'w', $cal_first_ts ); // 0 = Sunday
+$cal_prev      = gmdate( 'Y-m', strtotime( '-1 month', $cal_first_ts ) );
+$cal_next      = gmdate( 'Y-m', strtotime( '+1 month', $cal_first_ts ) );
+$cal_today     = ( $cal_year === (int) gmdate( 'Y' ) && $cal_month === (int) gmdate( 'n' ) ) ? (int) gmdate( 'j' ) : 0;
+// Prev/Next reload the page (no JS calendar router here), so without this
+// the tab-switching JS's hardcoded "pipeline is-active" would silently
+// bounce the user back to the pipeline tab every time they paged the month.
+$cal_is_active = (bool) $cal_param;
 ?>
 <div class="wrap vmsb">
 	<header class="vmsb-head">
@@ -111,11 +134,12 @@ $sheet  = VMSB_Settings::get( 'sheet_id' );
 	</div>
 
 	<div class="vmsb-tabs">
-		<button class="vmsb-tab is-active" data-tab="pipeline">Editorial Pipeline</button>
+		<button class="vmsb-tab<?php echo $cal_is_active ? '' : ' is-active'; ?>" data-tab="pipeline">Editorial Pipeline</button>
+		<button class="vmsb-tab<?php echo $cal_is_active ? ' is-active' : ''; ?>" data-tab="calendar">Calendar</button>
 		<button class="vmsb-tab" data-tab="social">Social Distribution</button>
 	</div>
 
-	<div class="vmsb-panel is-active" data-panel="pipeline">
+	<div class="vmsb-panel<?php echo $cal_is_active ? '' : ' is-active'; ?>" data-panel="pipeline">
 		<div class="vmsb-content-layout">
 
 		<aside class="vmsb-activity-sidebar vmsb-activity-top">
@@ -239,6 +263,54 @@ $sheet  = VMSB_Settings::get( 'sheet_id' );
 
 	</div>
 
+	</div>
+
+	<div class="vmsb-panel<?php echo $cal_is_active ? ' is-active' : ''; ?>" data-panel="calendar">
+		<div class="vmsb-cal-head">
+			<a class="vmsb-btn vmsb-btn-ghost vmsb-btn-small" href="<?php echo esc_url( add_query_arg( array( 'page' => 'vmsb-plan', 'cal' => $cal_prev ) ) ); ?>">‹ Prev</a>
+			<h2 style="margin:0;"><?php echo esc_html( gmdate( 'F Y', $cal_first_ts ) ); ?></h2>
+			<a class="vmsb-btn vmsb-btn-ghost vmsb-btn-small" href="<?php echo esc_url( add_query_arg( array( 'page' => 'vmsb-plan', 'cal' => $cal_next ) ) ); ?>">Next ›</a>
+		</div>
+
+		<?php if ( ! array_filter( $cal_days ) ) : ?>
+			<p class="vmsb-note" style="margin:14px 0;">Nothing scheduled for <?php echo esc_html( gmdate( 'F Y', $cal_first_ts ) ); ?>. Items get a date automatically when planned - see "Plan next 20" above.</p>
+		<?php endif; ?>
+
+		<div class="vmsb-cal-grid">
+			<?php foreach ( array( 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat' ) as $dow ) : ?>
+				<div class="vmsb-cal-dow"><?php echo esc_html( $dow ); ?></div>
+			<?php endforeach; ?>
+
+			<?php
+			for ( $i = 0; $i < $cal_start_dow; $i++ ) {
+				echo '<div class="vmsb-cal-cell is-outside"></div>';
+			}
+			for ( $day = 1; $day <= $cal_days_in; $day++ ) :
+				$items = $cal_days[ $day ] ?? array();
+				?>
+				<div class="vmsb-cal-cell<?php echo $day === $cal_today ? ' is-today' : ''; ?>">
+					<span class="vmsb-cal-daynum"><?php echo (int) $day; ?></span>
+					<?php foreach ( array_slice( $items, 0, 3 ) as $item ) : ?>
+						<div class="vmsb-cal-item state-<?php echo esc_attr( $item->status ); ?>" title="<?php echo esc_attr( $item->title . ' — ' . $item->status ); ?>">
+							<?php if ( $item->post_id ) : ?>
+								<a href="<?php echo esc_url( get_edit_post_link( $item->post_id, 'raw' ) ); ?>"><?php echo esc_html( mb_strimwidth( $item->title, 0, 34, '…' ) ); ?></a>
+							<?php else : ?>
+								<?php echo esc_html( mb_strimwidth( $item->title, 0, 34, '…' ) ); ?>
+							<?php endif; ?>
+						</div>
+					<?php endforeach; ?>
+					<?php if ( count( $items ) > 3 ) : ?>
+						<div class="vmsb-cal-more">+<?php echo count( $items ) - 3; ?> more</div>
+					<?php endif; ?>
+				</div>
+			<?php endfor; ?>
+			<?php
+			$trailing = ( 7 - ( ( $cal_start_dow + $cal_days_in ) % 7 ) ) % 7;
+			for ( $i = 0; $i < $trailing; $i++ ) {
+				echo '<div class="vmsb-cal-cell is-outside"></div>';
+			}
+			?>
+		</div>
 	</div>
 
 	<div class="vmsb-panel" data-panel="social">
