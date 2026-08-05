@@ -81,7 +81,9 @@
       "Bash(cd \"C:\\\\Users\\\\tripc\\\\Local Sites\\\\test\\\\app\\\\public\\\\wp-content\\\\plugins\\\\vm-seo-brain\")",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-webhooks.php)",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-core.php)",
-      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-settings.php)"
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-settings.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-quality-gate.php)",
+      "Bash(git commit -q -m 'Bridge YouTube Shorts to VM Social AI'\\\\''s existing video engine; add an originality check to the quality gate *)"
     ]
   }
 }

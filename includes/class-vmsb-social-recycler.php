@@ -70,9 +70,11 @@ class VMSB_Social_Recycler {
 			. "TASK: Create high-engagement posts for:\n"
 			. "1. LinkedIn: Use a 'Thumb-Stopping' professional hook. Tell a mini-story about why this topic matters.\n"
 			. "2. X / Twitter: Create a 5-tweet thread. Tweet 1 must be a viral hook (Contrarian or Question). Keep tweets punchy.\n"
-			. "3. Facebook: Friendly, community-driven approach with a clear call to action.\n\n"
+			. "3. Facebook: Friendly, community-driven approach with a clear call to action.\n"
+			. "4. YouTube Short: a punchy, curiosity-driven title under 60 characters (this becomes the video's search query, so it "
+			. "needs to work as a visual concept, not just a headline) and a short spoken-style caption/description that stands on its own without reading the article.\n\n"
 			. "Include the URL at the end: {$url}\n\n"
-			. 'Return JSON: {"linkedin":{"post":""}, "x":{"thread":[]}, "facebook":{"post":""}}';
+			. 'Return JSON: {"linkedin":{"post":""}, "x":{"thread":[]}, "facebook":{"post":""}, "youtube_short":{"title":"","caption":""}}';
 
 		$data = $this->ai->generate_json( $prompt, array(
 			'system' => $this->brain->context_prompt(),
@@ -170,6 +172,25 @@ class VMSB_Social_Recycler {
 				'media_id'     => get_post_thumbnail_id( $post_id ),
 				'status'       => 'pending',
 				'scheduled_at' => date( 'Y-m-d H:i:s', strtotime( '+3 hours' ) ),
+				'created_at'   => $now,
+			) );
+		}
+
+		// 4. YouTube Short - VM Social AI's own YouTube channel already calls
+		// its video engine internally (VMSAI_Channel_Youtube::publish() reads
+		// title/body straight off the queue row to generate the clip), so
+		// there's no video to generate or upload here - just a well-formed
+		// row for its dispatcher to pick up.
+		if ( ! empty( $data['youtube_short']['title'] ) ) {
+			$wpdb->insert( $table, array(
+				'campaign_id'  => $campaign_id,
+				'channel'      => 'youtube',
+				'format'       => 'video',
+				'title'        => sanitize_text_field( $data['youtube_short']['title'] ),
+				'body'         => $data['youtube_short']['caption'] ?? '',
+				'link'         => get_permalink( $post_id ),
+				'status'       => 'pending',
+				'scheduled_at' => date( 'Y-m-d H:i:s', strtotime( '+4 hours' ) ),
 				'created_at'   => $now,
 			) );
 		}

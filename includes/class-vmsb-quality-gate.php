@@ -96,6 +96,24 @@ class VMSB_Quality_Gate {
 			$blocking[] = 'Does not match the business: ' . $alignment['detail'];
 		}
 
+		// 7. Originality. This is NOT third-party plagiarism detection - that
+		// needs a paid service (Copyscape, Originality.ai, etc.) this plugin
+		// has no credentials for and cannot honestly claim to do. What this
+		// catches is the specific, common failure of unattended AI writing:
+		// generic, could-be-any-business filler dressed up as an article.
+		// Piggybacks on alignment_check()'s existing AI call instead of
+		// spending a second one - see the JSON schema there.
+		$checks['originality'] = array(
+			'weight' => 15,
+			'score'  => $alignment['originality_score'],
+			'detail' => $alignment['generic_patterns']
+				? 'Generic patterns found: ' . implode( '; ', $alignment['generic_patterns'] )
+				: 'Reads as distinctive, not generic AI filler.',
+		);
+		if ( $alignment['originality_score'] > 0 && $alignment['originality_score'] < (int) VMSB_Settings::get( 'quality_min_originality' ) ) {
+			$blocking[] = 'Reads as generic AI filler rather than genuine expertise: ' . implode( '; ', $alignment['generic_patterns'] );
+		}
+
 		// Weighted total.
 		$total = 0;
 		$wsum  = 0;
@@ -179,14 +197,16 @@ class VMSB_Quality_Gate {
 	}
 
 	private static function alignment_check( $text, array $context ) {
+		$empty = array( 'score' => 0, 'detail' => '', 'unverified_claims' => array(), 'originality_score' => 0, 'generic_patterns' => array() );
+
 		if ( ! class_exists( 'VMSB_Brain' ) ) {
-			return array( 'score' => 0, 'detail' => 'No brain.', 'unverified_claims' => array() );
+			return array_merge( $empty, array( 'detail' => 'No brain.' ) );
 		}
 
 		$brain   = new VMSB_Brain();
 		$profile = $brain->context_prompt();
 		if ( ! $profile ) {
-			return array( 'score' => 0, 'detail' => 'No business DNA set.', 'unverified_claims' => array() );
+			return array_merge( $empty, array( 'detail' => 'No business DNA set.' ) );
 		}
 
 		$ai     = new VMSB_AI_Router();
@@ -200,12 +220,15 @@ class VMSB_Quality_Gate {
 			. "Assess against the business you know:\n"
 			. "1. Does this read like it was written by THIS business with its real expertise, or like generic filler on the topic?\n"
 			. "2. Does it answer the query in the first paragraph?\n"
-			. "3. List any factual/statistical/numeric claim a reader would expect sourced but is not - invented awards, client names, certifications, dates.\n\n"
-			. 'Return JSON: {"alignment_score":0,"answers_query":true,"reasoning":"","unverified_claims":[]}';
+			. "3. List any factual/statistical/numeric claim a reader would expect sourced but is not - invented awards, client names, certifications, dates.\n"
+			. "4. Separately from brand fit: score how much this reads as generic, templated AI writing regardless of topic - hedge-everything "
+			. "phrasing, empty transitions ('in today's fast-paced world', 'it's important to note'), zero concrete specifics (no numbers, "
+			. "names, or examples that couldn't apply to literally any competitor). Quote the specific phrases that read this way, if any.\n\n"
+			. 'Return JSON: {"alignment_score":0,"answers_query":true,"reasoning":"","unverified_claims":[],"originality_score":0,"generic_patterns":[]}';
 
 		$data = $ai->generate_json( $prompt, array( 'system' => $profile, 'max_tokens' => 700, 'temperature' => 0.2 ) );
 		if ( ! is_array( $data ) || ! isset( $data['alignment_score'] ) ) {
-			return array( 'score' => 0, 'detail' => 'Alignment response unparseable.', 'unverified_claims' => array() );
+			return array_merge( $empty, array( 'detail' => 'Alignment response unparseable.' ) );
 		}
 
 		$raw    = (float) $data['alignment_score'];
@@ -216,10 +239,15 @@ class VMSB_Quality_Gate {
 			$detail = 'Does not answer the query up front. ' . $detail;
 		}
 
+		$orig_raw = (float) ( $data['originality_score'] ?? 0 );
+		$orig     = (int) round( $orig_raw <= 10 ? $orig_raw * 10 : $orig_raw );
+
 		return array(
 			'score'             => max( 0, min( 100, $score ) ),
 			'detail'            => $detail ?: 'Aligned.',
 			'unverified_claims' => array_filter( (array) ( $data['unverified_claims'] ?? array() ) ),
+			'originality_score' => max( 0, min( 100, $orig ) ),
+			'generic_patterns'  => array_filter( (array) ( $data['generic_patterns'] ?? array() ) ),
 		);
 	}
 

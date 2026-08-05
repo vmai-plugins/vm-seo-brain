@@ -104,6 +104,10 @@ class VMSB_Settings {
 			'quality_gate'          => 1,
 			'quality_min_score'     => 70,
 			'quality_min_alignment' => 60,
+			// Not third-party plagiarism detection (needs a paid API this
+			// plugin has no credentials for) - this is a same-call heuristic
+			// for generic, could-be-anyone AI filler. See VMSB_Quality_Gate.
+			'quality_min_originality' => 50,
 			'quality_min_words'     => 700,
 			'quality_dup_block'     => 1,
 
