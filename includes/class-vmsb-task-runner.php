@@ -53,6 +53,12 @@ class VMSB_Task_Runner {
 		global $wpdb;
 		$table = self::table();
 
+		// World-Class Blitz Detection: If site is in growth sprint, double the batch limit for content tasks
+		$velocity = (int) VMSB_Settings::get( 'posts_per_day', 3 );
+		if ( $velocity >= 15 ) {
+			$limit = max( $limit, 8 ); // Process more tasks per hour for high-velocity sites
+		}
+
 		// Claim rows atomically before dispatching them: without this, two
 		// overlapping cron requests (a real risk with external cron triggers,
 		// or a manual "run now" overlapping the scheduled hourly hit) can both

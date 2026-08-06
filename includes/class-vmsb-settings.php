@@ -13,6 +13,7 @@ class VMSB_Settings {
 	private static $secret_keys = array(
 		'aipuffer_key', 'openai_key', 'gemini_key', 'openrouter_key',
 		'pexels_key', 'comfy_key', 'google_client_secret', 'google_refresh_token',
+		'banana_key',
 	);
 
 	public static function defaults() {
@@ -48,7 +49,7 @@ class VMSB_Settings {
 			'ollama_model'    => 'llama3.1',
 
 			// Image chain.
-			'image_chain'     => array( 'aipuffer', 'pollinations', 'huggingface', 'cloudflare', 'pexels' ),
+			'image_chain'     => array( 'aipuffer', 'google', 'banana', 'pollinations', 'huggingface', 'cloudflare', 'pexels' ),
 			'pollinations_url'=> 'https://image.pollinations.ai/prompt/',
 			'pollinations_model' => 'flux',
 			'huggingface_key' => '',
@@ -56,12 +57,15 @@ class VMSB_Settings {
 			'cloudflare_account_id' => '',
 			'cloudflare_api_token'  => '',
 			'cloudflare_model'      => '@cf/bytedance/stable-diffusion-xl-lightning',
+			'banana_key'      => '',
+			'banana_model'    => 'flux-1-schnell',
 			'comfy_url'       => '',
 			'comfy_key'       => '',
 			'comfy_workflow'  => '',
 			'pexels_key'      => '',
 			'aipuffer_image_provider' => 'openai', // openai|google|azure|replicate
 			'aipuffer_image_model'    => 'dall-e-3',
+			'google_imagen_model'     => 'imagen-3',
 			'image_width'     => 1200,
 			'image_height'    => 675,
 			'image_style'     => 'premium professional business photography, editorial commercial style, corporate aesthetic, high-end studio lighting, sharp focus, clean and professional, no text',

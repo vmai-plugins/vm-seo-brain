@@ -184,6 +184,72 @@ class VMSB_Image_Engine {
 		return $this->fetch_bytes( $url, 120 );
 	}
 
+	private function from_google( $prompt, $subject, $meta ) {
+		$key = VMSB_Settings::get( 'gemini_key' );
+		if ( ! $key ) {
+			return new WP_Error( 'vmsb_google', 'Gemini/Google key missing.' );
+		}
+
+		$model = VMSB_Settings::get( 'google_imagen_model', 'imagen-3' );
+
+		// Imagen 3 via Vertex AI/Gemini API (2026 Beta Endpoint)
+		$url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:predict?key=" . rawurlencode( $key );
+		$body = array(
+			'instances' => array(
+				array( 'prompt' => $prompt )
+			),
+			'parameters' => array(
+				'sampleCount' => 1,
+				'aspectRatio' => '16:9',
+			)
+		);
+
+		$res = wp_remote_post( $url, array(
+			'timeout' => 90,
+			'headers' => array( 'Content-Type' => 'application/json' ),
+			'body'    => wp_json_encode( $body ),
+		) );
+
+		if ( is_wp_error( $res ) ) return $res;
+		$data = json_decode( wp_remote_retrieve_body( $res ), true );
+
+		if ( ! empty( $data['predictions'][0]['bytesBase64Encoded'] ) ) {
+			return base64_decode( $data['predictions'][0]['bytesBase64Encoded'] );
+		}
+
+		return new WP_Error( 'vmsb_google', 'Google Imagen returned no image data.' );
+	}
+
+	private function from_banana( $prompt, $subject, $meta ) {
+		$key = VMSB_Settings::get( 'banana_key' );
+		if ( ! $key ) {
+			return new WP_Error( 'vmsb_banana', 'Banana.dev API key missing.' );
+		}
+
+		// Banana.dev Serverless Inference (2026 High-Speed Node)
+		$url = "https://api.banana.dev/start/v1/";
+		$body = array(
+			'apiKey'      => $key,
+			'modelKey'    => VMSB_Settings::get( 'banana_model', 'flux-nano-banana' ),
+			'modelInputs' => array( 'prompt' => $prompt, 'width' => 1024, 'height' => 768 )
+		);
+
+		$res = wp_remote_post( $url, array(
+			'timeout' => 90,
+			'headers' => array( 'Content-Type' => 'application/json' ),
+			'body'    => wp_json_encode( $body ),
+		) );
+
+		if ( is_wp_error( $res ) ) return $res;
+		$data = json_decode( wp_remote_retrieve_body( $res ), true );
+
+		if ( ! empty( $data['modelOutputs'][0]['image_url'] ) ) {
+			return $this->fetch_bytes( $data['modelOutputs'][0]['image_url'], 60 );
+		}
+
+		return new WP_Error( 'vmsb_banana', 'Banana.dev returned no image.' );
+	}
+
 	private function from_huggingface( $prompt, $subject, $meta ) {
 		$key   = VMSB_Settings::get( 'huggingface_key' );
 		$model = VMSB_Settings::get( 'huggingface_model', 'black-forest-labs/FLUX.1-dev' );

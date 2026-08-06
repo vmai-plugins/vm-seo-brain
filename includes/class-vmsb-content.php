@@ -1193,7 +1193,11 @@ class VMSB_Content {
 	public function hydrate_pipeline( $limit = 20 ) {
 		global $wpdb;
 
-		// Find 'planned' items with high priority that aren't approved yet
+		// 2026 Blitz Mode: Always ensure at least 100 planned items before approving
+		$planned_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table()} WHERE status = 'planned'" );
+		if ( $planned_count < 100 ) {
+			( new VMSB_Niche_Planner() )->plan_expansion( 50 );
+		}
 		$planned = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT id FROM {$this->table()} WHERE status = 'planned' ORDER BY priority DESC LIMIT %d",

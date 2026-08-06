@@ -203,7 +203,7 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 						<div class="vmsb-form-grid">
 							<label class="vmsb-full">Generation Chain
 								<span class="vmsb-checks">
-									<?php foreach ( array( 'aipuffer' => 'AI Puffer', 'pollinations' => 'Pollinations', 'huggingface' => 'Hugging Face', 'pexels' => 'Pexels' ) as $k => $label ) : ?>
+									<?php foreach ( array( 'aipuffer' => 'AI Puffer', 'google' => 'Google Imagen', 'banana' => 'Nano Banana', 'pollinations' => 'Pollinations', 'huggingface' => 'Hugging Face', 'cloudflare' => 'Cloudflare', 'pexels' => 'Pexels' ) as $k => $label ) : ?>
 										<label><input type="checkbox" name="<?php echo esc_attr( $field( 'image_chain' ) ); ?>[]" value="<?php echo esc_attr( $k ); ?>" <?php checked( in_array( $k, (array) $s['image_chain'], true ) ); ?>> <?php echo esc_html( $label ); ?></label>
 									<?php endforeach; ?>
 								</span>
@@ -218,6 +218,14 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<label>Cloudflare Account ID<input type="text" name="<?php echo esc_attr( $field( 'cloudflare_account_id' ) ); ?>" value="<?php echo esc_attr( $s['cloudflare_account_id'] ); ?>"></label>
 							<label>Cloudflare API Token<input type="password" name="<?php echo esc_attr( $field( 'cloudflare_api_token' ) ); ?>" value="<?php echo esc_attr( $s['cloudflare_api_token'] ); ?>" autocomplete="new-password"></label>
 							<label>Cloudflare Model<input type="text" name="<?php echo esc_attr( $field( 'cloudflare_model' ) ); ?>" value="<?php echo esc_attr( $s['cloudflare_model'] ); ?>"></label>
+
+							<label>Google Imagen Key<input type="password" name="<?php echo esc_attr( $field( 'gemini_key' ) ); ?>" value="<?php echo esc_attr( $s['gemini_key'] ); ?>" autocomplete="new-password">
+								<small class="vmsb-note">Shared with Gemini AI. Uses Imagen 3.</small>
+							</label>
+							<label>Google Imagen Model<input type="text" name="<?php echo esc_attr( $field( 'google_imagen_model' ) ); ?>" value="<?php echo esc_attr( $s['google_imagen_model'] ); ?>" placeholder="imagen-3|imagen-3-nano"></label>
+
+							<label>Nano Banana API Key<input type="password" name="<?php echo esc_attr( $field( 'banana_key' ) ); ?>" value="<?php echo esc_attr( $s['banana_key'] ); ?>" autocomplete="new-password"></label>
+							<label>Banana Model Key<input type="text" name="<?php echo esc_attr( $field( 'banana_model' ) ); ?>" value="<?php echo esc_attr( $s['banana_model'] ); ?>"></label>
 
 							<label>AI Puffer Image Provider<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_image_provider' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_image_provider'] ); ?>" placeholder="openai|google|azure|replicate"></label>
 							<label>AI Puffer Image Model<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_image_model' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_image_model'] ); ?>"></label>

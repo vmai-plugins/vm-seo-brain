@@ -83,9 +83,14 @@ class VMSB_Model_Sync {
 		if ( ! empty( $body['models'] ) ) {
 			foreach ( $body['models'] as $m ) {
 				$id = str_replace( 'models/', '', $m['name'] );
-				if ( strpos( $id, 'gemini' ) !== false ) {
-					$models[] = array( 'id' => $id, 'name' => $m['displayName'] ?? $id );
-				}
+
+				// Categorize for UI
+				$type = ( strpos($id, 'imagen') !== false ) ? 'Image' : 'Text';
+				$models[] = array(
+					'id'   => $id,
+					'name' => "{$type}: " . ($m['displayName'] ?? $id),
+					'type' => strtolower($type)
+				);
 			}
 		}
 		update_option( 'vmsb_models_gemini', $models );

@@ -357,14 +357,24 @@ class VMSB_Admin {
 			array( $this, 'render_dashboard' )
 		);
 
+		// learning.php, logs.php and memory.php were fully built (real
+		// queries, working action buttons, matching the rest of the design
+		// system) but never registered here - admin.php?page=vmsb-learning
+		// et al. is a plain WordPress core menu slug, so without an
+		// add_submenu_page() call for it, WP's own routing blocks the
+		// request before render_page() ever runs. Complete pages that no
+		// user could ever reach.
 		$pages = array(
 			'vmsb-issues'     => 'Issues',
 			'vmsb-keywords'   => 'Keywords',
 			'vmsb-silo'       => 'Silos',
 			'vmsb-taxonomy'   => 'Taxonomy',
 			'vmsb-plan'       => 'Content Plan',
+			'vmsb-memory'     => 'Memory',
 			'vmsb-competitive'=> 'Competitive',
+			'vmsb-learning'   => 'Learning',
 			'vmsb-usage'      => 'AI Usage',
+			'vmsb-logs'       => 'Logs',
 			'vmsb-settings'   => 'Settings',
 		);
 
@@ -446,7 +456,7 @@ class VMSB_Admin {
 			'huggingface_model', 'cloudflare_account_id', 'cloudflare_model',
 			'comfy_url', 'image_style', 'google_client_id', 'gsc_property', 'ga4_property_id',
 			'sheet_id', 'sheet_tab', 'bulk_topics_tab', 'theme_mode', 'aipuffer_image_provider', 'aipuffer_image_model',
-			'webhook_url',
+			'google_imagen_model', 'banana_model', 'webhook_url',
 		);
 		foreach ( $text_keys as $key ) {
 			if ( isset( $fields[ $key ] ) ) {
