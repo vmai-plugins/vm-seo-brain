@@ -5,6 +5,7 @@ global $wpdb;
 $fixer   = new VMSB_Fixer();
 $counts  = $fixer->counts();
 $pending = ( new VMSB_Content() )->pending_reviews( 50 );
+$fixed   = $fixer->fixed_issues( 25 );
 
 // The filter field below is named vmsb_post_type, not post_type - WordPress
 // core treats any `post_type` query var on admin.php as a signal that the
@@ -88,6 +89,47 @@ foreach ( $exclude_types as $et ) {
 								<button class="vmsb-btn vmsb-btn-gold vmsb-btn-xs" data-vmsb="pending-approve" data-body='{"post_id":<?php echo (int) $p['post_id']; ?>}' data-confirm="Publish this drafted rewrite to the live page?">Approve</button>
 								<button class="vmsb-mini-btn" data-vmsb="pending-reject" data-body='{"post_id":<?php echo (int) $p['post_id']; ?>}' data-confirm="Discard this draft? The issue will reopen.">Reject</button>
 							</div>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+	</section>
+	<?php endif; ?>
+
+	<?php if ( $fixed ) : ?>
+	<section class="vmsb-card" style="margin-bottom:24px; border-left: 3px solid var(--good);">
+		<div class="vmsb-flex-space" style="margin-bottom: 14px;">
+			<h2 style="margin:0;">Recently Fixed <span class="vmsb-tag vmsb-tag-good" style="margin-left:8px;"><?php echo count( $fixed ); ?></span></h2>
+			<p class="vmsb-note" style="margin:0;">Auto-fixes God Fix or Auto-Fix applied. Every "Continue?" confirm on this page has always promised these can be reverted from here.</p>
+		</div>
+		<div class="vmsb-table-wrap">
+			<table class="vmsb-table">
+				<thead><tr><th>Page / Term</th><th>What was fixed</th><th>When</th><th></th></tr></thead>
+				<tbody>
+				<?php foreach ( $fixed as $f ) :
+					$object_label = '—';
+					$object_url   = '';
+					if ( 'post' === $f->object_type && $f->object_id && get_post( $f->object_id ) ) {
+						$object_label = get_the_title( $f->object_id );
+						$object_url   = get_edit_post_link( $f->object_id );
+					} elseif ( 'term' === $f->object_type && $f->object_id ) {
+						$term = get_term( $f->object_id );
+						if ( $term && ! is_wp_error( $term ) ) {
+							$object_label = $term->name;
+							$object_url   = get_edit_term_link( $f->object_id, $term->taxonomy );
+						}
+					} elseif ( 'site' === $f->object_type ) {
+						$object_label = 'Site-wide';
+					}
+				?>
+					<tr>
+						<td><?php if ( $object_url ) : ?><a href="<?php echo esc_url( $object_url ); ?>" target="_blank"><?php echo esc_html( $object_label ); ?></a><?php else : ?><?php echo esc_html( $object_label ); ?><?php endif; ?></td>
+						<td class="vmsb-issue-detail"><?php echo esc_html( $fixer->get_rule_explanation( $f->rule ) ?: $f->rule ); ?></td>
+						<td class="vmsb-note"><?php echo esc_html( $f->fixed_at ? human_time_diff( strtotime( $f->fixed_at ) ) . ' ago' : '—' ); ?></td>
+						<td class="vmsb-row-actions">
+							<button class="vmsb-mini-btn" data-vmsb="revert" data-id="<?php echo (int) $f->id; ?>" data-confirm="Undo this fix and restore the previous version?">Revert</button>
 						</td>
 					</tr>
 				<?php endforeach; ?>

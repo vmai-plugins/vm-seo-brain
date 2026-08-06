@@ -127,6 +127,22 @@ class VMSB_Fixer {
 		) );
 	}
 
+	/**
+	 * Recently auto-fixed issues that can still be undone. The god-fix
+	 * confirm dialog has always promised "Revert any change later from the
+	 * logs" - the logs page has never had anything to click, and neither
+	 * did anywhere else. Scoped to has a revert_payload, since fixes that
+	 * never captured a before-state (a handful of rule types don't) can't
+	 * actually be undone even though their status is 'fixed'.
+	 */
+	public function fixed_issues( $limit = 25 ) {
+		global $wpdb;
+		return $wpdb->get_results( $wpdb->prepare(
+			"SELECT * FROM {$this->table()} WHERE status = 'fixed' AND revert_payload IS NOT NULL AND revert_payload != '' ORDER BY id DESC LIMIT %d",
+			(int) $limit
+		) );
+	}
+
 	public function counts() {
 		global $wpdb;
 		$rows = $wpdb->get_results( "SELECT severity, COUNT(*) n FROM {$this->table()} WHERE status = 'open' GROUP BY severity", ARRAY_A );
@@ -688,6 +704,14 @@ class VMSB_Fixer {
 
 			case 'aeo_gap':
 				return ( new VMSB_AEO() )->apply( $id );
+
+			case 'roi_leak':
+				// find_leaks() has always filed these into the same issues
+				// table as everything else here, so they already show up in
+				// the open-issues list with an Auto-Fix button - clicking it
+				// just hit the switch's default case and silently did
+				// nothing, since roi_leak was never one of the mapped rules.
+				return ( new VMSB_ROI() )->insert_cta( $id );
 
 			case 'low_rankmath_score':
 				return $this->god_fix_90( $id );

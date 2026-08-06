@@ -157,7 +157,13 @@ $market_latest  = ( new VMSB_Market() )->latest();
 			<p class="vmsb-sub">Optimizing how users see you in search results.</p>
 
 			<div class="vmsb-cards" style="margin:20px 0;">
-				<div class="vmsb-card"><span class="vmsb-card-num"><?php echo (int) $roi_counts['open_leaks']; ?></span><span class="vmsb-card-label">Conversion Leaks</span></div>
+				<div class="vmsb-card">
+					<span class="vmsb-card-num"><?php echo (int) $roi_counts['open_leaks']; ?></span>
+					<span class="vmsb-card-label">Conversion Leaks</span>
+					<?php if ( $roi_counts['open_leaks'] ) : ?>
+						<a href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-issues&rule=roi_leak' ) ); ?>" class="vmsb-note" style="display:block; margin-top:6px;">View &amp; fix on Issues →</a>
+					<?php endif; ?>
+				</div>
 				<div class="vmsb-card"><span class="vmsb-card-num"><?php echo count( $running ); ?></span><span class="vmsb-card-label">Live CTR Tests</span></div>
 				<div class="vmsb-card">
 					<span class="vmsb-card-num vmsb-card-sm" style="color:var(--good);"><?php echo $forecast ? esc_html( ucfirst( $forecast['trend'] ) ) : '—'; ?></span>

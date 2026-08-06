@@ -133,7 +133,17 @@ class VMSB_ROI {
 			) );
 		}
 
-		return array( 'inserted' => true, 'revert' => array( 'post_id' => $post_id, 'field' => 'post_content', 'value' => $before ) );
+		// Flat post_id/post_content, not nested under a 'revert' key - this
+		// return value IS the issue's revert_payload verbatim (see
+		// VMSB_Fixer::fix_issue()'s docblock), and VMSB_Fixer::revert() only
+		// ever looks for a top-level post_content key. The nested shape this
+		// used to return meant a revert would silently fall through to a
+		// RankMath-meta revert with nothing to actually revert, mark the
+		// issue 'reverted', and leave the CTA sitting in the post untouched -
+		// same class of bug as the earlier fix_orphan()/revert() fix this
+		// session, just never reachable until roi_leak got wired into
+		// fix_issue()'s dispatch.
+		return array( 'inserted' => true, 'post_id' => $post_id, 'post_content' => $before );
 	}
 
 	/**

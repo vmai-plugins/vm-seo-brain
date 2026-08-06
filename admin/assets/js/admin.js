@@ -126,13 +126,14 @@
 		if ( route === 'webhook-test' ) { return ( data.ok ? 'Success: ' : 'Failed: ' ) + data.message; }
 		if ( route === 'health-reset' ) { return 'Circuit breakers reset.'; }
 		if ( route === 'test-image-provider' ) { return data.ok ? 'Success: Image generated with ' + data.provider : 'Failed: ' + data.error; }
+		if ( route === 'revert' )          { return 'Reverted. The page is back to how it was before the fix.'; }
 		if ( route === 'pending-approve' ) { return 'Draft approved and published.'; }
 		if ( route === 'pending-reject' )  { return 'Draft discarded — issue reopened.'; }
 		return JSON.stringify( data, null, 2 );
 	}
 
 	function reloadIfNeeded( route ) {
-		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject' ];
+		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert' ];
 		if ( routes.indexOf( route ) !== -1 ) {
 			setTimeout( () => window.location.reload(), 1600 );
 		}
