@@ -22,6 +22,22 @@ class VMSB_Backlinks {
 	public function __construct() {
 		$this->ai  = new VMSB_AI_Router();
 		$this->log = new VMSB_Logger();
+
+		// The Competitive page's Backlink Pipeline has always claimed
+		// "The Brain finds link prospects automatically as new content is
+		// published" - nothing ever actually called discover() on publish,
+		// so prospects could only ever exist if someone hit the REST route
+		// directly. This makes that claim true. Gated on backlink_enabled,
+		// same opt-in this whole module already requires, even though
+		// discover() itself only reasons about prospects and sends nothing.
+		add_action( 'vmsb_post_produced', array( $this, 'on_post_produced' ) );
+	}
+
+	public function on_post_produced( $post_id ) {
+		if ( ! (int) VMSB_Settings::get( 'backlink_enabled' ) ) {
+			return;
+		}
+		$this->discover( $post_id );
 	}
 
 	private function table() {
@@ -84,6 +100,32 @@ class VMSB_Backlinks {
 		}
 
 		return array( 'found' => $found );
+	}
+
+	/**
+	 * Backfill for posts published before the on_post_produced hook existed
+	 * (or from while backlink_enabled was off) - runs discover() for a
+	 * handful of published posts that have no prospect rows yet at all.
+	 */
+	public function discover_recent( $limit = 5 ) {
+		global $wpdb;
+		$table = $this->table();
+		$posts = $wpdb->get_col( $wpdb->prepare(
+			"SELECT p.ID FROM {$wpdb->posts} p
+			 WHERE p.post_status = 'publish' AND p.post_type = 'post'
+			 AND NOT EXISTS (SELECT 1 FROM {$table} b WHERE b.target_post_id = p.ID)
+			 ORDER BY p.post_date DESC LIMIT %d",
+			$limit
+		) );
+
+		$done = 0;
+		foreach ( $posts as $post_id ) {
+			$res = $this->discover( (int) $post_id );
+			if ( ! is_wp_error( $res ) ) {
+				$done++;
+			}
+		}
+		return array( 'processed' => $done, 'checked' => count( $posts ) );
 	}
 
 	/**

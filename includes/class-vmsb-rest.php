@@ -61,6 +61,7 @@ class VMSB_REST {
 			'competitor-scan'     => 'competitor_scan',
 			'competitor-duel'     => 'competitor_duel',
 			'backlink-discover'   => 'backlink_discover',
+			'backlink-discover-recent' => 'backlink_discover_recent',
 			'backlink-draft'      => 'backlink_draft',
 			'backlink-send'       => 'backlink_send',
 			'backlink-shield'     => 'backlink_shield',
@@ -447,6 +448,10 @@ class VMSB_REST {
 			return new WP_REST_Response( array( 'error' => $result->get_error_message() ), 422 );
 		}
 		return rest_ensure_response( $result );
+	}
+
+	public function backlink_discover_recent( $request ) {
+		return rest_ensure_response( ( new VMSB_Backlinks() )->discover_recent( (int) $request->get_param( 'limit' ) ?: 5 ) );
 	}
 
 	public function backlink_draft( $request ) {

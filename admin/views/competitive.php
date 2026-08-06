@@ -65,13 +65,25 @@ $market_latest  = ( new VMSB_Market() )->latest();
 										</td>
 										<td><span class="vmsb-tag vmsb-tag-gold"><?php echo (int) $c->shared_keywords; ?> Gaps Found</span></td>
 										<td><span class="vmsb-sev sev-<?php echo $ratio > 1.2 ? 'high' : 'low'; ?>"><?php echo round($ratio, 1); ?>x your size</span></td>
-										<td><button class="vmsb-mini-btn" data-vmsb="competitor-duel" data-id="0" data-body='{"domain":"<?php echo esc_attr($c->domain); ?>"}'>Scout Gaps</button></td>
+										<td class="vmsb-row-actions">
+											<button class="vmsb-mini-btn" data-vmsb="competitor-duel" data-id="0" data-body='{"domain":"<?php echo esc_attr($c->domain); ?>"}'>Scout Gaps</button>
+											<button class="vmsb-mini-btn" data-vmsb="competitor-remove" data-id="<?php echo (int) $c->id; ?>" data-confirm="Stop tracking <?php echo esc_attr( $c->domain ); ?>?">Remove</button>
+										</td>
 									</tr>
 								<?php endforeach; ?>
 								</tbody>
 							</table>
 						</div>
 					<?php endif; ?>
+
+					<!-- competitor-add existed as a working REST route with no form
+					     anywhere to reach it - the empty state above literally said
+					     "Add one below" while nothing was below it. -->
+					<div id="vmsb-competitor-add-form" class="vmsb-inline-form" style="margin-top:16px; gap:10px;">
+						<input type="text" name="domain" placeholder="rival-domain.com" style="flex:1; min-width:180px;">
+						<input type="text" name="label" placeholder="Display name (optional)" style="flex:1; min-width:160px;">
+						<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="competitor-add" data-vmsb-form="vmsb-competitor-add-form">Add Competitor</button>
+					</div>
 				</div>
 
 				<div class="vmsb-card">
@@ -95,12 +107,17 @@ $market_latest  = ( new VMSB_Market() )->latest();
 			<h2>Backlink Pipeline</h2>
 			<p class="vmsb-sub">Converting relationships into domain authority.</p>
 
+			<?php if ( ! (int) VMSB_Settings::get( 'backlink_enabled' ) ) : ?>
+				<p class="vmsb-status-line is-warning">⚠️ Outreach is off in Settings → God Mode. Discovery (below) still works either way - it only reasons about prospects and sends nothing - but drafting and sending pitches stays locked until you opt in with a sender name and email.</p>
+			<?php endif; ?>
+
 			<div class="vmsb-btn-row">
 				<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="backlink-shield" data-body='{"limit":30}'>Scan for Dead Outbound Links</button>
+				<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="backlink-discover-recent" data-body='{"limit":5}' title="Runs discovery for published posts that have no prospects yet">Discover Prospects for Recent Posts</button>
 			</div>
 
 			<?php if ( ! $prospects ) : ?>
-				<div class="vmsb-empty"><h2>No prospects yet</h2><p>The Brain finds link prospects automatically as new content is published.</p></div>
+				<div class="vmsb-empty"><h2>No prospects yet</h2><p>New posts get prospects automatically once published (if outreach is enabled in Settings) - or click "Discover Prospects for Recent Posts" above to backfill existing ones.</p></div>
 			<?php else : ?>
 				<div class="vmsb-table-wrap">
 					<table class="vmsb-table vmsb-table-full">

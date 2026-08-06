@@ -76,6 +76,7 @@
 		}
 		if ( route === 'competitor-scan' )    { return data.checked + ' competitors checked, ' + data.gaps + ' gaps found.'; }
 		if ( route === 'competitor-add' )     { return 'Added.'; }
+		if ( route === 'competitor-remove' )  { return data.removed ? 'Removed.' : 'Could not remove.'; }
 		if ( route === 'competitor-duel' ) {
 			if ( data.gaps ) {
 				let msg = 'Hijack Opportunities Found:';
@@ -85,6 +86,7 @@
 			return 'Verdict: ' + ( data.verdict || 'unknown' ) + '. ' + ( data.recommended_additions || [] ).length + ' additions suggested.';
 		}
 		if ( route === 'backlink-discover' )  { return data.found + ' prospects found.'; }
+		if ( route === 'backlink-discover-recent' ) { return data.processed + ' of ' + data.checked + ' posts checked for prospects.'; }
 		if ( route === 'backlink-draft' )     { return 'Draft ready: ' + ( data.subject || '' ); }
 		if ( route === 'backlink-send' )      { return data.sent ? 'Sent.' : 'Not sent.'; }
 		if ( route === 'backlink-shield' )    { return data.checked + ' links checked, ' + data.flagged + ' flagged.'; }
@@ -130,7 +132,7 @@
 	}
 
 	function reloadIfNeeded( route ) {
-		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject' ];
+		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject' ];
 		if ( routes.indexOf( route ) !== -1 ) {
 			setTimeout( () => window.location.reload(), 1600 );
 		}
