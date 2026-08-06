@@ -99,6 +99,33 @@ class VMSB_Thief {
 		" ) );
 	}
 
+	/**
+	 * Hijacked keywords land in the same content plan table as everything
+	 * else, distinguished only by a [THIEF]/[BLITZ] title prefix - nothing
+	 * ever pulled just those rows back out into their own view, so a
+	 * hijack was invisible unless you happened to notice the prefix while
+	 * scanning the full pipeline table.
+	 */
+	public function recent_hijacks( $limit = 10 ) {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT id, title, primary_keyword, brief, status, post_id, created_at FROM {$wpdb->prefix}vmsb_plan
+			 WHERE title LIKE '[THIEF]%' OR title LIKE '[BLITZ]%'
+			 ORDER BY created_at DESC LIMIT %d",
+			$limit
+		) );
+
+		foreach ( $rows as $row ) {
+			$row->is_blitz = ( 0 === strpos( $row->title, '[BLITZ]' ) );
+			// The brief's format is fixed by queue_hijack_post() above, which
+			// is the only writer of these rows - safe to parse back out
+			// rather than adding a schema column just for display.
+			$row->target_domain = preg_match( "/Target rival '([^']+)'/", (string) $row->brief, $m ) ? $m[1] : '';
+		}
+
+		return $rows;
+	}
+
 	private function queue_hijack_post( $gap_data, $competitor_domain, $is_blitz = false ) {
 		global $wpdb;
 		$table = $wpdb->prefix . 'vmsb_plan';

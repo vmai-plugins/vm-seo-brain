@@ -116,7 +116,10 @@
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-roi.php)",
       "Bash(ls -la \"/c/vmai-crm-stable\" 2>&1 | head -50)",
       "Bash(cd /c/vmai-crm-stable *)",
-      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l '/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vmai-sales-agent/includes/class-vmai-rest-api.php')"
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l '/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vmai-sales-agent/includes/class-vmai-rest-api.php')",
+      "Read(//c/vmai-crm-stable/**)",
+      "Bash(npx tsc *)",
+      "mcp__claude-in-chrome__get_page_text"
     ]
   }
 }

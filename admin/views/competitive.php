@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) || exit;
 $competitor    = new VMSB_Competitor();
 $backlinks     = new VMSB_Backlinks();
 $programmatic  = new VMSB_Programmatic();
+$thief         = new VMSB_Thief();
 
 $competitors    = $competitor->list_all();
 $competitor_ct  = $competitor->counts();
@@ -11,6 +12,7 @@ $prospects      = $backlinks->list_by_status( '', 40 );
 $backlink_ct    = $backlinks->counts();
 $pseo_stats     = $programmatic->stats();
 $market_latest  = ( new VMSB_Market() )->latest();
+$hijacks        = $thief->recent_hijacks( 10 );
 ?>
 <div class="wrap vmsb vmsb-competitive">
 	<header class="vmsb-head">
@@ -98,6 +100,37 @@ $market_latest  = ( new VMSB_Market() )->latest();
 						<p class="vmsb-note" style="color:var(--text); line-height:1.5;"><?php echo esc_html($market_latest['recommendation']); ?></p>
 					<?php endif; ?>
 				</div>
+			</div>
+
+			<div class="vmsb-card" style="margin-top:20px;">
+				<h3 style="font-size:14px; text-transform:uppercase; color:var(--muted); margin-bottom:15px;">Live Hijack Feed</h3>
+				<p class="vmsb-note" style="margin:0 0 15px;">Keywords Thief Mode and Blitz have queued from rival gaps. These were always landing in the Content Plan with a [THIEF]/[BLITZ] prefix and nothing surfaced them here specifically until now.</p>
+				<?php if ( ! $hijacks ) : ?>
+					<div class="vmsb-empty"><h2>No hijacks yet</h2><p>Run Sync Market Intelligence above, or wait for God Mode's competitor_blitz task if it's enabled.</p></div>
+				<?php else : ?>
+					<div class="vmsb-table-wrap">
+						<table class="vmsb-table vmsb-table-full">
+							<thead><tr><th>Keyword</th><th>Target</th><th>Mode</th><th>Status</th><th>Queued</th></tr></thead>
+							<tbody>
+							<?php foreach ( $hijacks as $h ) : ?>
+								<tr>
+									<td>
+										<?php if ( $h->post_id && get_post( $h->post_id ) ) : ?>
+											<a href="<?php echo esc_url( get_edit_post_link( $h->post_id ) ); ?>"><?php echo esc_html( $h->primary_keyword ); ?></a>
+										<?php else : ?>
+											<strong><?php echo esc_html( $h->primary_keyword ); ?></strong>
+										<?php endif; ?>
+									</td>
+									<td><?php echo $h->target_domain ? '<code>' . esc_html( $h->target_domain ) . '</code>' : '<span class="vmsb-note">—</span>'; ?></td>
+									<td><span class="vmsb-tag <?php echo $h->is_blitz ? 'vmsb-tag-crit' : 'vmsb-tag-gold'; ?>"><?php echo $h->is_blitz ? 'Blitz' : 'Thief'; ?></span></td>
+									<td><span class="vmsb-sev state-<?php echo esc_attr( $h->status ); ?>"><?php echo esc_html( $h->status ); ?></span></td>
+									<td class="vmsb-note"><?php echo esc_html( human_time_diff( strtotime( $h->created_at ) ) . ' ago' ); ?></td>
+								</tr>
+							<?php endforeach; ?>
+							</tbody>
+						</table>
+					</div>
+				<?php endif; ?>
 			</div>
 	</div>
 
