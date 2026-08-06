@@ -66,7 +66,7 @@ class VMSB_Silo {
 
 		$map = $this->ai->generate_json(
 			$prompt,
-			array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 4000, 'temperature' => 0.35 )
+			array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 4000, 'temperature' => 0.35, 'action' => 'silo_map' )
 		);
 
 		if ( ! is_array( $map ) || empty( $map['silos'] ) ) {
@@ -270,7 +270,7 @@ class VMSB_Silo {
 			. "I need to link naturally to a page titled \"{$target_title}\".\n"
 			. "Find the single best existing sentence to carry that link, and give me the exact anchor phrase inside it. The anchor must be words that already appear in the sentence, 2-6 words long, descriptive, never 'click here' or 'read more'.\n\n"
 			. 'Return JSON: {"sentence":"","anchor":"","confidence":0.0}',
-			array( 'max_tokens' => 400, 'temperature' => 0.2 )
+			array( 'max_tokens' => 400, 'temperature' => 0.2, 'action' => 'link_autopilot' )
 		);
 
 		if ( empty( $data['sentence'] ) || empty( $data['anchor'] ) ) {
@@ -403,13 +403,20 @@ class VMSB_Silo {
 	/**
 	 * Push all "to create" gaps from the Silo Map into the Content Plan.
 	 */
-	public function push_gaps_to_plan() {
+	/**
+	 * @param bool $as_suggestion When true, gaps land as 'suggested' rows for
+	 *        a human to approve instead of jumping straight to 'approved' -
+	 *        used by VMSB_Growth_Engine::scan() so silo gaps go through the
+	 *        same review queue as every other suggestion source.
+	 */
+	public function push_gaps_to_plan( $as_suggestion = false ) {
 		$map = $this->generate_map();
 		if ( empty( $map['silos'] ) ) {
 			return array( 'pushed' => 0 );
 		}
 
 		$content = new VMSB_Content();
+		$status  = $as_suggestion ? 'suggested' : 'approved';
 		$pushed  = 0;
 
 		foreach ( $map['silos'] as $silo ) {
@@ -420,7 +427,8 @@ class VMSB_Silo {
 					$silo['pillar']['slug'], // Use slug as keyword if primary not explicit
 					"Silo Pillar for: {$silo['name']}. This should be the authoritative hub for this topic.",
 					$silo['name'],
-					1
+					1,
+					$status
 				);
 				$pushed++;
 			}
@@ -433,7 +441,9 @@ class VMSB_Silo {
 							$child['title'],
 							$child['primary_keyword'] ?: $child['slug'],
 							"Supporting post for silo: {$silo['name']}. Links back to the pillar.",
-							$silo['name']
+							$silo['name'],
+							0,
+							$status
 						);
 						$pushed++;
 					}

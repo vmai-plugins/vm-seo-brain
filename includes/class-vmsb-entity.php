@@ -40,7 +40,7 @@ class VMSB_Entity {
 			. "topic would mention. Then say which of those are actually present in the article and which are missing.\n\n"
 			. 'Return JSON: {"expected_entities":[""],"present":[""],"missing":[""]}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 600, 'temperature' => 0.2 ) );
+		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 600, 'temperature' => 0.2, 'action' => 'entity_sweep' ) );
 		if ( ! is_array( $data ) ) {
 			return new WP_Error( 'vmsb_entity', $this->ai->get_last_error() ?: 'No usable response.' );
 		}

@@ -31,6 +31,17 @@ class VMSB_Niche_Planner {
 	 * @return array{planned:int, clusters:array}
 	 */
 	public function plan_expansion( $total_pieces = 20, $cluster = '' ) {
+		// License Gating
+		if ( ! class_exists('VMSB_License') ) return array( 'planned' => 0 );
+
+		$limits = VMSB_License::limits();
+		$current_kw_count = (int) $this->keywords->count();
+
+		if ( $current_kw_count >= $limits['keywords'] && ! VMSB_License::at_least('elite') ) {
+			$this->log->warn( 'niche_planner', "Expansion halted. Current keyword count ({$current_kw_count}) exceeds plan limit ({$limits['keywords']}). Upgrade to Elite for unlimited dominance." );
+			return array( 'planned' => 0, 'error' => 'Keyword limit reached' );
+		}
+
 		if ( $cluster ) {
 			$this->log->info( 'niche_planner', "Starting targeted expansion for silo: {$cluster} ({$total_pieces} pieces)." );
 			$total_created = $this->plan_for_silo( $cluster, $total_pieces );
@@ -101,7 +112,7 @@ class VMSB_Niche_Planner {
 			. "Each cluster should represent a major pillar of topical authority.\n\n"
 			. 'Return JSON: {"clusters":[{"name":"","reason":"","target_audience":"","commercial_intent":"high|medium|low"}]}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'complexity' => 'premium', 'temperature' => 0.7 ) );
+		$data = $this->ai->generate_json( $prompt, array( 'complexity' => 'premium', 'temperature' => 0.7, 'action' => 'niche_expansion' ) );
 
 		return isset( $data['clusters'] ) ? array_slice( (array) $data['clusters'], 0, $count ) : array();
 	}
@@ -112,7 +123,7 @@ class VMSB_Niche_Planner {
 			. "Each piece must link up to the main '{$silo_name}' pillar.\n\n"
 			. 'Return JSON: {"plan":[{"title":"","keyword":"","brief":"","intent":""}]}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 2000 ) );
+		$data = $this->ai->generate_json( $prompt, array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 2000, 'action' => 'niche_expansion' ) );
 
 		return $this->process_ai_plan( $data, $silo_name );
 	}
@@ -124,7 +135,7 @@ class VMSB_Niche_Planner {
 			. "Plan {$count} pieces: 1 main pillar article and " . ($count - 1) . " supporting articles.\n"
 			. 'Return JSON: {"plan":[{"title":"","keyword":"","brief":"","intent":"","is_pillar":false}]}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 2500 ) );
+		$data = $this->ai->generate_json( $prompt, array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 2500, 'action' => 'niche_expansion' ) );
 
 		return $this->process_ai_plan( $data, $cluster['name'] );
 	}

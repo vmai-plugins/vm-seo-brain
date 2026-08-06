@@ -32,12 +32,20 @@ class VMSB_REST {
 			'taxonomy-propose'=> 'taxonomy_propose',
 			'plan'            => 'plan',
 			'niche-plan'      => 'niche_plan',
+			'cluster-architect' => 'cluster_architect',
+			'gap-discovery'     => 'gap_discovery',
+			'battle-roadmap'    => 'battle_roadmap',
+			'growth-scan'              => 'growth_scan',
+			'growth-suggestion-approve'=> 'growth_suggestion_approve',
+			'growth-suggestion-reject' => 'growth_suggestion_reject',
 			'improve-post'         => 'improve_post',
 			'keyword-dismiss'      => 'keyword_dismiss',
 			'keyword-merge-cluster'=> 'keyword_merge_cluster',
+			'keyword-suggest-merges' => 'keyword_suggest_merges',
 			'push-sheet'      => 'push_sheet',
 			'pull-sheet'      => 'pull_sheet',
 			'import-topics'      => 'import_topics',
+			'save-editor-note'   => 'save_editor_note',
 			'pull-bulk-topics'   => 'pull_bulk_topics',
 			'clear-rejected'  => 'clear_rejected',
 			'replan-rejected' => 'replan_rejected',
@@ -45,6 +53,7 @@ class VMSB_REST {
 			'bulk-action'     => 'bulk_action',
 			'bulk-issue-action' => 'bulk_issue_action',
 			'produce'         => 'produce',
+			'retry-critique'  => 'retry_critique',
 			'revert'          => 'revert',
 			'dismiss'         => 'dismiss',
 			'pending-list'    => 'pending_list',
@@ -88,6 +97,7 @@ class VMSB_REST {
 			'social-generate'     => 'social_generate',
 			'strategist-preview'  => 'strategist_preview',
 			'tasks-process'       => 'tasks_process',
+			'license-verify'      => 'license_verify',
 			'command'             => 'command',
 			'aipuffer-bots'       => 'aipuffer_bots',
 			'health-reset'        => 'health_reset',
@@ -256,10 +266,51 @@ class VMSB_REST {
 		return rest_ensure_response( array( 'merged' => $n ) );
 	}
 
+	public function keyword_suggest_merges( $request ) {
+		return rest_ensure_response( array( 'suggestions' => ( new VMSB_Keywords() )->suggest_cluster_merges() ) );
+	}
+
+	public function growth_scan( $request ) {
+		return rest_ensure_response( ( new VMSB_Growth_Engine() )->scan() );
+	}
+
+	public function growth_suggestion_approve( $request ) {
+		return rest_ensure_response( ( new VMSB_Growth_Engine() )->approve( (int) $request->get_param( 'id' ) ) );
+	}
+
+	public function growth_suggestion_reject( $request ) {
+		return rest_ensure_response( ( new VMSB_Growth_Engine() )->reject( (int) $request->get_param( 'id' ) ) );
+	}
+
 	public function niche_plan( $request ) {
 		$count   = (int) $request->get_param( 'count' ) ?: 20;
 		$cluster = sanitize_text_field( $request->get_param( 'cluster' ) );
 		return rest_ensure_response( ( new VMSB_Niche_Planner() )->plan_expansion( $count, $cluster ) );
+	}
+
+	public function cluster_architect( $request ) {
+		$seed = sanitize_text_field( $request->get_param( 'seed' ) );
+		$size = (int) $request->get_param( 'size' ) ?: 6;
+		if ( ! $seed ) return new WP_Error( 'vmsb_rest', 'Seed keyword is required.' );
+
+		$res = ( new VMSB_Cluster_Architect() )->design_cluster( $seed, $size );
+		if ( is_wp_error( $res ) ) return $res;
+		return rest_ensure_response( $res );
+	}
+
+	public function gap_discovery( $request ) {
+		$engine = new VMSB_Gap_Finder();
+		$gaps = $engine->discover_golden_gaps( 10 );
+		if ( is_wp_error($gaps) ) return $gaps;
+
+		return rest_ensure_response( array( 'gaps' => $gaps ) );
+	}
+
+	public function battle_roadmap( $request ) {
+		$target = (int) $request->get_param( 'target' ) ?: (int) VMSB_Settings::get( 'growth_target', 50000 );
+		$days   = (int) $request->get_param( 'days' ) ?: (int) VMSB_Settings::get( 'growth_window', 50 );
+		$res = ( new VMSB_Roadmap() )->generate_plan( $target, $days );
+		return rest_ensure_response( array( 'roadmap' => $res ) );
 	}
 
 	public function push_sheet( $request ) {
@@ -279,6 +330,14 @@ class VMSB_REST {
 		$topics   = array_map( 'sanitize_text_field', (array) $request->get_param( 'topics' ) );
 		$language = sanitize_text_field( (string) $request->get_param( 'language' ) );
 		return rest_ensure_response( ( new VMSB_Content() )->import_topics( $topics, 5.0, $language ) );
+	}
+
+	public function save_editor_note( $request ) {
+		global $wpdb;
+		$id = (int) $request->get_param( 'id' );
+		$note = wp_kses_post( $request->get_param( 'note' ) );
+		$updated = $wpdb->update( $wpdb->prefix . 'vmsb_plan', array( 'editor_note' => $note ), array( 'id' => $id ) );
+		return rest_ensure_response( array( 'success' => (bool)$updated ) );
 	}
 
 	public function pull_bulk_topics( $request ) {
@@ -316,6 +375,15 @@ class VMSB_REST {
 	public function produce( $request ) {
 		$id  = (int) $request->get_param( 'id' );
 		$res = ( new VMSB_Content() )->produce( $id );
+		if ( is_wp_error( $res ) ) {
+			return new WP_REST_Response( array( 'error' => $res->get_error_message() ), 422 );
+		}
+		return rest_ensure_response( array( 'post_id' => $res, 'edit_url' => get_edit_post_link( $res, 'raw' ) ) );
+	}
+
+	public function retry_critique( $request ) {
+		$id  = (int) $request->get_param( 'id' );
+		$res = ( new VMSB_Content() )->retry_with_critique( $id );
 		if ( is_wp_error( $res ) ) {
 			return new WP_REST_Response( array( 'error' => $res->get_error_message() ), 422 );
 		}
@@ -579,8 +647,9 @@ class VMSB_REST {
 	}
 
 	public function trend_scout( $request ) {
-		$found = ( new VMSB_News() )->scout( 5 );
-		return rest_ensure_response( array( 'proposed' => $found['proposed'] ?? 0 ) );
+		// This forces a refresh of the trending signals dashboard.
+		delete_transient('vmsb_rising_trends');
+		return rest_ensure_response( array( 'success' => true ) );
 	}
 
 	public function traffic_forecast( $request ) {
@@ -671,6 +740,15 @@ class VMSB_REST {
 			return rest_ensure_response( array( 'error' => 'Task runner unavailable.' ) );
 		}
 		return rest_ensure_response( VMSB_Task_Runner::process( (int) $request->get_param( 'limit' ) ?: 3 ) );
+	}
+
+	public function license_verify( $request ) {
+		$key = sanitize_text_field( $request->get_param( 'license_key' ) );
+		$ok  = VMSB_License::verify( $key );
+		if ( $ok ) {
+			return rest_ensure_response( array( 'ok' => true, 'plan' => VMSB_License::plan() ) );
+		}
+		return new WP_REST_Response( array( 'error' => 'Invalid license key or connection error.' ), 403 );
 	}
 
 	public function command( $request ) {

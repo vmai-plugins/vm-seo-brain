@@ -112,7 +112,7 @@ class VMSB_ROI {
 			. "that connects THIS article's specific topic to the conversion goal - not generic.\n\n"
 			. 'Return JSON: {"html":""}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 300, 'temperature' => 0.4 ) );
+		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 300, 'temperature' => 0.4, 'action' => 'roi_sweep' ) );
 		if ( empty( $data['html'] ) ) {
 			return new WP_Error( 'vmsb_roi', $this->ai->get_last_error() ?: 'Could not draft a CTA.' );
 		}

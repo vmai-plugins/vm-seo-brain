@@ -54,6 +54,7 @@ final class VMSB_Core {
 			'graph'       => new VMSB_Graph(),
 			'aipuffer'    => new VMSB_AIPuffer(),
 			'webhooks'    => new VMSB_Webhooks(),
+			'growth_engine' => new VMSB_Growth_Engine(),
 		);
 
 		new VMSB_Scheduler();

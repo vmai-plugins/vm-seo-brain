@@ -27,13 +27,76 @@ class VMSB_Keywords {
 		return $wpdb->prefix . 'vmsb_keywords';
 	}
 
+	/**
+	 * Identifies "Anomalies" in the niche where competitors are weak
+	 * but search interest is spikey.
+	 */
+	private function discover_niche_anomalies() {
+		$profile = $this->brain->profile();
+		$prompt = "Act as a Niche Intelligence Analyst. Identify 10 'Search Anomalies' for this business: '{$profile['name']} ({$profile['type']})'.\n"
+			. "Anomalies are queries that:\n"
+			. "1. Have rising interest but 'Thin' search results.\n"
+			. "2. Are underserved by major industry players.\n"
+			. "3. Connect two unrelated but relevant sub-topics.\n\n"
+			. 'Return JSON: {"anomalies":[{"keyword":"","why_opportunity":"","intent":""}]}';
+
+		$data = $this->ai->generate_json( $prompt, array( 'persona' => 'strategist', 'complexity' => 'premium' ) );
+		$n = 0;
+		if ( ! empty($data['anomalies']) ) {
+			foreach ( $data['anomalies'] as $a ) {
+				$this->upsert( $a['keyword'], array(
+					'source' => 'anomaly',
+					'intent' => $a['intent'] ?: 'informational',
+					'cluster' => 'Anomalies'
+				) );
+				$n++;
+			}
+		}
+		return $n;
+	}
+
 	/* ---------------------------------------------------------------- research */
+
+	/**
+	 * Pull keywords identified as competitor gaps into the main keyword universe.
+	 */
+	public function ingest_competitor_gaps() {
+		global $wpdb;
+		$issues_table = $wpdb->prefix . 'vmsb_issues';
+		$gaps = $wpdb->get_results( "SELECT suggested FROM {$issues_table} WHERE rule = 'competitor_gap' AND status = 'open'" );
+
+		$n = 0;
+		foreach ( $gaps as $gap ) {
+			$data = json_decode( $gap->suggested, true );
+			if ( ! empty($data['query']) ) {
+				$this->upsert( $data['query'], array(
+					'source' => 'competitor',
+					'intent' => 'commercial',
+					'cluster' => $data['competitor'] ?? 'Competitor Hijack'
+				) );
+				$n++;
+			}
+		}
+		return $n;
+	}
 
 	public function research( $seed_limit = 40 ) {
 		$found = 0;
 		$found += $this->pull_search_console();
 		$found += $this->expand_autocomplete( $seed_limit );
 		$found += $this->expand_with_ai();
+
+		// 2026 Strategy: Competitor Gap Hijacking
+		if ( class_exists( 'VMSB_Competitor' ) ) {
+			$comp_engine = new VMSB_Competitor();
+			$res = $comp_engine->scan( 5 ); // Check top 5 rivals
+			if ( ! is_wp_error($res) ) {
+				$found += $this->ingest_competitor_gaps();
+			}
+		}
+
+		// 2026 Strategy: Niche Territorial Analysis
+		$found += $this->discover_niche_anomalies();
 
 		// 2026 Strategy: Rising Trends Ingestion
 		if ( class_exists( 'VMSB_Trends' ) ) {
@@ -182,8 +245,9 @@ class VMSB_Keywords {
 		$prompt = "Produce a keyword universe for this business.\n"
 			. "Cover the full funnel: informational, commercial investigation, transactional, and navigational.\n"
 			. "Include long-tail questions real buyers type. Include location modifiers only if the business is local.\n"
+			. "For each keyword, estimate the Global Search Volume (monthly) and identify likely SERP Features (e.g. Featured Snippet, People Also Ask, Video).\n"
 			. "Do not include keywords the business cannot credibly rank for or serve.\n\n"
-			. 'Return JSON: {"keywords":[{"keyword":"","intent":"informational|commercial|transactional|navigational","funnel":"top|middle|bottom","cluster":"","est_difficulty":0}]}';
+			. 'Return JSON: {"keywords":[{"keyword":"","intent":"informational|commercial|transactional|navigational","funnel":"top|middle|bottom","cluster":"","est_difficulty":0,"est_volume":0,"serp_features":[]}]}';
 
 		$data = $this->ai->generate_json(
 			$prompt,
@@ -208,6 +272,8 @@ class VMSB_Keywords {
 				'funnel'     => isset( $item['funnel'] ) ? $item['funnel'] : null,
 				'cluster'    => isset( $item['cluster'] ) ? $item['cluster'] : null,
 				'difficulty' => isset( $item['est_difficulty'] ) ? (int) $item['est_difficulty'] : null,
+				'volume'     => isset( $item['est_volume'] ) ? (int) $item['est_volume'] : null,
+				'serp_features' => isset( $item['serp_features'] ) ? wp_json_encode( (array) $item['serp_features'] ) : null,
 				'source'     => 'ai',
 			);
 
@@ -263,7 +329,9 @@ class VMSB_Keywords {
 				'impressions' => isset( $fields['impressions'] ) ? $fields['impressions'] : null,
 				'clicks'      => isset( $fields['clicks'] ) ? $fields['clicks'] : null,
 				'ctr'         => isset( $fields['ctr'] ) ? $fields['ctr'] : null,
+				'serp_features' => isset( $fields['serp_features'] ) ? $fields['serp_features'] : null,
 				'source'      => isset( $fields['source'] ) ? $fields['source'] : 'ai',
+				'volume'      => isset( $fields['volume'] ) ? (int) $fields['volume'] : null,
 			),
 			static fn( $v ) => null !== $v
 		);
@@ -301,6 +369,7 @@ class VMSB_Keywords {
 	public function score_all() {
 		global $wpdb;
 
+		// 1. Calculate base opportunity
 		$wpdb->query(
 			"UPDATE {$this->table()} SET opportunity = (
 				(LOG(10, GREATEST(impressions, 1)) * 12)
@@ -311,7 +380,19 @@ class VMSB_Keywords {
 			)"
 		);
 
-		// 2. Apply Classification Labels
+		// 2. High-Quality Booster: Boost keywords in authoritative clusters
+		$clusters = $this->get_cluster_stats( 50 );
+		foreach ( $clusters as $c ) {
+			if ( $c->cluster_health > 70 ) {
+				$wpdb->query( $wpdb->prepare(
+					"UPDATE {$this->table()} SET opportunity = opportunity * 1.25 WHERE cluster = %s",
+					$c->cluster
+				) );
+			}
+		}
+
+		// 3. Final normalization
+		$wpdb->query( "UPDATE {$this->table()} SET opportunity = ROUND(GREATEST(0, LEAST(100, opportunity)), 1)" );
 	}
 
 	/**
@@ -342,8 +423,21 @@ class VMSB_Keywords {
 			return 0;
 		}
 
+		// Every call used to invent cluster names with zero knowledge of what
+		// already existed, so the same topic could come back "Core Brand &
+		// Education" this run and "Core Brand and Education" next run -
+		// fragmenting instead of consolidating every time research runs.
+		// Feeding the existing distinct names back in and requiring a match
+		// against them first is what makes clustering actually converge to a
+		// stable set of silos over repeated runs instead of growing forever.
+		$existing = $wpdb->get_col( "SELECT DISTINCT cluster FROM {$this->table()} WHERE cluster IS NOT NULL AND cluster != '' ORDER BY cluster ASC" );
+
 		$data = $this->ai->generate_json(
 			"Group these search queries into topic clusters. One cluster per genuine topic, not per keyword. Name each cluster the way a pillar page would be titled.\n\n"
+			. ( $existing
+				? "EXISTING CLUSTERS (use one of these names verbatim whenever a query belongs to one of them - do not invent a slightly different name for a topic that already has a cluster):\n- " . implode( "\n- ", $existing ) . "\n\n"
+				: '' )
+			. "Only invent a new cluster name for a query that genuinely doesn't fit any existing cluster above.\n\n"
 			. "Reproduce each query in \"keywords\" EXACTLY character-for-character as given below - do not paraphrase, reorder words, fix spelling/grammar, or change capitalization. "
 			. "A query that doesn't match what was given verbatim cannot be matched back to its record.\n\n"
 			. "Queries:\n- " . implode( "\n- ", $unclustered )
@@ -443,6 +537,53 @@ class VMSB_Keywords {
 			array( 'cluster' => $to, 'updated_at' => current_time( 'mysql', true ) ),
 			array( 'cluster' => $from )
 		);
+	}
+
+	/**
+	 * One-time cleanup for clusters that already fragmented before
+	 * cluster() started reusing existing names - "Core Brand & Education"
+	 * vs "Core Brand and Education" vs "Core Brand & Services" all sitting
+	 * as separate clusters, for example. Suggests merges for a human to
+	 * review and apply via merge_cluster(); never merges anything itself,
+	 * since collapsing two genuinely distinct clusters into one would be
+	 * worse than leaving them fragmented.
+	 */
+	public function suggest_cluster_merges() {
+		global $wpdb;
+		$clusters = $wpdb->get_col( "SELECT DISTINCT cluster FROM {$this->table()} WHERE cluster IS NOT NULL AND cluster != '' ORDER BY cluster ASC" );
+		if ( count( $clusters ) < 2 ) {
+			return array();
+		}
+
+		$data = $this->ai->generate_json(
+			"These are cluster names currently used on a site's keyword map. Some may be the same real-world topic split across "
+			. "slightly different names (capitalization, 'and' vs '&', singular vs plural, a reworded title for the same subject).\n\n"
+			. "Clusters:\n- " . implode( "\n- ", $clusters ) . "\n\n"
+			. "Only group names you're confident describe the same topic - when in doubt, leave them separate. For each group of 2+ "
+			. "duplicates, name the clearest one as the keeper and list the rest as names to fold into it.\n\n"
+			. 'Return JSON: {"groups":[{"keep":"","merge":[]}]}',
+			array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 1500, 'temperature' => 0.2 )
+		);
+
+		$known = array_flip( $clusters );
+		$suggestions = array();
+		foreach ( ( isset( $data['groups'] ) ? $data['groups'] : array() ) as $group ) {
+			$keep = isset( $group['keep'] ) ? trim( $group['keep'] ) : '';
+			if ( ! $keep || ! isset( $known[ $keep ] ) ) {
+				continue;
+			}
+			foreach ( ( isset( $group['merge'] ) ? $group['merge'] : array() ) as $from ) {
+				$from = trim( $from );
+				// Only ever suggest folding a cluster that actually exists into
+				// another that actually exists - the model can't invent a merge
+				// target merge_cluster() would then apply against nothing.
+				if ( $from && $from !== $keep && isset( $known[ $from ] ) ) {
+					$suggestions[] = array( 'from' => $from, 'to' => $keep );
+				}
+			}
+		}
+
+		return $suggestions;
 	}
 
 	public function content_gaps( $limit = 40 ) {

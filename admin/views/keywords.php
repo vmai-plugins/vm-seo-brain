@@ -15,7 +15,7 @@ $planned_count = $k->count('planned');
 			<p class="vmsb-eyebrow">Keyword Intelligence</p>
 			<h1>Keyword Universe</h1>
 			<p class="vmsb-sub">
-				<?php echo number_format($total_count); ?> queries discovered, <?php echo number_format($planned_count); ?> already in content plan.
+				<?php echo number_format($total_count); ?> queries discovered, <?php echo number_format($planned_count); ?> already in pipeline.
 				<?php if ( (new VMSB_RankMath())->is_active() ) : ?>
 					<span class="vmsb-tag vmsb-tag-good" style="margin-left:10px;">Rank Math Data Active</span>
 				<?php endif; ?>
@@ -65,54 +65,72 @@ $planned_count = $k->count('planned');
 				<span class="vmsb-card-label">Low CTR Snippets</span>
 				<p class="vmsb-note">Ranking but ignored</p>
 			</div>
+			<div class="vmsb-card" style="background: linear-gradient(135deg, var(--panel) 0%, rgba(201, 162, 39, 0.05) 100%);">
+				<?php
+				global $wpdb;
+				$p10_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_keywords WHERE position <= 10 AND position > 0");
+				$coverage = $total_count > 0 ? round(($p10_count / $total_count) * 100) : 0;
+				?>
+				<span class="vmsb-card-num" style="color:var(--gold);"><?php echo $coverage; ?>%</span>
+				<span class="vmsb-card-label">Topical Coverage</span>
+				<p class="vmsb-note">Niche dominance score</p>
+			</div>
 		</div>
 
-		<div class="vmsb-card">
-			<h3 style="margin:0 0 15px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted);">Position Distribution</h3>
-			<?php
-			global $wpdb;
-			$table = $wpdb->prefix . 'vmsb_keywords';
-			$dist = $wpdb->get_results("
-				SELECT
-					CASE
-						WHEN position <= 3 THEN 'P1 (Top 3)'
-						WHEN position <= 10 THEN 'P1 (4-10)'
-						WHEN position <= 20 THEN 'Page 2'
-						WHEN position <= 50 THEN 'Page 3-5'
-						ELSE 'Page 6+'
-					END as bucket,
-					COUNT(*) as n
-				FROM {$table}
-				WHERE position > 0
-				GROUP BY bucket
-				ORDER BY MIN(position) ASC
-			");
-			$max_n = $dist ? max(wp_list_pluck($dist, 'n')) : 1;
-			?>
-			<div class="vmsb-dist-chart" style="display:flex; flex-direction:column; gap:10px;">
-				<?php foreach ($dist as $d) : $pct = ($d->n / $max_n) * 100; ?>
-					<div class="vmsb-dist-row">
-						<span><?php echo esc_html($d->bucket); ?></span>
-						<div class="vmsb-bar" style="flex:1; height:6px; margin:0;"><span style="width:<?php echo $pct; ?>%; background:var(--gold);"></span></div>
-						<span><?php echo (int)$d->n; ?></span>
-					</div>
-				<?php endforeach; ?>
-				<?php if ( ! $dist ) : ?><p class="vmsb-note">No rank data yet.</p><?php endif; ?>
+		<div class="vmsb-grid" style="grid-template-columns: 1fr 1fr; gap:20px;">
+			<div class="vmsb-card" style="padding:20px;">
+				<h3 style="margin:0 0 15px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted);">Position Distribution</h3>
+				<?php
+				global $wpdb;
+				$table = $wpdb->prefix . 'vmsb_keywords';
+				$dist = $wpdb->get_results("
+					SELECT
+						CASE
+							WHEN position <= 3 THEN 'P1 (Top 3)'
+							WHEN position <= 10 THEN 'P1 (4-10)'
+							WHEN position <= 20 THEN 'Page 2'
+							WHEN position <= 50 THEN 'Page 3-5'
+							ELSE 'Page 6+'
+						END as bucket,
+						COUNT(*) as n
+					FROM {$table}
+					WHERE position > 0
+					GROUP BY bucket
+					ORDER BY MIN(position) ASC
+				");
+				$max_n = $dist ? max(wp_list_pluck($dist, 'n')) : 1;
+				?>
+				<div class="vmsb-dist-chart" style="display:flex; flex-direction:column; gap:10px;">
+					<?php foreach ($dist as $d) : $pct = ($d->n / $max_n) * 100; ?>
+						<div class="vmsb-dist-row">
+							<span><?php echo esc_html($d->bucket); ?></span>
+							<div class="vmsb-bar" style="flex:1; height:6px; margin:0;"><span style="width:<?php echo $pct; ?>%; background:var(--gold);"></span></div>
+							<span><?php echo (int)$d->n; ?></span>
+						</div>
+					<?php endforeach; ?>
+				</div>
 			</div>
 
-			<h3 style="margin:25px 0 15px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted);">Top Cluster Health</h3>
-			<div class="vmsb-cluster-stats" style="display:flex; flex-direction:column; gap:12px;">
+			<div class="vmsb-card" style="padding:20px; background: linear-gradient(135deg, var(--panel) 0%, rgba(69, 170, 242, 0.03) 100%);">
+				<h3 style="margin:0 0 15px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted);">Intent Evolution</h3>
 				<?php
-				$c_stats = $k->get_cluster_stats(3);
-				foreach ($c_stats as $cs) : ?>
-					<div class="vmsb-cluster-mini-row">
-						<div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-							<strong><?php echo esc_html($cs->cluster); ?></strong>
-							<span><?php echo (int)$cs->keywords; ?> KWs</span>
+				$intent_dist = $wpdb->get_results("SELECT intent, COUNT(*) as n FROM {$table} WHERE intent IS NOT NULL GROUP BY intent ORDER BY n DESC");
+				?>
+				<div class="vmsb-intent-chart" style="display:flex; flex-direction:column; gap:12px;">
+					<?php foreach ($intent_dist as $id) :
+						$i_pct = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE intent = %s AND position <= 10", $id->intent));
+						$total_i = max(1, (int)$id->n);
+						$success_rate = round(($i_pct / $total_i) * 100);
+					?>
+						<div class="vmsb-intent-row">
+							<div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+								<strong><?php echo esc_html(ucfirst($id->intent)); ?></strong>
+								<span class="vmsb-note"><?php echo $success_rate; ?>% in Top 10</span>
+							</div>
+							<div class="vmsb-bar" style="height:4px; margin:0;"><span style="width:<?php echo ($id->n / $total_count) * 100; ?>%; background:var(--accent-blue);"></span></div>
 						</div>
-						<div class="vmsb-bar" style="height:4px; margin:0;"><span style="width:<?php echo (float)$cs->cluster_health; ?>%; background:var(--good);"></span></div>
-					</div>
-				<?php endforeach; ?>
+					<?php endforeach; ?>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -154,7 +172,9 @@ $planned_count = $k->count('planned');
 				<?php foreach ( $clusters as $c ) : ?><option value="<?php echo esc_attr( $c ); ?>"><?php endforeach; ?>
 			</datalist>
 			<button class="vmsb-mini-btn" id="vmsb-cluster-merge-apply">Merge</button>
+			<button class="vmsb-mini-btn" id="vmsb-cluster-suggest-merges" title="AI scans your <?php echo count( $clusters ); ?> clusters for likely duplicates (e.g. 'Core Brand & Education' vs 'Core Brand and Education') and suggests merges for you to apply">🤖 Suggest Merges</button>
 		</div>
+		<div id="vmsb-cluster-merge-suggestions"></div>
 	<?php endif; ?>
 
 	<div class="vmsb-tabs">
@@ -201,6 +221,8 @@ $planned_count = $k->count('planned');
 							<th>Query</th>
 							<th>Intent</th>
 							<th>Funnel</th>
+							<th>Vol</th>
+							<th>Features</th>
 							<th>Pos</th>
 							<th>Impressions</th>
 							<th title="Modeled ranking difficulty, 0-100. Higher means more competitive - real data when SEMrush/Ahrefs is connected, otherwise the model's estimate.">Difficulty &#9432;</th>
@@ -232,6 +254,16 @@ $planned_count = $k->count('planned');
 							</td>
 							<td><span class="vmsb-tag <?php echo $intent_cls; ?>"><?php echo esc_html( $row->intent ?: 'info' ); ?></span></td>
 							<td><span class="vmsb-tag <?php echo $funnel_cls; ?>"><?php echo esc_html( $row->funnel ?: 'top' ); ?></span></td>
+							<td><span class="vmsb-note"><?php echo $row->volume ? number_format($row->volume) : '&mdash;'; ?></span></td>
+							<td>
+								<?php
+								$features = json_decode($row->serp_features ?? '[]', true);
+								if ( ! empty($features) ) :
+									foreach ( (array)$features as $f ) : ?>
+										<span class="vmsb-mini-tag" title="<?php echo esc_attr($f); ?>"><?php echo substr(esc_html($f), 0, 1); ?></span>
+									<?php endforeach;
+								else : echo '&mdash;'; endif; ?>
+							</td>
 							<td>
 								<div class="vmsb-pos-badge <?php echo (float)$row->position <= 10 ? 'good' : 'med'; ?>">
 									<?php echo $row->position ? esc_html( number_format( (float) $row->position, 1 ) ) : '&mdash;'; ?>

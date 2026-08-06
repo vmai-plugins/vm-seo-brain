@@ -37,6 +37,7 @@ class VMSB_Strategist {
 			'ctr_conclude'     => array( 'ctr',         0.5, 35 ),
 			'backlink_shield'  => array( 'backlinks',   1.0, 20 ),
 			'weekly_roadmap'   => array( 'brain',       2.0, 60 ),
+			'market_assess'    => array( 'brain',       1.5, 40 ),
 			'improvement_loop' => array( 'brain',       1.0, 50 ),
 			'graph_sync'       => array( 'graph',       1.0, 30 ),
 			'thief_scout'      => array( 'thief',       1.5, 45 ),
@@ -54,6 +55,7 @@ class VMSB_Strategist {
 			'competitor_blitz' => array( 'thief',       2.0, 80 ),
 			'hydrate_pipeline' => array( 'content',     0.5, 40 ),
 			'sheet_sync'       => array( 'content',     0.5, 30 ),
+			'growth_scan'      => array( 'growth',      1.0, 55 ),
 		);
 	}
 
@@ -76,6 +78,7 @@ class VMSB_Strategist {
 			'ctr_conclude'    => 'ctr_test_enabled',
 			'backlink_shield' => null, // read-only risk detection, safe regardless of outreach toggle
 			'weekly_roadmap'  => 'god_mode',
+			'market_assess'   => 'god_mode',
 			'improvement_loop'=> 'god_mode',
 			'graph_sync'      => 'vector_enabled',
 			'thief_scout'     => 'competitor_enabled',
@@ -90,6 +93,7 @@ class VMSB_Strategist {
 			'hydrate_pipeline'=> 'god_mode',
 			'competitor_blitz'=> 'competitor_enabled',
 			'sheet_sync'      => 'google_refresh_token',
+			'growth_scan'     => 'auto_growth_mode',
 		)[ $task ] ?? null;
 	}
 
@@ -155,6 +159,7 @@ class VMSB_Strategist {
 			'ctr_conclude'    => 'Completes running A/B tests and commits the winning variations.',
 			'backlink_shield' => 'Protects your site authority by monitoring for dead or toxic outbound links.',
 			'competitor_blitz' => 'Aggressively targets keywords where competitors are ranking but vulnerable.',
+			'growth_scan'      => 'Scans Search Console gaps, competitor gaps, and thin silos for new topic ideas and queues them for your approval - it never writes anything on its own.',
 		);
 		return $explanations[ $task ] ?? 'Autonomous maintenance task.';
 	}
@@ -208,6 +213,10 @@ class VMSB_Strategist {
 				$last_roadmap = (int) get_option( 'vmsb_last_roadmap', 0 );
 				return ( time() - $last_roadmap ) > ( 6 * DAY_IN_SECONDS ) ? $base : 0;
 
+			case 'market_assess':
+				$last_market = (int) get_option( 'vmsb_last_market_assessment_task', 0 );
+				return ( time() - $last_market ) > ( 14 * DAY_IN_SECONDS ) ? $base : 0;
+
 			case 'improvement_loop':
 				// Run if we have fresh losses to learn from
 				$counts = class_exists( 'VMSB_Outcome_Ledger' ) ? VMSB_Outcome_Ledger::counts() : array();
@@ -259,6 +268,15 @@ class VMSB_Strategist {
 			case 'sheet_sync':
 				return $state['gsc_connected'] ? $base : 0;
 
+			case 'growth_scan':
+				$last = (int) get_option( 'vmsb_last_growth_scan', 0 );
+				if ( ( time() - $last ) < DAY_IN_SECONDS ) {
+					return 0;
+				}
+				// Behind pace on the traffic target? Scan harder for opportunities.
+				$growth_status = ( new VMSB_Growth() )->status();
+				return empty( $growth_status['on_track'] ) ? min( 100, $base + 20 ) : $base;
+
 			default:
 				return $base;
 		}
@@ -289,6 +307,7 @@ class VMSB_Strategist {
 			case 'link_autopilot': $parts[] = 'funneling Juice to rising stars'; break;
 			case 'competitor_blitz': $parts[] = 'hijacking top rival rankings'; break;
 			case 'sheet_sync':     $parts[] = 'checking for externally published posts'; break;
+			case 'growth_scan':    $parts[] = 'scanning for new topic suggestions toward the growth target'; break;
 		}
 		return implode( ', ', $parts );
 	}

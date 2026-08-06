@@ -35,7 +35,11 @@ $hijacks        = $thief->recent_hijacks( 10 );
 		<section class="vmsb-section">
 			<div style="display:flex; justify-content:space-between; align-items:baseline;">
 				<h2>The Competitive War Room</h2>
-				<button class="vmsb-btn vmsb-btn-gold vmsb-btn-sm" data-vmsb="competitor-scan" data-body='{"limit":10}'>Sync Market Intelligence</button>
+				<?php if ( VMSB_License::has_feature('competitor_hijack') ) : ?>
+					<button class="vmsb-btn vmsb-btn-gold vmsb-btn-sm" data-vmsb="competitor-scan" data-body='{"limit":10}'>Sync Market Intelligence</button>
+				<?php else : ?>
+					<a href="<?php echo admin_url('admin.php?page=vmsb-plans'); ?>" class="vmsb-btn vmsb-btn-gold vmsb-btn-sm">Unlock Competitor Intelligence</a>
+				<?php endif; ?>
 			</div>
 
 			<div class="vmsb-grid" style="margin-top:20px;">
@@ -239,27 +243,28 @@ $hijacks        = $thief->recent_hijacks( 10 );
 			<div class="vmsb-grid">
 				<div class="vmsb-card">
 					<h3>Programmatic SEO</h3>
-					<div id="vmsb-pseo-form" class="vmsb-stack-form" style="max-width:100%;">
-						<label>Title Template</label>
-						<input type="text" name="template" placeholder="{service} in {city}">
-						<label>Variable Name <small>(the single placeholder above these values fill in, e.g. "city")</small></label>
-						<input type="text" name="variable_name" placeholder="city">
-						<label>Base Keyword <small>(optional)</small></label>
-						<input type="text" name="base_keyword" placeholder="best plumber">
-						<label>Values <small>(one per line)</small></label>
-						<textarea name="values" data-list rows="4" placeholder="Indore&#10;Bhopal&#10;Pune"></textarea>
-						<button class="vmsb-btn vmsb-btn-gold vmsb-btn-block" data-vmsb="programmatic-build" data-vmsb-form="vmsb-pseo-form">Build Dominance Set</button>
-					</div>
+					<?php if ( VMSB_License::has_feature('programmatic_seo') ) : ?>
+						<div id="vmsb-pseo-form" class="vmsb-stack-form" style="max-width:100%;">
+							<label>Title Template</label>
+							<input type="text" name="template" placeholder="{service} in {city}">
+							<label>Variable Name <small>(the single placeholder above these values fill in, e.g. "city")</small></label>
+							<input type="text" name="variable_name" placeholder="city">
+							<label>Base Keyword <small>(optional)</small></label>
+							<input type="text" name="base_keyword" placeholder="best plumber">
+							<label>Values <small>(one per line)</small></label>
+							<textarea name="values" data-list rows="4" placeholder="Indore&#10;Bhopal&#10;Pune"></textarea>
+							<button class="vmsb-btn vmsb-btn-gold vmsb-btn-block" data-vmsb="programmatic-build" data-vmsb-form="vmsb-pseo-form">Build Dominance Set</button>
+						</div>
+					<?php else : ?>
+						<p class="vmsb-note" style="margin-bottom: 20px;">Automate thousands of high-intent local or service pages instantly.</p>
+						<a href="<?php echo admin_url('admin.php?page=vmsb-plans'); ?>" class="vmsb-btn vmsb-btn-gold vmsb-btn-block">Unlock Programmatic SEO</a>
+					<?php endif; ?>
 				</div>
 
 				<div class="vmsb-card">
 					<h3>Global Expansion</h3>
-					<p class="vmsb-note">Target new locations using your best-performing content as a blueprint.</p>
+					<p class="vmsb-note">Target new locations using your best-performing content as a blueprint. Visit the <strong>Growth Plan</strong> page for advanced trend scouting.</p>
 					<button class="vmsb-btn vmsb-btn-ghost vmsb-btn-block" data-vmsb="traffic-forecast">Refresh Opportunity Map</button>
-
-					<h3 style="margin-top:30px;">Timely Angles</h3>
-					<p class="vmsb-note">Hijack news and seasonal trends.</p>
-					<button class="vmsb-btn vmsb-btn-ghost vmsb-btn-block" data-vmsb="news-scout" data-body='{"count":5}'>Scout News Signals</button>
 				</div>
 			</div>
 		</section>

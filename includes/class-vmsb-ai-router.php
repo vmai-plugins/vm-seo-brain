@@ -30,7 +30,7 @@ class VMSB_AI_Router {
 
 	/**
 	 * @param string $prompt   User prompt.
-	 * @param array  $args     system, json, temperature, max_tokens, cache_ttl, kb (bool), provider, complexity (cheap|standard|premium), persona (strategist|wordsmith|auditor|thief), attempt (int)
+	 * @param array  $args     system, json, temperature, max_tokens, cache_ttl, kb (bool), provider, complexity (cheap|standard|premium), persona (strategist|wordsmith|auditor|thief), attempt (int), action (string)
 	 * @return array{ok:bool,text:string,provider:string,model:string,error:string,usage:array}
 	 */
 	public function generate( $prompt, array $args = array() ) {
@@ -48,6 +48,7 @@ class VMSB_AI_Router {
 				'complexity'  => 'standard',
 				'persona'     => 'strategist',
 				'attempt'     => 1,
+				'action'      => '',
 			)
 		);
 
@@ -108,11 +109,20 @@ class VMSB_AI_Router {
 			return $this->fail( 'Daily AI call budget reached. Raise it in Settings > Autonomy or wait for the reset.' );
 		}
 
-		// World-Class Optimization: Mistakes Memory (Learning from Rejections)
+		// World-Class Optimization: Mistakes & Lessons Memory
+		$brain = new VMSB_Brain();
 		if ( $args['persona'] === 'wordsmith' ) {
-			$mistakes = ( new VMSB_Brain() )->recall( 'ai_training', 'recent_mistakes' );
+			$mistakes = $brain->recall( 'ai_training', 'recent_mistakes' );
 			if ( $mistakes ) {
 				$args['system'] .= "\n\nCRITICAL: In previous attempts, you made these mistakes. DO NOT REPEAT THEM:\n- " . implode("\n- ", (array)$mistakes);
+			}
+		}
+
+		// Apply lessons from the Healer (Post-Mortem Analysis)
+		if ( ! empty($args['action']) ) {
+			$lesson = $brain->recall( 'healer', "lesson_{$args['action']}" );
+			if ( $lesson ) {
+				$args['system'] .= "\n\nCRITICAL STRATEGIC LESSON: {$lesson}";
 			}
 		}
 
@@ -282,7 +292,11 @@ class VMSB_AI_Router {
 
 	public static function parse_json( $text ) {
 		$text = trim( (string) $text );
-		$text = preg_replace( '/^```(?:json)?|```$/m', '', $text );
+
+		// Salvage Step 0: Aggressive Markdown & Commentary Removal
+		// Some models (especially on local hosts) wrap JSON in markdown blocks or add "Here is the JSON:" preamble.
+		$text = preg_replace( '/^.*?({|\[)/s', '$1', $text ); // Strip everything before first { or [
+		$text = preg_replace( '/(}|\])[^}\]]*$/s', '$1', $text ); // Strip everything after last } or ]
 		$text = trim( $text );
 
 		// Salvage Step 1: Standard Parse
@@ -296,22 +310,6 @@ class VMSB_AI_Router {
 		$data  = json_decode( $fixed, true );
 		if ( JSON_ERROR_NONE === json_last_error() ) {
 			return $data;
-		}
-
-		// Salvage Step 3: Outermost object/array extraction
-		if ( preg_match( '/(\{.*\}|\[.*\])/s', $text, $m ) ) {
-			$inner = $m[1];
-			$data = json_decode( $inner, true );
-			if ( JSON_ERROR_NONE === json_last_error() ) {
-				return $data;
-			}
-
-			// Try fixing trailing commas in the extracted part too
-			$inner_fixed = preg_replace( '/,\s*([\]\}])/', '$1', $inner );
-			$data = json_decode( $inner_fixed, true );
-			if ( JSON_ERROR_NONE === json_last_error() ) {
-				return $data;
-			}
 		}
 
 		return null;

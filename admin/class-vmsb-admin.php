@@ -369,12 +369,13 @@ class VMSB_Admin {
 			'vmsb-keywords'   => 'Keywords',
 			'vmsb-silo'       => 'Silos',
 			'vmsb-taxonomy'   => 'Taxonomy',
-			'vmsb-plan'       => 'Content Plan',
+			'vmsb-pipeline'   => 'Pipeline',
+			'vmsb-growth'     => 'Growth Plan',
 			'vmsb-memory'     => 'Memory',
 			'vmsb-competitive'=> 'Competitive',
 			'vmsb-learning'   => 'Learning',
-			'vmsb-usage'      => 'AI Usage',
 			'vmsb-logs'       => 'Logs',
+			'vmsb-plans'      => 'Billing & Usage',
 			'vmsb-settings'   => 'Settings',
 		);
 
@@ -478,7 +479,7 @@ class VMSB_Admin {
 			}
 		}
 
-		foreach ( array( 'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl', 'thief_auto_plan', 'webhook_enabled' ) as $key ) {
+		foreach ( array( 'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl', 'thief_auto_plan', 'webhook_enabled', 'auto_growth_mode' ) as $key ) {
 			$clean[ $key ] = empty( $fields[ $key ] ) ? 0 : 1;
 		}
 
@@ -517,6 +518,8 @@ class VMSB_Admin {
 			'saved'            => array( 'success', 'Settings saved.' ),
 			'google_connected' => array( 'success', 'Google connected.' ),
 			'google_failed'    => array( 'error', 'Google failed.' ),
+			'import_done'      => array( 'success', 'Topics imported successfully. View them in the Pipeline.' ),
+			'license_active'   => array( 'success', 'License activated successfully! Your plan is now: ' . strtoupper(VMSB_License::plan()) ),
 		);
 		$key = sanitize_key( wp_unslash( $_GET['vmsb_msg'] ) );
 		if ( ! isset( $messages[ $key ] ) ) {

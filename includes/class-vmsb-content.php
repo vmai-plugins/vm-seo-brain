@@ -157,14 +157,16 @@ class VMSB_Content {
 		$uid = substr( md5( $keyword ), 0, 24 );
 		$now = current_time( 'mysql', true );
 
+		$status = VMSB_Settings::get('posts_per_day') >= 10 ? 'approved' : 'planned';
+
 		$wpdb->query( $wpdb->prepare(
 			"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, secondary_keywords, cluster, intent, content_type, brief, internal_links, target_words, priority, scheduled_for, status, created_at, updated_at)
-			 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%f,%s,'planned',%s,%s)
-			 ON DUPLICATE KEY UPDATE title = VALUES(title), brief = VALUES(brief), status = 'planned', updated_at = VALUES(updated_at)",
+			 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%f,%s,%s,%s,%s)
+			 ON DUPLICATE KEY UPDATE title = VALUES(title), brief = VALUES(brief), status = VALUES(status), updated_at = VALUES(updated_at)",
 			$uid, $data['title'], $keyword, wp_json_encode( $data['secondary_keywords'] ?? array() ),
 			$gap->cluster, $gap->intent, $data['content_type'] ?? 'blog', $data['brief'] ?? '',
 			wp_json_encode( $data['internal_links'] ?? array() ), (int) ($data['target_words'] ?? 1600),
-			1.0, $now, $now, $now
+			1.0, $now, $status, $now, $now
 		) );
 
 		( new VMSB_Keywords() )->mark( $keyword, 'planned' );
@@ -178,7 +180,7 @@ class VMSB_Content {
 	/**
 	 * Turn a flat list of raw topic ideas (a pasted list, or rows pulled
 	 * from a dedicated "Bulk Topics" sheet tab - see pull_bulk_topics())
-	 * into proper Content Plan rows. Unlike plan_by_keyword(), these don't
+	 * into proper pipeline rows. Unlike plan_by_keyword(), these don't
 	 * need to already exist in the tracked keyword universe: each is
 	 * expanded from scratch into a full plan row (primary/secondary
 	 * keywords, cluster, intent, format, brief) via AI.
@@ -188,20 +190,13 @@ class VMSB_Content {
 	public function import_topics( array $topics, $priority = 5.0, $language = '' ) {
 		$language = sanitize_text_field( $language );
 		global $wpdb;
-		// array_unique on the raw strings first - catches the literal "pasted
-		// the same list twice" case before it burns an AI call on each copy.
-		$topics = array_slice( array_values( array_unique( array_filter( array_map( 'trim', $topics ) ) ) ), 0, 15 );
+
+		// 2026 Blitz Logic: Handle up to 30 topics per batch for high-velocity sites
+		$topics = array_slice( array_values( array_unique( array_filter( array_map( 'trim', $topics ) ) ) ), 0, 30 );
 		if ( ! $topics ) {
 			return array( 'imported' => 0, 'skipped' => 0, 'processed' => 0, 'submitted' => 0 );
 		}
 
-		// Dedup on the target KEYWORD, not the title - checking here against
-		// raw input topics ("signs you need a new water heater") never
-		// matched existing plan TITLES (the AI's own polished output, e.g.
-		// "5 Warning Signs You Need a New Water Heater ASAP"), so it never
-		// actually caught anything. Checking primary_keyword after the AI
-		// call is what actually prevents two plan rows from targeting the
-		// same keyword under different titles - a real cannibalization risk.
 		$existing_keywords = array_map( 'strtolower', (array) $wpdb->get_col( "SELECT primary_keyword FROM {$this->table()}" ) );
 
 		$imported  = 0;
@@ -211,9 +206,9 @@ class VMSB_Content {
 		$start     = time();
 
 		foreach ( $topics as $topic ) {
-			// Anti-timeout: one AI call per topic - whatever's left over
-			// when this trips can simply be re-submitted next run.
-			if ( time() - $start > 25 ) {
+			// Anti-timeout: One reasoning cycle per topic.
+			// Stop if we exceed 40 seconds to prevent 504 Gateway Timeouts.
+			if ( time() - $start > 40 ) {
 				break;
 			}
 			$processed++;
@@ -239,11 +234,22 @@ class VMSB_Content {
 				continue;
 			}
 
-			$uid = substr( md5( $data['primary_keyword'] . '|' . $topic ), 0, 24 );
+			// World-Class Audit: Semantic Duplicate Check
+			if ( class_exists('VMSB_Vector_Store') && VMSB_Settings::get('vector_enabled') ) {
+				$hits = VMSB_Vector_Store::search( $data['title'], array( 'limit' => 1, 'threshold' => 0.85 ) );
+				if ( $hits ) {
+					$skipped++;
+					$this->log->info( 'content', "Skipping import of topic '{$topic}' - semantically similar to existing content: " . get_the_title($hits[0]['object_id']) );
+					continue;
+				}
+			}
+
+			$uid = substr( md5( $data['primary_keyword'] ), 0, 24 );
+			$status = VMSB_Settings::get('posts_per_day') >= 10 ? 'approved' : 'planned';
 
 			$wpdb->query( $wpdb->prepare(
 				"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, secondary_keywords, cluster, intent, content_language, content_type, brief, internal_links, target_words, priority, status, created_at, updated_at)
-				 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%f,'planned',%s,%s)
+				 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%f,%s,%s,%s)
 				 ON DUPLICATE KEY UPDATE title = VALUES(title), brief = VALUES(brief), updated_at = VALUES(updated_at)",
 				$uid,
 				sanitize_text_field( $data['title'] ),
@@ -257,6 +263,7 @@ class VMSB_Content {
 				wp_json_encode( array() ),
 				(int) ( $data['target_words'] ?? 1600 ),
 				(float) $priority,
+				$status,
 				$now,
 				$now
 			) );
@@ -277,7 +284,7 @@ class VMSB_Content {
 	/**
 	 * Pull raw topic ideas from a dedicated "Bulk Topics" tab (column A:
 	 * topic text, column B: status) in the SAME spreadsheet as the main
-	 * Content Plan sync tab, and turn each unprocessed row into a plan row.
+	 * pipeline sync tab, and turn each unprocessed row into a plan row.
 	 *
 	 * Deliberately a separate tab, not the main sync tab: a different
 	 * automation (e.g. AI Puffer's own Sheets feature) can drop topic ideas
@@ -501,6 +508,8 @@ class VMSB_Content {
 			}
 		}
 
+		$this->set_agent_task( $item->id, 'Researching topical authority gaps...' );
+
 		// World-Class Optimization: Retrieval Augmented Guidance (RAG)
 		$semantic_clues = array();
 		if ( class_exists('VMSB_Vector_Store') && (int) VMSB_Settings::get('vector_enabled') ) {
@@ -509,6 +518,8 @@ class VMSB_Content {
 				$semantic_clues[] = get_the_title( $hit['object_id'] );
 			}
 		}
+
+		$this->set_agent_task( $item->id, 'Drafting 90+ authority content...' );
 
 		$prompt = "Write the article.\n\n"
 			// A plan row's own content_language overrides the site-wide
@@ -523,6 +534,7 @@ class VMSB_Content {
 			. "SEARCH INTENT: {$item->intent}\n"
 			. "TARGET LENGTH: about {$item->target_words} words\n"
 			. "BRIEF: {$item->brief}\n"
+			. ( $item->editor_note ? "CRITICAL EDITOR NOTE: {$item->editor_note}\n" : "" )
 			. ( $semantic_clues ? "SEMANTIC CONTEXT (Build upon these existing site themes): " . implode( ', ', $semantic_clues ) . "\n" : "" )
 			. ( $agent_context ? "RESEARCH & ARCHITECTURE GUIDANCE: {$agent_context}\n" : "" )
 			. 'INTERNAL LINKS TO INCLUDE (use natural anchors): ' . wp_json_encode( $link_context ) . "\n\n"
@@ -562,6 +574,7 @@ class VMSB_Content {
 				// significant rewrite gets.
 				'persona'     => 'wordsmith',
 				'complexity'  => 'premium',
+				'action'      => 'publish_post',
 			)
 		);
 
@@ -576,6 +589,9 @@ class VMSB_Content {
 
 		$review = (int) VMSB_Settings::get( 'require_review' );
 		$auto   = (int) VMSB_Settings::get( 'auto_publish' );
+
+		$this->set_agent_task( $item->id, 'Applying Senior Editor critique...' );
+
 		// THE GATE. Nothing the brain writes reaches a live URL unchecked.
 		$html   = wp_kses_post( $data['content_html'] );
 		$report = class_exists( 'VMSB_Quality_Gate' )
@@ -693,6 +709,8 @@ class VMSB_Content {
 		}
 
 		// Featured image.
+		$this->set_agent_task( $item->id, 'Generating hyper-realistic visuals...' );
+
 		$img = $this->images->create(
 			! empty( $data['featured_image_prompt'] ) ? $data['featured_image_prompt'] : $item->title,
 			array(
@@ -1020,7 +1038,15 @@ class VMSB_Content {
 		wp_remote_get( "https://www.bing.com/ping?sitemap={$sitemap}", array( 'timeout' => 10, 'blocking' => false ) );
 	}
 
-	public function plan_specific( $title, $keyword, $brief, $cluster = '', $is_pillar = 0 ) {
+	/**
+	 * $status defaults to 'approved' (ready for autonomous generation) to
+	 * preserve every existing caller's behaviour - Cluster Architect, Silo
+	 * gap-push, and the Gap Radar's "Push to Pipeline" button all skip
+	 * straight to approved because a human already triggered them on
+	 * purpose. Passing 'suggested' is what lets VMSB_Growth_Engine::scan()
+	 * queue candidates for review instead of auto-approving them.
+	 */
+	public function plan_specific( $title, $keyword, $brief, $cluster = '', $is_pillar = 0, $status = 'approved' ) {
 		global $wpdb;
 		$uid = substr( md5( $keyword . '|' . $title ), 0, 24 );
 		$now = current_time( 'mysql', true );
@@ -1028,13 +1054,17 @@ class VMSB_Content {
 		$wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, brief, cluster, is_pillar, status, created_at, updated_at, priority)
-				 VALUES (%s,%s,%s,%s,%s,%d,'approved',%s,%s,15)
+				 VALUES (%s,%s,%s,%s,%s,%d,%s,%s,%s,15)
 				 ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at), cluster = VALUES(cluster), brief = VALUES(brief), is_pillar = VALUES(is_pillar)",
-				$uid, $title, $keyword, $brief, $cluster, (int) $is_pillar, $now, $now
+				$uid, $title, $keyword, $brief, $cluster, (int) $is_pillar, $status, $now, $now
 			)
 		);
 
-		$this->push_to_sheet();
+		// Don't sync a not-yet-approved suggestion to the external sheet -
+		// it would look like a committed item to anyone else reading it there.
+		if ( 'suggested' !== $status ) {
+			$this->push_to_sheet();
+		}
 		return $wpdb->insert_id;
 	}
 
@@ -1088,6 +1118,34 @@ class VMSB_Content {
 			}
 		}
 		return $confirmed;
+	}
+
+	public function set_agent_task( $id, $task ) {
+		global $wpdb;
+		return $wpdb->update( $this->table(), array( 'agent_task' => $task ), array( 'id' => (int) $id ) );
+	}
+
+	/**
+	 * Enhanced Retry: Dispatches a senior editor persona to analyze why
+	 * the previous attempt failed and rewrite with corrected instructions.
+	 */
+	public function retry_with_critique( $id ) {
+		global $wpdb;
+		$item = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id = %d", $id ) );
+		if ( ! $item ) return new WP_Error( 'not_found', 'Pipeline item not found.' );
+
+		$error = $item->last_error ?: 'Unknown technical failure.';
+
+		// Inject the error into the brief for the next attempt
+		$new_brief = "PREVIOUS ATTEMPT FAILED. REASON: {$error}\n\nORIGINAL BRIEF: {$item->brief}\n\nFIX INSTRUCTIONS: Ensure the content structure is perfectly aligned and avoids the previous failure triggers.";
+
+		$wpdb->update( $this->table(), array(
+			'brief' => $new_brief,
+			'status' => 'approved',
+			'priority' => 30 // Boost priority for retries
+		), array( 'id' => $id ) );
+
+		return $this->produce( $id );
 	}
 
 	public function trigger_victory_sequence( $post_id ) {

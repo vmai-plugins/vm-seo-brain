@@ -269,6 +269,7 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<label class="vmsb-check"><input type="checkbox" name="<?php echo esc_attr( $field( 'auto_publish' ) ); ?>" value="1" <?php checked( $s['auto_publish'], 1 ); ?>> Auto-Publish new high-score articles directly</label>
 							<label>Publishing Velocity (Posts/Day)<input type="number" name="<?php echo esc_attr( $field( 'posts_per_day' ) ); ?>" value="<?php echo esc_attr( $s['posts_per_day'] ); ?>" min="0" max="24"></label>
 							<label>Growth Target (Traffic)<input type="number" name="<?php echo esc_attr( $field( 'growth_target' ) ); ?>" value="<?php echo esc_attr( $s['growth_target'] ); ?>"></label>
+							<label class="vmsb-check"><input type="checkbox" name="<?php echo esc_attr( $field( 'auto_growth_mode' ) ); ?>" value="1" <?php checked( $s['auto_growth_mode'], 1 ); ?>> Auto Growth Mode: scan for new topic suggestions on a daily cadence (still requires your approval before anything gets written)</label>
 						</div>
 
 						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">

@@ -64,10 +64,31 @@
 		if ( route === 'import-topics' || route === 'pull-bulk-topics' ) {
 			return data.imported + ' topic(s) turned into plan rows' + ( data.skipped ? ', ' + data.skipped + ' skipped (duplicate or unusable).' : '.' );
 		}
+		if ( route === 'cluster-architect' ) {
+			return 'Authority Cluster Created: "' + data.cluster + '" with ' + data.count + ' pieces pushed to pipeline.';
+		}
+		if ( route === 'gap-discovery' ) {
+			const list = $('#vmsb-gap-list');
+			list.empty();
+			data.gaps.forEach(g => {
+				list.append(`
+					<tr>
+						<td><strong>${esc(g.title)}</strong><br><small>Keyword: ${esc(g.keyword)}</small></td>
+						<td><span class="vmsb-tag vmsb-tag-blue">${esc(g.type)}</span></td>
+						<td><p class="vmsb-note" style="max-width:250px;">${esc(g.reasoning)}</p></td>
+						<td class="vmsb-row-actions">
+							<button class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="plan" data-body='{"keyword":"${esc(g.keyword)}", "count":1}'>Push to Pipeline</button>
+						</td>
+					</tr>
+				`);
+			});
+			$('#vmsb-gap-results').fadeIn();
+			return 'Gap Radar Scan Complete. Found ' + data.gaps.length + ' high-leverage opportunities.';
+		}
 		if ( route === 'produce' )    { return 'Written. Open it: ' + data.edit_url; }
 		if ( route === 'understand' ) { return 'Business profile updated: ' + ( data.type || 'no type detected' ); }
 		if ( route === 'silo-map' )   { return ( data.silos || [] ).length + ' silos mapped.'; }
-		if ( route === 'silo-push-gaps' ) { return data.pushed + ' topics pushed to the content plan.'; }
+		if ( route === 'silo-push-gaps' ) { return data.pushed + ' topics pushed to the pipeline.'; }
 		if ( route === 'index-vectors' || route === 'rebuild-index' ) {
 			return data.indexed + ' indexed, ' + data.skipped + ' already current, ' + data.failed + ' failed. ' + data.remaining + ' remaining.';
 		}
@@ -101,6 +122,10 @@
 		if ( route === 'ctr-start' )     { return 'Test started: "' + data.variant + '" for ' + data.concludes_in_days + ' days.'; }
 		if ( route === 'ctr-conclude' )  { return data.concluded + ' experiments concluded.'; }
 		if ( route === 'news-scout' )    { return data.proposed + ' timely angles proposed - verify before writing.'; }
+		if ( route === 'battle-roadmap' ) { return 'Battle Roadmap Generated. View it in the Roadmap tab.'; }
+		if ( route === 'growth-scan' ) { return data.found + ' new suggestion(s) queued for review.'; }
+		if ( route === 'growth-suggestion-approve' ) { return data.approved ? 'Approved — moved into the production pipeline.' : 'Could not approve (already actioned?).'; }
+		if ( route === 'growth-suggestion-reject' ) { return data.rejected ? 'Rejected.' : 'Could not reject (already actioned?).'; }
 		if ( route === 'niche-plan' )   { return data.planned + ' pieces planned for expansion.'; }
 		if ( route === 'clear-rejected' ) { return data.deleted + ' rejected items removed.'; }
 		if ( route === 'replan-rejected' ) { return data.updated + ' items reset for re-planning.'; }
@@ -129,13 +154,21 @@
 		if ( route === 'revert' )          { return 'Reverted. The page is back to how it was before the fix.'; }
 		if ( route === 'pending-approve' ) { return 'Draft approved and published.'; }
 		if ( route === 'pending-reject' )  { return 'Draft discarded — issue reopened.'; }
+		if ( route === 'license-verify' )  { return 'Success! Your ' + data.plan + ' plan is now active.'; }
 		return JSON.stringify( data, null, 2 );
 	}
 
 	function reloadIfNeeded( route ) {
-		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert' ];
+		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert', 'license-verify', 'cluster-architect', 'battle-roadmap', 'growth-scan', 'growth-suggestion-approve', 'growth-suggestion-reject' ];
 		if ( routes.indexOf( route ) !== -1 ) {
-			setTimeout( () => window.location.reload(), 1600 );
+			const msg = ( route === 'import-topics' || route === 'pull-bulk-topics' ) ? '&vmsb_msg=import_done' : ( route === 'license-verify' ? '&vmsb_msg=license_active' : '' );
+			setTimeout( () => {
+				if ( msg ) {
+					window.location.href = window.location.href.split('&')[0] + msg;
+				} else {
+					window.location.reload();
+				}
+			}, 1600 );
 		}
 	}
 
@@ -332,6 +365,53 @@
 			alert( 'Merge failed: ' + e.message );
 		} finally {
 			btn.prop( 'disabled', false ).text( label );
+		}
+	} );
+
+	// AI-suggested cluster merges: scan all existing cluster names for likely
+	// duplicates and let the user apply each suggestion with one click,
+	// reusing the same keyword-merge-cluster route the manual tool above uses.
+	$( document ).on( 'click', '#vmsb-cluster-suggest-merges', async function () {
+		const btn   = $( this );
+		const box   = $( '#vmsb-cluster-merge-suggestions' );
+		const label = btn.text();
+		btn.prop( 'disabled', true ).text( 'Scanning…' );
+		try {
+			const data        = await call( 'keyword-suggest-merges', {} );
+			const suggestions = data.suggestions || [];
+			if ( ! suggestions.length ) {
+				box.html( '<p class="vmsb-note" style="margin-top:10px;">No confident duplicates found among your current clusters.</p>' );
+				return;
+			}
+			let html = '<div class="vmsb-note" style="margin:10px 0 6px;">' + suggestions.length + ' likely duplicate(s) found:</div>';
+			suggestions.forEach( function ( s ) {
+				html += '<div class="vmsb-inline-form" style="align-items:center; gap:10px; margin-bottom:6px;">'
+					+ '<span>' + esc( s.from ) + ' &rarr; <strong>' + esc( s.to ) + '</strong></span>'
+					+ '<button class="vmsb-mini-btn vmsb-suggested-merge-apply" data-from="' + esc( s.from ) + '" data-to="' + esc( s.to ) + '">Apply</button>'
+					+ '</div>';
+			} );
+			box.html( html );
+		} catch ( e ) {
+			box.html( '<p class="vmsb-error" style="margin-top:10px;">Failed: ' + esc( e.message ) + '</p>' );
+		} finally {
+			btn.prop( 'disabled', false ).text( label );
+		}
+	} );
+
+	$( document ).on( 'click', '.vmsb-suggested-merge-apply', async function () {
+		const btn  = $( this );
+		const from = btn.data( 'from' );
+		const to   = btn.data( 'to' );
+		if ( ! confirm( 'Move every keyword in "' + from + '" into "' + to + '"?' ) ) return;
+
+		btn.prop( 'disabled', true ).text( 'Merging…' );
+		try {
+			const data = await call( 'keyword-merge-cluster', { from: from, to: to } );
+			say( stamp() + '  ' + data.merged + ' keyword(s) moved from "' + from + '" into "' + to + '".', true );
+			setTimeout( () => window.location.reload(), 1200 );
+		} catch ( e ) {
+			alert( 'Merge failed: ' + e.message );
+			btn.prop( 'disabled', false ).text( 'Apply' );
 		}
 	} );
 

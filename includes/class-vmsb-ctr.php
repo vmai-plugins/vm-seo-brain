@@ -88,7 +88,7 @@ class VMSB_CTR {
 			. "same core promise, still accurate to the content, under 60 characters.\n\n"
 			. 'Return JSON: {"variant_title":""}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 150, 'temperature' => 0.6 ) );
+		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 150, 'temperature' => 0.6, 'action' => 'ctr_test' ) );
 		if ( empty( $data['variant_title'] ) ) {
 			return new WP_Error( 'vmsb_ctr', $this->ai->get_last_error() ?: 'Could not draft a variant.' );
 		}

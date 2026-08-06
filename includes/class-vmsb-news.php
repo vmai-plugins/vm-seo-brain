@@ -28,11 +28,15 @@ class VMSB_News {
 	 */
 	public function scout( $count = 5 ) {
 		if ( ! $this->is_enabled() ) {
-			return new WP_Error( 'vmsb_news', 'Trend Scout is not active.' );
+			return new WP_Error( 'vmsb_news', 'Trend Scout is not active. Enable it in Settings > God Mode.' );
 		}
 
 		$brain   = new VMSB_Brain();
 		$profile = $brain->profile();
+
+		if ( empty($profile['type']) ) {
+			return new WP_Error( 'vmsb_news', 'Business DNA missing. Re-calibrate DNA on Dashboard first.' );
+		}
 
 		// 1. Fetch live signals from Google News RSS for the niche
 		$signals = $this->fetch_live_signals( $profile['type'] . ' ' . $profile['name'] );

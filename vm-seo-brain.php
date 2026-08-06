@@ -53,7 +53,7 @@ spl_autoload_register(
  */
 final class VMSB_Install {
 
-	const DB_VERSION = '1.7.0'; // 1.7.0: + vmsb_plan.content_language (per-item language override)
+	const DB_VERSION = '1.10.0'; // 1.10.0: + vmsb_keywords.serp_features
 
 	public static function activate() {
 		self::tables();
@@ -114,6 +114,7 @@ final class VMSB_Install {
 			clicks INT NOT NULL DEFAULT 0,
 			ctr FLOAT NOT NULL DEFAULT 0,
 			opportunity FLOAT NOT NULL DEFAULT 0,
+			serp_features TEXT NULL,
 			post_id BIGINT UNSIGNED NULL,
 			status VARCHAR(32) NOT NULL DEFAULT 'new',
 			source VARCHAR(32) NOT NULL DEFAULT 'gsc',
@@ -138,6 +139,8 @@ final class VMSB_Install {
 			cluster VARCHAR(191) NULL,
 			intent VARCHAR(32) NULL,
 			content_language VARCHAR(10) NULL,
+			agent_task VARCHAR(64) NULL,
+			editor_note TEXT NULL,
 			is_pillar TINYINT(1) NOT NULL DEFAULT 0,
 			content_type VARCHAR(32) NOT NULL DEFAULT 'blog',
 			brief LONGTEXT NULL,

@@ -83,7 +83,7 @@ class VMSB_AEO {
 			. "do not add information that is not there. The answer must stand alone without needing the rest of the article for context.\n\n"
 			. 'Return JSON: {"questions":[{"q":"","direct_answer":""}]}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'max_tokens' => 700, 'temperature' => 0.2 ) );
+		$data = $this->ai->generate_json( $prompt, array( 'max_tokens' => 700, 'temperature' => 0.2, 'action' => 'aeo_sweep' ) );
 		if ( ! is_array( $data ) ) {
 			return array();
 		}

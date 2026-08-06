@@ -24,7 +24,12 @@ $biz_summary   = ( new VMSB_Performance() )->business_summary();
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Strategic Executive Command</p>
-			<h1>SEO Brain Intelligence</h1>
+			<h1 style="display:flex; align-items:center; gap:15px;">
+				SEO Brain Intelligence
+				<span class="vmsb-tag vmsb-tag-<?php echo VMSB_License::plan() === 'elite' ? 'gold' : (VMSB_License::plan() === 'pro' ? 'purple' : 'blue'); ?>" style="font-size:11px; padding:4px 12px; text-transform:uppercase; letter-spacing:1px; font-weight:800;">
+					<?php echo esc_html(VMSB_License::plan()); ?>
+				</span>
+			</h1>
 			<p class="vmsb-sub"><?php echo esc_html( $profile['type'] ? $profile['name'] . ' — ' . $profile['type'] : 'The brain has not read this site yet.' ); ?></p>
 		</div>
 		<div class="vmsb-head-actions">
@@ -42,9 +47,10 @@ $biz_summary   = ( new VMSB_Performance() )->business_summary();
 			array( 'slug' => 'vmsb-keywords',   'icon' => 'search',       'title' => 'Keywords',      'desc' => 'Your keyword universe, clustered by opportunity.' ),
 			array( 'slug' => 'vmsb-silo',       'icon' => 'networking',   'title' => 'Silos',         'desc' => 'Topical clusters, pillar strength, internal links.' ),
 			array( 'slug' => 'vmsb-taxonomy',   'icon' => 'category',     'title' => 'Taxonomy',      'desc' => 'Category and tag structure, zombies, duplicates.' ),
-			array( 'slug' => 'vmsb-plan',       'icon' => 'edit-page',    'title' => 'Content Plan',  'desc' => 'The editorial queue, from gap to published post.',    'badge' => (int) ( $plan['planned'] ?? 0 ) . ' planned', 'badge_class' => 'vmsb-tag-gold' ),
+			array( 'slug' => 'vmsb-pipeline',   'icon' => 'edit-page',    'title' => 'Pipeline',      'desc' => 'Editorial production factory.',    'badge' => (int) ( $plan['planned'] ?? 0 ) . ' queued', 'badge_class' => 'vmsb-tag-gold' ),
+			array( 'slug' => 'vmsb-growth',     'icon' => 'performance',  'title' => 'Growth Plan',  'desc' => 'Viral trends and niche expansion.' ),
 			array( 'slug' => 'vmsb-competitive','icon' => 'shield',       'title' => 'Competitive',   'desc' => 'Rival tracking, backlinks, ROI, CTR experiments.' ),
-			array( 'slug' => 'vmsb-usage',      'icon' => 'chart-area',   'title' => 'AI Usage',      'desc' => 'Token spend and efficiency across the AI chain.' ),
+			array( 'slug' => 'vmsb-plans',      'icon' => 'cart',         'title' => 'Billing & Usage','desc' => 'Subscription and resource tracking.', 'badge' => strtoupper(VMSB_License::plan()), 'badge_class' => 'vmsb-tag-gold' ),
 			array( 'slug' => 'vmsb-settings',   'icon' => 'admin-generic','title' => 'Settings',      'desc' => 'Providers, autonomy limits, and integrations.' ),
 		);
 		foreach ( $hub_items as $item ) :
@@ -63,7 +69,7 @@ $biz_summary   = ( new VMSB_Performance() )->business_summary();
 
 	<?php
 	$weekly_narrative = get_option( 'vmsb_weekly_narrative' );
-	if ( $weekly_narrative ) : ?>
+	if ( $weekly_narrative && VMSB_License::at_least('pro') ) : ?>
 		<div class="vmsb-card vmsb-card-wide vmsb-executive-summary" style="margin-bottom: 30px; border-left: 4px solid var(--gold);">
 			<div class="vmsb-flex-space" style="margin-bottom: 15px;">
 				<h2 style="margin:0; font-family:var(--serif); color:var(--gold-soft);">Executive Growth Narrative</h2>

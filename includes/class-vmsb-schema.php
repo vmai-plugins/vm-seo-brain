@@ -39,7 +39,7 @@ class VMSB_Schema {
 			. "Generate 3-4 FAQ question/answer pairs using ONLY information actually stated in this article - do not invent facts to answer a question it doesn't cover.\n\n"
 			. 'Return JSON: {"faq":[{"q":"","a":""}]}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'max_tokens' => 600, 'temperature' => 0.2 ) );
+		$data = $this->ai->generate_json( $prompt, array( 'max_tokens' => 600, 'temperature' => 0.2, 'action' => 'schema_sweep' ) );
 		if ( empty( $data['faq'] ) ) {
 			return new WP_Error( 'vmsb_schema', 'No FAQ content produced.' );
 		}

@@ -23,7 +23,7 @@ class VMSB_Duel {
 			. "Find 3 specific technical or topical things the competitors are doing better (e.g. FAQ schema, missing entity 'X', better H2 structure).\n"
 			. "Return JSON: {\"gaps\":[{\"type\":\"entity|schema|structure\",\"detail\":\"\",\"fix_instruction\":\"\"}]}";
 
-		$res = $ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'complexity' => 'premium' ) );
+		$res = $ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'complexity' => 'premium', 'action' => 'content_duel' ) );
 
 		if ( ! empty( $res['gaps'] ) ) {
 			return $this->apply_fixes( $post_id, $res['gaps'] );

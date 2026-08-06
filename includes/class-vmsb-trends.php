@@ -20,6 +20,11 @@ class VMSB_Trends {
 	 * Get trending topics for the configured niche and location.
 	 */
 	public function get_rising_signals( $limit = 10 ) {
+		$cached = get_transient( 'vmsb_rising_trends' );
+		if ( is_array( $cached ) ) {
+			return array_slice( $cached, 0, $limit );
+		}
+
 		$country = VMSB_Settings::get( 'country', 'IN' );
 		$niche   = VMSB_Settings::get( 'business_type' );
 
@@ -52,9 +57,14 @@ class VMSB_Trends {
 			. "TASK: Identify which trends are RELEVANT to our niche or can be 'News-Jacked' (connected logically to our business).\n"
 			. "Return ONLY relevant topics as a JSON array of strings: [\"topic1\", \"topic2\"]";
 
-		$relevant = $this->ai->generate_json( $prompt, array( 'max_tokens' => 300 ) );
+		$relevant = $this->ai->generate_json( $prompt, array( 'max_tokens' => 300, 'persona' => 'strategist' ) );
 
-		return is_array( $relevant ) ? array_slice( $relevant, 0, $limit ) : array();
+		if ( is_array($relevant) ) {
+			set_transient( 'vmsb_rising_trends', $relevant, HOUR_IN_SECONDS );
+			return array_slice( $relevant, 0, $limit );
+		}
+
+		return array();
 	}
 
 	/**

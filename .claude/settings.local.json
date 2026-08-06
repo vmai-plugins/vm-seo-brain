@@ -119,7 +119,21 @@
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l '/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vmai-sales-agent/includes/class-vmai-rest-api.php')",
       "Read(//c/vmai-crm-stable/**)",
       "Bash(npx tsc *)",
-      "mcp__claude-in-chrome__get_page_text"
+      "mcp__claude-in-chrome__get_page_text",
+      "Bash(perl -0pi -e 's/\\\\} catch \\\\\\(e\\\\\\) \\\\{\\(\\\\s*\\\\n\\\\s*\\(?:Alert|setLead|setActivities|console|setNudging|setGhosting|setUpdatingStage\\)\\)/} catch {$1/g' src/screens/vmai-leads/VMAILeadDetailScreen.tsx)",
+      "Bash(npx eslint *)",
+      "Bash(perl -0pi -e 's/\\\\} catch \\\\\\(error\\\\\\) \\\\{\\(\\\\s*\\\\n\\\\s*Alert\\\\.alert\\)/} catch {$1/g' src/screens/vmai-discovery/VMAIDiscoveryScreen.tsx src/screens/vmai-inbox/VMAIInboxThreadScreen.tsx)",
+      "Bash(grep -oE \"vmai/v1/[a-zA-Z0-9/_\\\\$\\\\{\\\\}-]+\" src/services/VMAIService.ts)",
+      "Bash(grep -oE \"vmai/v1/[^\\\\`']+\" src/services/VMAIService.ts)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/43011c18-e040-4ed2-92a3-ce7cd1a6e6b9/scratchpad/run-tests.php 'C:/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vmai-sales-agent')",
+      "Bash(perl -pi -e 's/\\(?<!\\\\\\\\\\)\\\\bmb_substr\\\\\\(/\\\\\\\\mb_substr\\(/g' /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/43011c18-e040-4ed2-92a3-ce7cd1a6e6b9/scratchpad/phpunit-shim.php)",
+      "Read(//c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/43011c18-e040-4ed2-92a3-ce7cd1a6e6b9/scratchpad/**)",
+      "Bash(sed -i 's/ mb_substr\\(/ \\\\\\\\mb_substr\\(/g' /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/43011c18-e040-4ed2-92a3-ce7cd1a6e6b9/scratchpad/phpunit-shim.php)",
+      "Bash(npx jest *)",
+      "Read(//c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/**)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-keywords.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l admin/views/keywords.php)",
+      "Bash(node --check admin/assets/js/admin.js)"
     ]
   }
 }

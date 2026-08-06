@@ -51,6 +51,7 @@ $issues = $fixer->open_issues( 100, '', '', 'missing_term_description,empty_arch
 
 	<div class="vmsb-tabs">
 		<button class="vmsb-tab is-active" data-tab="categories">📁 Categories</button>
+		<button class="vmsb-tab" data-tab="personas">🧠 Expert Personas</button>
 		<button class="vmsb-tab" data-tab="tags">🏷️ Tags & Bloat</button>
 		<button class="vmsb-tab" data-tab="issues">⚠️ Taxonomy Issues</button>
 	</div>
@@ -77,6 +78,49 @@ $issues = $fixer->open_issues( 100, '', '', 'missing_term_description,empty_arch
 							<td><?php echo $c->description ? wp_trim_words($c->description, 10) : '<span class="vmsb-sev sev-high">Missing</span>'; ?></td>
 							<td>
 								<button class="vmsb-mini-btn" data-vmsb="taxonomy-propose" data-id="<?php echo $c->term_id; ?>">Optimise</button>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+	</div>
+
+	<!-- PERSONAS PANEL -->
+	<div class="vmsb-panel" data-panel="personas">
+		<div class="vmsb-alert" style="margin-bottom:20px;">
+			<p>Expert personas build <strong>E-E-A-T</strong> authority. The Brain automatically generates a distinct professional profile for each category and attaches their bio to published posts.</p>
+		</div>
+		<div class="vmsb-table-wrap">
+			<table class="vmsb-table vmsb-table-full">
+				<thead>
+					<tr>
+						<th>Category</th>
+						<th>Assigned Expert</th>
+						<th>Title</th>
+						<th>Expertise</th>
+						<th>Bio Snippet</th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php
+					$all_personas = get_option('vmsb_personas', array());
+					foreach ($categories as $c) :
+						$p = $all_personas[$c->term_id] ?? null;
+					?>
+						<tr>
+							<td><strong><?php echo esc_html($c->name); ?></strong></td>
+							<td><?php echo $p ? esc_html($p['name']) : '<span class="vmsb-note">Not generated yet</span>'; ?></td>
+							<td><?php echo $p ? esc_html($p['title']) : '&mdash;'; ?></td>
+							<td>
+								<?php if ($p && !empty($p['expertise'])) : ?>
+									<?php foreach ((array)$p['expertise'] as $ex) : ?>
+										<span class="vmsb-tag vmsb-tag-blue" style="font-size:9px;"><?php echo esc_html($ex); ?></span>
+									<?php endforeach; ?>
+								<?php else : echo '&mdash;'; endif; ?>
+							</td>
+							<td>
+								<small class="vmsb-note"><?php echo $p ? wp_trim_words($p['bio'], 10) : 'Will generate on next publish'; ?></small>
 							</td>
 						</tr>
 					<?php endforeach; ?>

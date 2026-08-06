@@ -155,8 +155,12 @@ class VMSB_Task_Runner {
 				update_option( 'vmsb_last_roadmap', time() );
 				return ( new VMSB_Commander() )->execute( '/report' );
 
-			case 'improvement_loop':
+			case 'market_assess':
+				update_option( 'vmsb_last_market_assessment_task', time() );
 				return ( new VMSB_Market() )->assess();
+
+			case 'improvement_loop':
+				return ( new VMSB_Healer() )->heal_losses();
 
 			case 'graph_sync':
 				VMSB_Graph::build_twin();
@@ -173,7 +177,10 @@ class VMSB_Task_Runner {
 				return ( new VMSB_Link_Flow() )->rebalance();
 
 			case 'battle_roadmap':
-				return ( new VMSB_Roadmap() )->generate_plan();
+				return ( new VMSB_Roadmap() )->generate_plan( (int) VMSB_Settings::get( 'growth_target', 50000 ), (int) VMSB_Settings::get( 'growth_window', 50 ) );
+
+			case 'growth_scan':
+				return ( new VMSB_Growth_Engine() )->scan();
 
 			case 'content_duel':
 				// Duel a random striking distance post

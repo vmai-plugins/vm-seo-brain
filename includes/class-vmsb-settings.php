@@ -77,7 +77,7 @@ class VMSB_Settings {
 			'gsc_property'         => '',
 			'ga4_property_id'      => '',
 			'sheet_id'             => '',
-			'sheet_tab'            => 'Content Plan',
+			'sheet_tab'            => 'Pipeline',
 			// Deliberately a separate tab in the same spreadsheet from
 			// 'sheet_tab' above - lets a different automation (e.g. AI
 			// Puffer's own Sheets feature) drop raw topic ideas here without
@@ -94,6 +94,7 @@ class VMSB_Settings {
 			'require_review'    => 1,
 			'growth_target'     => 50000,
 			'growth_window'     => 50,
+			'auto_growth_mode'  => 0,
 			'staleness_threshold_days' => 365,
 
 			// Vector memory. Thresholds at 0 auto-calibrate to the embedding model.
@@ -199,7 +200,19 @@ class VMSB_Settings {
 
 	public static function get( $key, $fallback = null ) {
 		$all = self::all();
-		return array_key_exists( $key, $all ) ? $all[ $key ] : $fallback;
+		$val = array_key_exists( $key, $all ) ? $all[ $key ] : $fallback;
+
+		// License Enforcement
+		if ( 'posts_per_day' === $key && class_exists('VMSB_License') ) {
+			$limits = VMSB_License::limits();
+			return min( (int)$val, (int)$limits['posts_per_day'] );
+		}
+
+		if ( 'vector_enabled' === $key && class_exists('VMSB_License') ) {
+			return VMSB_License::at_least('elite') ? (int)$val : 0;
+		}
+
+		return $val;
 	}
 
 	public static function update( array $changes ) {
