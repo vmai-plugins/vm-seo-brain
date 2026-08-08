@@ -19,6 +19,10 @@ class VMSB_Image_Engine {
 	 * @return array{ok:bool,attachment_id:int,url:string,provider:string,error:string}
 	 */
 	public function create( $subject, array $meta = array() ) {
+		if ( ! (int) VMSB_Settings::get( 'feature_images', 1 ) ) {
+			return array( 'ok' => false, 'attachment_id' => 0, 'url' => '', 'provider' => '', 'error' => 'Visual Engine is disabled.' );
+		}
+
 		// Professional Subject Refinement: Turn simple keywords into high-end descriptions
 		$subject = $this->refine_subject( $subject );
 

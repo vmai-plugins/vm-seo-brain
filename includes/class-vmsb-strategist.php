@@ -166,12 +166,20 @@ class VMSB_Strategist {
 
 	private static function site_state() {
 		global $wpdb;
+		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
+		$types_sql  = "'" . implode( "','", array_map( 'esc_sql', $safe_types ) ) . "'";
+
+		$total_published = 0;
+		foreach ( $safe_types as $type ) {
+			$counts = wp_count_posts( $type );
+			$total_published += (int) ($counts->publish ?? 0);
+		}
 
 		return array(
 			'roi_leaks_open'   => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_issues WHERE rule = 'roi_leak' AND status = 'open'" ),
 			'vectors_pending'  => class_exists( 'VMSB_Vector_Store' ) ? VMSB_Vector_Store::pending_count() : 0,
 			'ctr_running_due'  => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_experiments WHERE status = 'running' AND concludes_at <= UTC_TIMESTAMP()" ),
-			'published_posts'  => (int) wp_count_posts( 'post' )->publish,
+			'published_posts'  => $total_published,
 			'gsc_connected'    => ( new VMSB_Google() )->is_connected(),
 			'competitors_count' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_competitors WHERE status = 'active'" ),
 			// Check both native and Rank Math FAQ schema, same as VMSB_Schema::sweep(),
@@ -180,7 +188,7 @@ class VMSB_Strategist {
 				"SELECT COUNT(*) FROM {$wpdb->posts} p
 				 LEFT JOIN {$wpdb->postmeta} m1 ON m1.post_id = p.ID AND m1.meta_key = '_vmsb_faq_schema'
 				 LEFT JOIN {$wpdb->postmeta} m2 ON m2.post_id = p.ID AND m2.meta_key = 'rank_math_schema_FAQPage'
-				 WHERE p.post_status = 'publish' AND p.post_type = 'post' AND m1.meta_id IS NULL AND m2.meta_id IS NULL"
+				 WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql}) AND m1.meta_id IS NULL AND m2.meta_id IS NULL"
 			),
 		);
 	}

@@ -479,7 +479,7 @@ class VMSB_Admin {
 			}
 		}
 
-		foreach ( array( 'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl', 'thief_auto_plan', 'webhook_enabled', 'auto_growth_mode' ) as $key ) {
+		foreach ( array( 'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl', 'thief_auto_plan', 'webhook_enabled', 'auto_growth_mode', 'feature_aeo', 'feature_entity', 'feature_silo', 'feature_images', 'feature_taxonomy', 'feature_production', 'feature_maintenance', 'feature_schema' ) as $key ) {
 			$clean[ $key ] = empty( $fields[ $key ] ) ? 0 : 1;
 		}
 

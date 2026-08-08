@@ -34,6 +34,22 @@ class VMSB_Persona {
 	}
 
 	public static function apply_to_post( $post_id ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) return;
+
+		// SAFETY CHECK: Never rewrite system pages or unsafe post types
+		$front = (int) get_option( 'page_on_front' );
+		$blog  = (int) get_option( 'page_for_posts' );
+		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
+
+		if ( $post_id === $front || $post_id === $blog ) {
+			return;
+		}
+
+		if ( ! in_array( $post->post_type, $safe_types, true ) ) {
+			return;
+		}
+
 		$categories = wp_get_post_categories( $post_id );
 		if ( ! $categories ) return;
 

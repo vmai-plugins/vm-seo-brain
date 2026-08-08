@@ -62,6 +62,10 @@ class VMSB_Taxonomy {
 	}
 
 	public function audit( array $taxonomies = array( 'category', 'post_tag' ) ) {
+		if ( ! (int) VMSB_Settings::get( 'feature_taxonomy', 1 ) ) {
+			return 0;
+		}
+
 		$fixer  = new VMSB_Fixer();
 		$issues = 0;
 

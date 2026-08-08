@@ -30,6 +30,10 @@ class VMSB_AEO {
 	 * @return array{score:int,issues:array,questions:array}
 	 */
 	public function audit( $post_id ) {
+		if ( ! (int) VMSB_Settings::get( 'feature_aeo', 1 ) ) {
+			return new WP_Error( 'vmsb_aeo', 'AEO feature is disabled.' );
+		}
+
 		$post = get_post( $post_id );
 		if ( ! $post ) {
 			return new WP_Error( 'vmsb_aeo', 'Post not found.' );
@@ -164,10 +168,13 @@ class VMSB_AEO {
 	 */
 	public function sweep( $limit = 5 ) {
 		global $wpdb;
+		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
+		$types_sql  = "'" . implode( "','", array_map( 'esc_sql', $safe_types ) ) . "'";
+
 		$ids = $wpdb->get_col( $wpdb->prepare(
 			"SELECT p.ID FROM {$wpdb->posts} p
 			 LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_vmsb_aeo_audit'
-			 WHERE p.post_status = 'publish' AND p.post_type = 'post' AND m.meta_id IS NULL
+			 WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql}) AND m.meta_id IS NULL
 			 ORDER BY p.post_date DESC LIMIT %d",
 			(int) $limit
 		) );

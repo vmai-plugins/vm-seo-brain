@@ -480,6 +480,10 @@ class VMSB_Content {
 	 * Write and publish one planned piece.
 	 */
 	public function produce( $plan_id, $args = array() ) {
+		if ( ! (int) VMSB_Settings::get( 'feature_production', 1 ) ) {
+			return new WP_Error( 'vmsb_production', 'Automated Content Production is currently disabled in Settings.' );
+		}
+
 		// Global Drip Cap Check (Best of Autopilot)
 		$today_key       = 'vmsb_pub_' . gmdate( 'Ymd' );
 		$published_today = (int) get_option( $today_key, 0 );
@@ -537,7 +541,7 @@ class VMSB_Content {
 			. ( $item->editor_note ? "CRITICAL EDITOR NOTE: {$item->editor_note}\n" : "" )
 			. ( $semantic_clues ? "SEMANTIC CONTEXT (Build upon these existing site themes): " . implode( ', ', $semantic_clues ) . "\n" : "" )
 			. ( $agent_context ? "RESEARCH & ARCHITECTURE GUIDANCE: {$agent_context}\n" : "" )
-			. 'INTERNAL LINKS TO INCLUDE (use natural anchors): ' . wp_json_encode( $link_context ) . "\n\n"
+			. "INTERNAL LINKS TO INCLUDE (use natural anchors): " . wp_json_encode( $link_context ) . "\n\n"
 			. "RANK MATH 90+ SCORE REQUIREMENTS:\n"
 			. "- Focus Keyword must be in the FIRST paragraph (first 50 words).\n"
 			. "- Focus Keyword must be in at least one H2 and one H3 subheading.\n"

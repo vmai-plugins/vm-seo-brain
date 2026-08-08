@@ -25,6 +25,10 @@ class VMSB_Schema {
 	 * doesn't actually cover.
 	 */
 	public function generate_faq( $post_id ) {
+		if ( ! (int) VMSB_Settings::get( 'feature_schema', 1 ) ) {
+			return array( 'skipped' => 'Schema feature is disabled' );
+		}
+
 		$post = get_post( $post_id );
 		if ( ! $post ) {
 			return new WP_Error( 'vmsb_schema', 'Post not found.' );
@@ -84,6 +88,10 @@ class VMSB_Schema {
 	 * subjects, not just one page in isolation.
 	 */
 	public function generate_graph( $post_id ) {
+		if ( ! (int) VMSB_Settings::get( 'feature_schema', 1 ) ) {
+			return array( 'skipped' => 'Schema feature is disabled' );
+		}
+
 		$post = get_post( $post_id );
 		$cats = wp_get_post_categories( $post_id );
 		if ( ! $post || ! $cats ) {
@@ -118,12 +126,15 @@ class VMSB_Schema {
 	 */
 	public function sweep( $limit = 5 ) {
 		global $wpdb;
+		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
+		$types_sql  = "'" . implode( "','", array_map( 'esc_sql', $safe_types ) ) . "'";
+
 		// Check for both native and Rank Math FAQ schema
 		$ids = $wpdb->get_col( $wpdb->prepare(
 			"SELECT p.ID FROM {$wpdb->posts} p
 			 LEFT JOIN {$wpdb->postmeta} m1 ON m1.post_id = p.ID AND m1.meta_key = '_vmsb_faq_schema'
 			 LEFT JOIN {$wpdb->postmeta} m2 ON m2.post_id = p.ID AND m2.meta_key = 'rank_math_schema_FAQPage'
-			 WHERE p.post_status = 'publish' AND p.post_type = 'post'
+			 WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql})
 			 AND m1.meta_id IS NULL AND m2.meta_id IS NULL
 			 ORDER BY p.post_date DESC LIMIT %d",
 			(int) $limit

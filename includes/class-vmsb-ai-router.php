@@ -189,11 +189,11 @@ class VMSB_AI_Router {
 					// prompt that contradicts the format asked for here and made the
 					// verdict fail to parse on every call.
 					$quality_check = $this->generate(
-						"Act as a Senior Editor. Review this generated content for EEAT and High-End quality. "
-						. "Criteria: 1. Is it specific to the brand? 2. Does it avoid AI filler? 3. Is the tone truly expert? "
+						"Act as a Senior Editor. Review this generated content for EEAT and Rank Math 90+ optimization. "
+						. "Criteria: 1. Is the Focus Keyword in the first paragraph? 2. Is it in an H2/H3? 3. Is paragraph length short? 4. Is the tone truly expert? "
 						. "If score < 85, reply with 'REVISE: [Specific technical critique]'. Otherwise reply 'PASS'.\n\n"
-						. "CONTENT: " . wp_trim_words($result['text'], 600),
-						array('max_tokens' => 200, 'persona' => 'auditor')
+						. "CONTENT: " . wp_trim_words($result['text'], 800),
+						array('max_tokens' => 300, 'persona' => 'auditor')
 					);
 
 					$verdict = ! empty( $quality_check['ok'] ) ? trim( $quality_check['text'] ) : '';

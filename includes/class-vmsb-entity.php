@@ -28,6 +28,10 @@ class VMSB_Entity {
 	 * @return array{score:int,present:array,missing:array}
 	 */
 	public function audit( $post_id ) {
+		if ( ! (int) VMSB_Settings::get( 'feature_entity', 1 ) ) {
+			return new WP_Error( 'vmsb_entity', 'Entity Injection feature is disabled.' );
+		}
+
 		$post = get_post( $post_id );
 		if ( ! $post ) {
 			return new WP_Error( 'vmsb_entity', 'Post not found.' );
@@ -60,6 +64,22 @@ class VMSB_Entity {
 	 * how many are added in one pass so a single edit stays reviewable.
 	 */
 	public function inject( $post_id, $max_entities = 4 ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) return array( 'skipped' => 'post not found' );
+
+		// SAFETY CHECK: Never rewrite system pages or unsafe post types
+		$front = (int) get_option( 'page_on_front' );
+		$blog  = (int) get_option( 'page_for_posts' );
+		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
+
+		if ( $post_id === $front || $post_id === $blog ) {
+			return new WP_Error( 'vmsb_entity', 'Safety: Cannot auto-inject entities into system pages.' );
+		}
+
+		if ( ! in_array( $post->post_type, $safe_types, true ) ) {
+			return new WP_Error( 'vmsb_entity', 'Safety: This post type is not enabled for automated edits.' );
+		}
+
 		$audit = get_post_meta( $post_id, '_vmsb_entity_audit', true );
 		if ( ! $audit ) {
 			$audit = $this->audit( $post_id );
@@ -105,10 +125,13 @@ class VMSB_Entity {
 	 */
 	public function sweep( $limit = 5 ) {
 		global $wpdb;
+		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
+		$types_sql  = "'" . implode( "','", array_map( 'esc_sql', $safe_types ) ) . "'";
+
 		$ids = $wpdb->get_col( $wpdb->prepare(
 			"SELECT p.ID FROM {$wpdb->posts} p
 			 LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_vmsb_entity_audit'
-			 WHERE p.post_status = 'publish' AND p.post_type = 'post' AND m.meta_id IS NULL
+			 WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql}) AND m.meta_id IS NULL
 			 ORDER BY p.post_date DESC LIMIT %d",
 			(int) $limit
 		) );
@@ -142,13 +165,26 @@ class VMSB_Entity {
 			return new WP_Error( 'vmsb_entity', 'No entity specified.' );
 		}
 
-		if ( class_exists( 'VMSB_Integrations' ) && VMSB_Integrations::is_elementor_page( $post_id ) && (int) VMSB_Settings::get( 'elementor_safe_mode', 1 ) ) {
-			return new WP_Error( 'vmsb_entity', 'This page is built in Elementor - full post_content rewrite is skipped to avoid corrupting the layout.' );
-		}
-
 		$post = get_post( $post_id );
 		if ( ! $post ) {
 			return new WP_Error( 'vmsb_entity', 'Post not found.' );
+		}
+
+		// SAFETY CHECK
+		$front = (int) get_option( 'page_on_front' );
+		$blog  = (int) get_option( 'page_for_posts' );
+		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
+
+		if ( $post_id === $front || $post_id === $blog ) {
+			return new WP_Error( 'vmsb_entity', 'Safety: Cannot auto-inject entities into system pages.' );
+		}
+
+		if ( ! in_array( $post->post_type, $safe_types, true ) ) {
+			return new WP_Error( 'vmsb_entity', 'Safety: This post type is not enabled for automated edits.' );
+		}
+
+		if ( class_exists( 'VMSB_Integrations' ) && VMSB_Integrations::is_elementor_page( $post_id ) && (int) VMSB_Settings::get( 'elementor_safe_mode', 1 ) ) {
+			return new WP_Error( 'vmsb_entity', 'This page is built in Elementor - full post_content rewrite is skipped to avoid corrupting the layout.' );
 		}
 
 		$prompt = "Article HTML:\n\n" . $post->post_content . "\n\n"

@@ -121,6 +121,18 @@ class VMSB_Health {
 			);
 		}
 
+		// AI Link Genius Pro Integration
+		if ( class_exists( 'AILG_Core' ) ) {
+			global $wpdb;
+			$broken_links = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ailg_broken_links WHERE status = 'broken'" );
+			$pending_links = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ailg_suggestions WHERE status = 'pending'" );
+			$checks['link_genius'] = array(
+				'label'  => 'AI Link Genius Pro',
+				'ok'     => $broken_links === 0,
+				'detail' => "Active. {$pending_links} pending suggestions. " . ( $broken_links > 0 ? "{$broken_links} broken links detected!" : "Internal linking is healthy." ),
+			);
+		}
+
 		update_option( 'vmsb_health_last_check', array( 'checks' => $checks, 'at' => current_time( 'mysql' ) ), false );
 		return $checks;
 	}

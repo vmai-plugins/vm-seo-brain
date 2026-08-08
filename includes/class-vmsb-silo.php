@@ -24,6 +24,10 @@ class VMSB_Silo {
 	 * Generate a full silo map from the keyword universe + business profile.
 	 */
 	public function generate_map( $force = false ) {
+		if ( ! (int) VMSB_Settings::get( 'feature_silo', 1 ) ) {
+			return array( 'silos' => array() );
+		}
+
 		$existing = $this->brain->recall( 'silo', 'map' );
 		if ( $existing && ! $force ) {
 			return $existing;

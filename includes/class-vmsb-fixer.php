@@ -640,6 +640,11 @@ class VMSB_Fixer {
 		$id  = (int) $issue->object_id;
 		$sug = $issue->suggested ? json_decode( $issue->suggested, true ) : array();
 
+		// Feature Gating: Maintenance Toggle
+		if ( ! (int) VMSB_Settings::get( 'feature_maintenance', 1 ) ) {
+			return new WP_Error( 'vmsb_maintenance', 'Automated Content Optimization is currently disabled in Settings.' );
+		}
+
 		switch ( $issue->rule ) {
 
 			case 'missing_seo_title':

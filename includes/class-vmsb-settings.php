@@ -174,6 +174,16 @@ class VMSB_Settings {
 			'webhook_enabled' => 0,
 			'webhook_url'     => '',
 			'webhook_events'  => array( 'content_published' ),
+
+			// Feature Toggles (Granular Control)
+			'feature_aeo'        => 1,
+			'feature_entity'     => 1,
+			'feature_silo'       => 1,
+			'feature_images'     => 1,
+			'feature_taxonomy'   => 1,
+			'feature_production' => 1,
+			'feature_maintenance' => 1,
+			'feature_schema'     => 1,
 		);
 	}
 

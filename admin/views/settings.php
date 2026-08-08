@@ -273,6 +273,45 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 						</div>
 
 						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
+							<h3 style="margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold);">Feature Control</h3>
+							<p class="vmsb-note" style="margin-bottom: 20px;">Individually enable or disable specific AI intelligence modules.</p>
+							<div class="vmsb-checks" style="display: flex; gap: 20px; flex-wrap: wrap;">
+								<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+									<input type="checkbox" name="<?php echo esc_attr( $field( 'feature_production' ) ); ?>" value="1" <?php checked( $s['feature_production'], 1 ); ?>>
+									Auto Writing (New Posts)
+								</label>
+								<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+									<input type="checkbox" name="<?php echo esc_attr( $field( 'feature_maintenance' ) ); ?>" value="1" <?php checked( $s['feature_maintenance'], 1 ); ?>>
+									Auto Optimization (Existing Posts)
+								</label>
+								<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+									<input type="checkbox" name="<?php echo esc_attr( $field( 'feature_aeo' ) ); ?>" value="1" <?php checked( $s['feature_aeo'], 1 ); ?>>
+									AEO (AI Search Readiness)
+								</label>
+								<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+									<input type="checkbox" name="<?php echo esc_attr( $field( 'feature_entity' ) ); ?>" value="1" <?php checked( $s['feature_entity'], 1 ); ?>>
+									Entity Injection
+								</label>
+								<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+									<input type="checkbox" name="<?php echo esc_attr( $field( 'feature_silo' ) ); ?>" value="1" <?php checked( $s['feature_silo'], 1 ); ?>>
+									Silo & Link Rebuilding
+								</label>
+								<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+									<input type="checkbox" name="<?php echo esc_attr( $field( 'feature_schema' ) ); ?>" value="1" <?php checked( $s['feature_schema'], 1 ); ?>>
+									Structured Data (Schema)
+								</label>
+								<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+									<input type="checkbox" name="<?php echo esc_attr( $field( 'feature_images' ) ); ?>" value="1" <?php checked( $s['feature_images'], 1 ); ?>>
+									Visual Engine (Image Gen)
+								</label>
+								<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+									<input type="checkbox" name="<?php echo esc_attr( $field( 'feature_taxonomy' ) ); ?>" value="1" <?php checked( $s['feature_taxonomy'], 1 ); ?>>
+									Taxonomy Lab (Archives)
+								</label>
+							</div>
+						</div>
+
+						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
 							<h3 style="margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold);">Optimization Guardrails</h3>
 							<p class="vmsb-note" style="margin-bottom: 20px;">Select the post types the Brain is allowed to optimize. We recommend starting with just 'Posts'.</p>
 
