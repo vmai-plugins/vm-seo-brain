@@ -133,7 +133,16 @@
       "Read(//c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/**)",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-keywords.php)",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l admin/views/keywords.php)",
-      "Bash(node --check admin/assets/js/admin.js)"
+      "Bash(node --check admin/assets/js/admin.js)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && ls includes/ | grep -i agent; ls admin/views/ | grep -i agent; echo \"---core---\"; grep -n \"agents\\\\|Agents\" includes/class-vmsb-core.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rn \"class VMSB_Commander\\\\|class VMSB_AIPuffer\" includes/ | head; echo \"---logger channels---\"; grep -rohE \"log->\\(info|warn|error\\)\\\\\\( '[a-z_]+'\" includes/*.php | sed -E \"s/.*'\\([a-z_]+\\)'.*/\\\\1/\" | sort -u)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"vmsb_tasks\" vm-seo-brain.php | head -20; echo \"---rest tasks routes---\"; grep -n \"'tasks\\\\|tasks_\" includes/class-vmsb-rest.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rln \"vmsb_tasks\" --include=*.php . ; echo \"---\"; grep -rn \"CREATE TABLE.*tasks\\\\|dbDelta\" includes/class-vmsb-install.php 2>/dev/null | head -30; find . -iname \"*install*\")",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function recent\\\\|function info\\\\|function warn\\\\|function error\" includes/class-vmsb-logger.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"Popup Chat Handler\" -A 40 admin/assets/js/admin.js | head -60)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"vmsb-tag-gold\\\\|vmsb-tag-blue\\\\|vmsb-tag-good\\\\|vmsb-tag-crit\\\\|vmsb-tag-muted\\\\|vmsb-tag-purple\" admin/assets/css/admin.css | head -20)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"^\\\\.vmsb-tag {\" -A 6 admin/assets/css/admin.css)",
+      "mcp__claude-in-chrome__read_console_messages"
     ]
   }
 }

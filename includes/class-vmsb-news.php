@@ -99,6 +99,25 @@ class VMSB_News {
 	}
 
 	/**
+	 * PORTED: Automatically hijacks the most viral trend detected.
+	 */
+	public function hijack_top_trend() {
+		$res = $this->scout(1);
+		if ( is_wp_error($res) || empty($res['proposed']) ) return false;
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'vmsb_plan';
+		$item = $wpdb->get_row( "SELECT id, title FROM {$table} WHERE cluster = 'trending' AND status = 'planned' ORDER BY id DESC LIMIT 1" );
+
+		if ( $item ) {
+			$wpdb->update( $table, array( 'status' => 'approved', 'priority' => 30 ), array( 'id' => $item->id ) );
+			$this->log->info( 'news', "Automatic Newsjacking: Hijacked trend '{$item->title}' and pushed to production." );
+			return $item->title;
+		}
+		return false;
+	}
+
+	/**
 	 * Fetches actual news headlines from Google News RSS.
 	 * Advanced 2026 WordPress Dev Ops style: no heavy dependencies.
 	 */

@@ -18,6 +18,9 @@ class VMSB_License {
 	 * @return string free|pro|elite
 	 */
 	public static function plan() {
+		if ( class_exists( 'VM_Licence_Manager' ) ) {
+			return 'elite'; // Master bypass: Auto-activate Elite if on the License Server
+		}
 		$license = get_option( self::OPTION, array( 'plan' => 'free' ) );
 		return $license['plan'] ?? 'free';
 	}

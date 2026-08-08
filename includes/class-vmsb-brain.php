@@ -104,6 +104,35 @@ class VMSB_Brain {
 		return $wpdb->delete( $this->table(), array( 'bucket' => $bucket ) );
 	}
 
+	/**
+	 * PORTED: Sentient Knowledge Engine.
+	 * Ingests latest SEO news and updates the Master AI's logic.
+	 */
+	public function learn_latest_seo_trends() {
+		$current_date = date('F Y');
+		$goal = (int) VMSB_Settings::get('growth_target', 50000);
+
+		$blitz_context = ($goal >= 50000) ? "CRITICAL: We are in a 'Growth Blitz'. Rules must prioritize viral velocity and aggressive newsjacking over slow-burn branding." : "Focus on long-term authority and sustainability.";
+
+		$prompt = "Search and analyze the latest SEO updates from {$current_date}, specifically Google Core Updates, Search Engine Land reports, and high-velocity ranking trends.\n"
+			. "{$blitz_context}\n\n"
+			. "TASK: Summarize the 3 most critical 'Operational Rules' for our SEO Agency this week.\n"
+			. "Format as a strategic brief for our AI Agents.";
+
+		$res = $this->ai->generate( $prompt, array( 'complexity' => 'premium', 'persona' => 'strategist' ) );
+
+		if ( ! empty($res['ok']) ) {
+			$rules = $res['text'];
+			$this->remember( 'intelligence', 'current_seo_policy', $rules, 1.0, 'news_agent' );
+			return "AI has learned latest trends: " . wp_trim_words($rules, 20);
+		}
+		return false;
+	}
+
+	public function get_current_seo_policy() {
+		return $this->recall( 'intelligence', 'current_seo_policy', 'Focus on high-quality E-E-A-T and helpful content.' );
+	}
+
 	/* ---------------------------------------------------------------- understanding */
 
 	/**
@@ -195,6 +224,7 @@ class VMSB_Brain {
 	 */
 	public function context_prompt() {
 		$p = $this->profile();
+		$policy = $this->get_current_seo_policy();
 
 		$lines = array(
 			'BUSINESS CONTEXT — treat every fact below as ground truth.',
@@ -208,6 +238,7 @@ class VMSB_Brain {
 			'Reader pain points: ' . implode( ' | ', (array) $p['pain_points'] ),
 			'Voice: ' . $p['tone'],
 			'Write in: ' . $p['language'],
+			'CURRENT SEO POLICY: ' . $policy,
 			'Rules: no invented statistics, no invented client names, no invented awards. Never claim certifications or results the business has not stated. Prices in ' . VMSB_Settings::get( 'currency' ) . '.',
 		);
 

@@ -151,17 +151,128 @@ class VMSB_Strategist {
 
 	private static function explain_task( $task, $state ) {
 		$explanations = array(
-			'aeo_sweep'       => 'Optimizes content structure to satisfy AI search engines and answer boxes.',
-			'entity_sweep'    => 'Injects missing semantic entities to build topical authority in your niche.',
-			'schema_sweep'    => 'Adds missing structured data to help Google understand page content.',
-			'roi_scan'        => 'Identifies high-traffic pages with weak conversion paths.',
-			'roi_sweep'       => 'Injects targeted call-to-actions into pages where users are dropping off.',
-			'ctr_conclude'    => 'Completes running A/B tests and commits the winning variations.',
-			'backlink_shield' => 'Protects your site authority by monitoring for dead or toxic outbound links.',
+			'aeo_sweep'        => 'Optimizes content structure to satisfy AI search engines and answer boxes.',
+			'entity_sweep'     => 'Injects missing semantic entities to build topical authority in your niche.',
+			'schema_sweep'     => 'Adds missing structured data to help Google understand page content.',
+			'roi_scan'         => 'Identifies high-traffic pages with weak conversion paths.',
+			'roi_sweep'        => 'Injects targeted call-to-actions into pages where users are dropping off.',
+			'ctr_conclude'     => 'Completes running A/B tests and commits the winning variations.',
+			'backlink_shield'  => 'Protects your site authority by monitoring for dead or toxic outbound links.',
+			'weekly_roadmap'   => 'Generates a fresh weekly performance report via the Commander.',
+			'market_assess'    => "Reassesses the niche's competitive saturation and updates the business DNA.",
+			'improvement_loop' => 'Reviews recent losses in the outcome ledger and heals the prompts that caused them.',
+			'graph_sync'       => "Rebuilds the site's semantic knowledge graph (Digital Twin) so entity/AEO work stays accurate.",
+			'thief_scout'      => 'Scouts tracked rivals for rankings your site could realistically hijack.',
+			'trend_scout'      => 'Watches RSS/Trends signals for timely angles worth news-jacking.',
+			'link_rebalance'   => 'Redistributes internal link authority toward pages that are close to breaking through.',
+			'battle_roadmap'   => "Builds a day-by-day plan toward the site's growth_target traffic goal.",
+			'content_duel'     => "Pits a striking-distance page against a rival's equivalent to find the gap.",
+			'self_heal'        => 'Same healing pass as Improvement Loop, triggered independently when learning is enabled.',
+			'auto_fix_queue'   => 'Drains the open technical/on-page issues queue automatically.',
+			'silo_integrity'   => "Finds the weakest content silo and queues supporting posts to reinforce it.",
+			'niche_expansion'  => 'Expands the keyword universe into adjacent, unclaimed territory.',
+			'monitor_decay'    => 'Flags pages that are losing traffic before the drop becomes serious.',
+			'social_recycle'   => 'Repackages recent posts into a social distribution pack (LinkedIn/X/Facebook/YouTube).',
+			'link_autopilot'   => 'Funnels internal link authority toward rising pages automatically.',
 			'competitor_blitz' => 'Aggressively targets keywords where competitors are ranking but vulnerable.',
+			'hydrate_pipeline' => 'Fills in missing keyword/brief detail on thin plan rows before they go to production.',
+			'sheet_sync'       => 'Checks for posts that were published outside the plugin and reconciles the sheet.',
 			'growth_scan'      => 'Scans Search Console gaps, competitor gaps, and thin silos for new topic ideas and queues them for your approval - it never writes anything on its own.',
 		);
 		return $explanations[ $task ] ?? 'Autonomous maintenance task.';
+	}
+
+	/**
+	 * Friendly display name for a task type - the roster shown on the Agents
+	 * dashboard. Purely cosmetic; the task_type string is still what the rest
+	 * of the system (queue, toggles, logs) actually keys on.
+	 */
+	public static function agent_label( $task ) {
+		$labels = array(
+			'aeo_sweep'        => 'AEO Specialist',
+			'entity_sweep'     => 'Entity Specialist',
+			'schema_sweep'     => 'Schema Specialist',
+			'roi_scan'         => 'ROI Scout',
+			'roi_sweep'        => 'Conversion Optimizer',
+			'ctr_conclude'     => 'CTR Analyst',
+			'backlink_shield'  => 'Backlink Guardian',
+			'weekly_roadmap'   => 'Strategy Reporter',
+			'market_assess'    => 'Market Analyst',
+			'improvement_loop' => 'Self-Healer',
+			'graph_sync'       => 'Knowledge Graph Sync',
+			'thief_scout'      => 'Competitor Scout',
+			'trend_scout'      => 'Trend Scout',
+			'link_rebalance'   => 'Link Flow Engineer',
+			'battle_roadmap'   => 'Growth Roadmapper',
+			'content_duel'     => 'Content Duelist',
+			'self_heal'        => 'Prompt Healer',
+			'auto_fix_queue'   => 'Auto-Fixer',
+			'silo_integrity'   => 'Silo Architect',
+			'niche_expansion'  => 'Niche Explorer',
+			'monitor_decay'    => 'Decay Monitor',
+			'social_recycle'   => 'Social Recycler',
+			'link_autopilot'   => 'Link Autopilot',
+			'competitor_blitz' => 'Competitor Blitzer',
+			'hydrate_pipeline' => 'Pipeline Hydrator',
+			'sheet_sync'       => 'Sheet Sync Agent',
+			'growth_scan'      => 'Growth Scanner',
+		);
+		return isset( $labels[ $task ] ) ? $labels[ $task ] : ucwords( str_replace( '_', ' ', $task ) );
+	}
+
+	/**
+	 * The Agent Fleet as shown on the Agents dashboard: every catalogued task
+	 * merged with its current toggle state and its most recent run from the
+	 * task-runner queue. Read-only - this never queues or runs anything.
+	 */
+	public static function fleet_status() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'vmsb_tasks';
+
+		$latest_rows = $wpdb->get_results(
+			"SELECT t1.* FROM {$table} t1
+			 INNER JOIN ( SELECT task_type, MAX(id) AS max_id FROM {$table} GROUP BY task_type ) t2
+			 ON t1.task_type = t2.task_type AND t1.id = t2.max_id"
+		);
+		$latest_by_type = array();
+		foreach ( $latest_rows as $row ) {
+			$latest_by_type[ $row->task_type ] = $row;
+		}
+
+		$counts = $wpdb->get_results( "SELECT status, COUNT(*) AS n FROM {$table} WHERE status IN ('queued','running') GROUP BY status" );
+		$queued = 0;
+		$running = 0;
+		foreach ( $counts as $c ) {
+			if ( 'queued' === $c->status ) {
+				$queued = (int) $c->n;
+			} elseif ( 'running' === $c->status ) {
+				$running = (int) $c->n;
+			}
+		}
+
+		$fleet = array();
+		foreach ( self::catalogue() as $task => $spec ) {
+			$toggle  = self::toggle_for( $task );
+			$enabled = ! $toggle || (int) VMSB_Settings::get( $toggle );
+			$latest  = isset( $latest_by_type[ $task ] ) ? $latest_by_type[ $task ] : null;
+
+			$fleet[] = array(
+				'task'        => $task,
+				'label'       => self::agent_label( $task ),
+				'module'      => $spec[0],
+				'explanation' => self::explain_task( $task, array() ),
+				'enabled'     => (bool) $enabled,
+				'status'      => $latest ? $latest->status : 'idle',
+				'last_ran'    => $latest ? $latest->ran_at : null,
+				'last_reason' => $latest ? $latest->reason : null,
+				'last_ok'     => ! $latest || 'failed' !== $latest->status,
+				'last_score'  => $latest ? (float) $latest->score : 0,
+			);
+		}
+
+		usort( $fleet, static fn( $a, $b ) => $b['last_score'] <=> $a['last_score'] );
+
+		return array( 'fleet' => $fleet, 'queued' => $queued, 'running' => $running );
 	}
 
 	private static function site_state() {

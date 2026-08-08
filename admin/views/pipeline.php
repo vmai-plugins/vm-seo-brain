@@ -211,6 +211,25 @@ $rising_trends = $trends_engine->get_rising_signals(8);
 						</div>
 					</div>
 				</div>
+
+				<!-- QUANTUM MODES (PRO PORT) -->
+				<div class="vmsb-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
+					<div class="vmsb-card" style="border-top: 4px solid var(--crit);">
+						<h3 style="margin:0 0 10px;">Quantum Heist</h3>
+						<p class="vmsb-note" style="margin-bottom:15px;">Steal high-value rankings from top competitors.</p>
+						<button class="vmsb-btn vmsb-btn-gold vmsb-btn-sm" data-vmsb="quantum-heist">Run Heist</button>
+					</div>
+					<div class="vmsb-card" style="border-top: 4px solid var(--accent-purple);">
+						<h3 style="margin:0 0 10px;">Vulture Strike</h3>
+						<p class="vmsb-note" style="margin-bottom:15px;">Target competitor rankings that are currently dropping.</p>
+						<button class="vmsb-btn vmsb-btn-gold vmsb-btn-sm" data-vmsb="vulture-strike" data-confirm="Vulture Strike will scan for competitor ranking decay and queue takedowns. Continue?">Run Strike</button>
+					</div>
+					<div class="vmsb-card" style="border-top: 4px solid var(--accent-blue);">
+						<h3 style="margin:0 0 10px;">Quantum Blast</h3>
+						<p class="vmsb-note" style="margin-bottom:15px;">Launch massive programmatic clusters.</p>
+						<button class="vmsb-btn vmsb-btn-gold vmsb-btn-sm" data-vmsb="quantum-blast">Run Blast</button>
+					</div>
+				</div>
 			</section>
 
 			<aside>

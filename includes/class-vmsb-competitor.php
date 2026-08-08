@@ -96,6 +96,173 @@ class VMSB_Competitor {
 		return $added;
 	}
 
+	/**
+	 * PORTED: Strategic "Quantum Heist" (Mass Ranking Takeover).
+	 * Steals high-value rankings from top competitors in a single cycle.
+	 */
+	public function run_quantum_heist() {
+		$competitors = $this->list_all();
+		if ( empty($competitors) ) {
+			$this->seed_from_profile();
+			$competitors = $this->list_all();
+		}
+
+		$total_stolen = 0;
+		$brain = new VMSB_Brain();
+
+		foreach ( array_slice($competitors, 0, 3) as $c ) {
+			$comp_domain = $c->domain;
+
+			// 1. Identify their "Cash Cow" keywords
+			$cash_cows = array();
+			if ( class_exists( 'VMSB_External_Data' ) && VMSB_External_Data::semrush_configured() ) {
+				$gap_data = VMSB_External_Data::semrush_keyword_gap( wp_parse_url(home_url(), PHP_URL_HOST), $comp_domain );
+				if ( ! is_wp_error($gap_data) ) $cash_cows = $gap_data;
+			}
+
+			if ( empty($cash_cows) ) {
+				// Fallback: Ask AI to identify their likely top 5 queries
+				$prompt = "Identify the top 5 high-volume search queries that the domain '{$comp_domain}' likely ranks #1-3 for in the niche: '{$brain->get_current_seo_policy()}'.\n"
+					. 'Return JSON: {"keywords":[""]}';
+				$res = $this->ai->generate_json( $prompt, array( 'max_tokens' => 200 ) );
+				$cash_cows = array_map( fn($kw) => array('Ph' => $kw), (array) ($res['keywords'] ?? array()) );
+			}
+
+			// 2. Plan and Queue Takedowns
+			foreach ( array_slice( $cash_cows, 0, 3 ) as $kw_row ) {
+				$keyword = $kw_row['Ph'] ?? $kw_row['Phrase'] ?? $kw_row['Keyword'] ?? '';
+				if ( ! $keyword ) continue;
+
+				$strategy = $this->plan_takedown( $keyword, $comp_domain );
+				if ( $strategy ) {
+					( new VMSB_Content() )->plan_specific(
+						$strategy['title'],
+						$keyword,
+						"TAKEOVER STRATEGY: Outranking {$comp_domain}. Angle: " . ($strategy['angle'] ?? ''),
+						'competitor_heist',
+						0,
+						'approved'
+					);
+					$total_stolen++;
+				}
+			}
+		}
+
+		$this->log->info( 'competitor', "Quantum Heist complete. Identified and queued {$total_stolen} high-value takedown articles." );
+		return $total_stolen;
+	}
+
+	private function plan_takedown( $keyword, $competitor ) {
+		$prompt = "Act as a Content Domination Expert. We want to steal the #1 ranking from '{$competitor}' for the keyword: '{$keyword}'.\n\n"
+			. "TASK: Design a 10x content piece that makes their coverage look obsolete.\n"
+			. "Identify the specific gap (e.g., they lack data, their images are old, they don't answer X).\n"
+			. 'Return JSON: {"title": "", "angle": ""}';
+
+		return $this->ai->generate_json( $prompt, array( 'complexity' => 'premium', 'persona' => 'thief' ) );
+	}
+
+	/**
+	 * PORTED: Targeted URL Heist.
+	 * Analyzes a specific competitor URL and plans a superior "Kill-Shot" article.
+	 */
+	public function execute_targeted_heist( $competitor_url ) {
+		if ( false !== strpos($competitor_url, wp_parse_url(home_url(), PHP_URL_HOST)) ) return false;
+
+		$this->log->info( 'competitor', "Initiating targeted heist on URL: {$competitor_url}" );
+
+		$prompt = "Analyze this competitor URL (conceptual analysis): {$competitor_url}\n\n"
+			. "TASK: Plan a superior article for our site that will outrank this specific page.\n"
+			. "1. Identify the 'Authority Gap' (What did they miss?).\n"
+			. "2. Create a 'Kill-Shot' Title (Better CTR).\n"
+			. "3. Identify the primary SEO keyword they are likely ranking for.\n\n"
+			. 'Return JSON: {"target_keyword": "", "new_title": "", "strategy": ""}';
+
+		$plan = $this->ai->generate_json( $prompt, array( 'complexity' => 'premium', 'persona' => 'thief' ) );
+
+		if ( ! empty($plan['target_keyword']) ) {
+			return ( new VMSB_Content() )->plan_specific(
+				$plan['new_title'],
+				$plan['target_keyword'],
+				"TARGETED HEIST: Outranking specific competitor page. Strategy: " . ($plan['strategy'] ?? ''),
+				'targeted_heist',
+				0,
+				'approved'
+			);
+		}
+
+		return false;
+	}
+
+	/**
+	 * PORTED: Traffic Siphon Mode (Competitor Vulture).
+	 * Identifies keywords where competitors are dropping and we have an opportunity to strike.
+	 */
+	public function run_siphon_scan() {
+		if ( ! class_exists( 'VMSB_External_Data' ) || ! VMSB_External_Data::semrush_configured() ) {
+			return new WP_Error( 'vmsb_vulture', 'SEMrush API not configured for Siphon scan.' );
+		}
+
+		$competitors = $this->list_all();
+		if ( empty($competitors) ) return 0;
+
+		$history = get_option('vmsb_competitor_rank_snapshots', array());
+		$total_strikes = 0;
+
+		foreach ( array_slice($competitors, 0, 3) as $c ) {
+			$domain = $c->domain;
+			$this->log->info( 'competitor', "Vulture Agent scanning {$domain} for ranking decay..." );
+
+			$current_kws = VMSB_External_Data::semrush_organic_keywords( $domain, 'us', 50 );
+			if ( is_wp_error($current_kws) || empty($current_kws) ) continue;
+
+			$prev_snapshot = $history[$domain] ?? array();
+			$vulture_targets = array();
+
+			foreach ( $current_kws as $row ) {
+				$kw = strtolower($row['Ph'] ?? '');
+				$pos = (int)($row['Po'] ?? 0);
+				if ( ! $kw || $pos === 0 ) continue;
+
+				if ( isset($prev_snapshot[$kw]) ) {
+					$prev_pos = (int)$prev_snapshot[$kw];
+					$drop_dist = $pos - $prev_pos;
+
+					// DETECT DROP: If they were in top 3 and now > 5, or if they dropped 4+ spots
+					if ( ($prev_pos <= 3 && $pos > 5) || $drop_dist >= 4 ) {
+						$vulture_targets[] = array(
+							'keyword' => $kw,
+							'pos' => $pos,
+							'prev_pos' => $prev_pos
+						);
+					}
+				}
+				$prev_snapshot[$kw] = $pos;
+			}
+
+			$history[$domain] = $prev_snapshot;
+
+			// Initialize strikes for detected drops
+			foreach ( array_slice($vulture_targets, 0, 3) as $target ) {
+				$strategy = $this->plan_takedown( $target['keyword'], $domain );
+				if ( $strategy ) {
+					( new VMSB_Content() )->plan_specific(
+						$strategy['title'],
+						$target['keyword'],
+						"VULTURE STRIKE: Competitor {$domain} dropped from #{$target['prev_pos']} to #{$target['pos']}. Strike now while they are weak. Strategy: " . ($strategy['angle'] ?? ''),
+						'vulture_strike',
+						0,
+						'approved'
+					);
+					$total_strikes++;
+				}
+			}
+		}
+
+		update_option('vmsb_competitor_rank_snapshots', $history);
+		$this->log->info( 'competitor', "Vulture Strike complete. Launched {$total_strikes} predatory takeovers." );
+		return $total_strikes;
+	}
+
 	/* ---------------------------------------------------------------- shared-query overlap */
 
 	/**

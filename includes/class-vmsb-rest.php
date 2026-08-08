@@ -38,6 +38,8 @@ class VMSB_REST {
 			'growth-scan'              => 'growth_scan',
 			'growth-suggestion-approve'=> 'growth_suggestion_approve',
 			'growth-suggestion-reject' => 'growth_suggestion_reject',
+			'agents-status'            => 'agents_status',
+			'agents-run-strategist'    => 'agents_run_strategist',
 			'improve-post'         => 'improve_post',
 			'keyword-dismiss'      => 'keyword_dismiss',
 			'keyword-merge-cluster'=> 'keyword_merge_cluster',
@@ -97,6 +99,9 @@ class VMSB_REST {
 			'social-generate'     => 'social_generate',
 			'strategist-preview'  => 'strategist_preview',
 			'tasks-process'       => 'tasks_process',
+			'quantum-heist'       => 'quantum_heist',
+			'quantum-blast'       => 'quantum_blast',
+			'vulture-strike'      => 'vulture_strike',
 			'license-verify'      => 'license_verify',
 			'command'             => 'command',
 			'aipuffer-bots'       => 'aipuffer_bots',
@@ -268,6 +273,15 @@ class VMSB_REST {
 
 	public function keyword_suggest_merges( $request ) {
 		return rest_ensure_response( array( 'suggestions' => ( new VMSB_Keywords() )->suggest_cluster_merges() ) );
+	}
+
+	public function agents_status( $request ) {
+		return rest_ensure_response( VMSB_Strategist::fleet_status() );
+	}
+
+	public function agents_run_strategist( $request ) {
+		$plan = VMSB_Strategist::plan_and_queue( 6 );
+		return rest_ensure_response( array( 'queued' => count( $plan ), 'plan' => $plan ) );
 	}
 
 	public function growth_scan( $request ) {
@@ -740,6 +754,22 @@ class VMSB_REST {
 			return rest_ensure_response( array( 'error' => 'Task runner unavailable.' ) );
 		}
 		return rest_ensure_response( VMSB_Task_Runner::process( (int) $request->get_param( 'limit' ) ?: 3 ) );
+	}
+
+	public function quantum_heist( $request ) {
+		$res = ( new VMSB_Competitor() )->run_quantum_heist();
+		return rest_ensure_response( array( 'stolen' => $res ) );
+	}
+
+	public function quantum_blast( $request ) {
+		$res = ( new VMSB_Programmatic() )->run_quantum_blast();
+		return rest_ensure_response( array( 'queued' => $res ) );
+	}
+
+	public function vulture_strike( $request ) {
+		$res = ( new VMSB_Competitor() )->run_siphon_scan();
+		if ( is_wp_error($res) ) return $res;
+		return rest_ensure_response( array( 'strikes' => $res ) );
 	}
 
 	public function license_verify( $request ) {

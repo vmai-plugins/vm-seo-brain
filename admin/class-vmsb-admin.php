@@ -371,6 +371,7 @@ class VMSB_Admin {
 			'vmsb-taxonomy'   => 'Taxonomy',
 			'vmsb-pipeline'   => 'Pipeline',
 			'vmsb-growth'     => 'Growth Plan',
+			'vmsb-agents'     => 'Agents',
 			'vmsb-memory'     => 'Memory',
 			'vmsb-competitive'=> 'Competitive',
 			'vmsb-learning'   => 'Learning',

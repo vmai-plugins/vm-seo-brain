@@ -928,6 +928,44 @@ class VMSB_Content {
 		return array( 'post_id' => $post_id, 'rejected' => true );
 	}
 
+	/**
+	 * PORTED: Data-Driven Content Rescue.
+	 * Rewrites an underperforming post using real search data to hit Page 1.
+	 */
+	public function rescue_post( $post_id, array $real_queries ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) return false;
+
+		$query_list = implode( ', ', $real_queries );
+		$prompt = "Act as a Content Rescue Strategist. This article is ranking on Page 2+ and we want to push it to Top 3.\n"
+			. "REAL SEARCH DATA: Users are finding this page via these queries: [{$query_list}].\n\n"
+			. "TASK: Rewrite the article to better satisfy the intent of these SPECIFIC queries.\n"
+			. "1. Improve the depth and add missing entities.\n"
+			. "2. Ensure the content is 10x better than current Top 3 results.\n"
+			. "3. Maintain the same title and URLs.\n\n"
+			. "Return FULL HTML with Gutenberg blocks.";
+
+		$data = $this->ai->generate( $prompt, array( 'complexity' => 'premium', 'persona' => 'creative' ) );
+		if ( empty($data['ok']) ) return false;
+
+		$new_content = $data['text'];
+		wp_update_post( array(
+			'ID'           => $post_id,
+			'post_content' => wp_kses_post( $new_content ),
+			'post_modified' => current_time( 'mysql' ),
+			'post_modified_gmt' => current_time( 'mysql', 1 )
+		) );
+
+		update_post_meta( $post_id, '_vmsb_rescue_performed', current_time( 'mysql' ) );
+
+		// Force instant re-indexing
+		if ( class_exists('VMSB_Indexing') ) {
+			( new VMSB_Indexing() )->submit($post_id);
+		}
+
+		return true;
+	}
+
 	/* ---------------------------------------------------------------- helpers */
 
 	/**

@@ -122,6 +122,9 @@
 		if ( route === 'ctr-start' )     { return 'Test started: "' + data.variant + '" for ' + data.concludes_in_days + ' days.'; }
 		if ( route === 'ctr-conclude' )  { return data.concluded + ' experiments concluded.'; }
 		if ( route === 'news-scout' )    { return data.proposed + ' timely angles proposed - verify before writing.'; }
+		if ( route === 'quantum-heist' ) { return data.stolen + ' takedown articles queued to steal competitor rankings.'; }
+		if ( route === 'vulture-strike' ) { return data.strikes + ' predatory takeovers launched against decaying competitor rankings.'; }
+		if ( route === 'quantum-blast' ) { return data.queued + ' programmatic pages launched across 3 strategic niches.'; }
 		if ( route === 'battle-roadmap' ) { return 'Battle Roadmap Generated. View it in the Roadmap tab.'; }
 		if ( route === 'growth-scan' ) { return data.found + ' new suggestion(s) queued for review.'; }
 		if ( route === 'growth-suggestion-approve' ) { return data.approved ? 'Approved — moved into the production pipeline.' : 'Could not approve (already actioned?).'; }
@@ -147,6 +150,10 @@
 			return data.plan.map( p => p.task + '  (score ' + p.score + ') — ' + p.reason ).join( '\n' );
 		}
 		if ( route === 'tasks-process' ) { return data.ran + ' task(s) run: ' + Object.keys( data.results || {} ).join( ', ' ); }
+		if ( route === 'agents-run-strategist' ) {
+			if ( ! data.queued ) { return 'Nothing to queue right now — every eligible agent scored zero impact.'; }
+			return data.queued + ' agent(s) queued: ' + data.plan.map( p => p.task ).join( ', ' ) + '. They\'ll run on the next queue drain, or click "Process Queue Now".';
+		}
 		if ( route === 'test-provider' ) { return data.ok ? 'Success: ' + data.message : 'Failed: ' + data.message; }
 		if ( route === 'webhook-test' ) { return ( data.ok ? 'Success: ' : 'Failed: ' ) + data.message; }
 		if ( route === 'health-reset' ) { return 'Circuit breakers reset.'; }
@@ -159,7 +166,7 @@
 	}
 
 	function reloadIfNeeded( route ) {
-		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert', 'license-verify', 'cluster-architect', 'battle-roadmap', 'growth-scan', 'growth-suggestion-approve', 'growth-suggestion-reject' ];
+		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert', 'license-verify', 'cluster-architect', 'battle-roadmap', 'growth-scan', 'growth-suggestion-approve', 'growth-suggestion-reject', 'agents-run-strategist' ];
 		if ( routes.indexOf( route ) !== -1 ) {
 			const msg = ( route === 'import-topics' || route === 'pull-bulk-topics' ) ? '&vmsb_msg=import_done' : ( route === 'license-verify' ? '&vmsb_msg=license_active' : '' );
 			setTimeout( () => {

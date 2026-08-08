@@ -22,6 +22,60 @@ class VMSB_Outcome_Ledger {
 		return $wpdb->prefix . 'vmsb_outcomes';
 	}
 
+	/**
+	 * PORTED: ROI Value Calculation.
+	 * Estimates the dollar value of the current organic traffic blitz.
+	 */
+	public static function calculate_blitz_value() {
+		$counts = self::counts();
+		$net_clicks = (int) $counts['net_clicks'];
+
+		// Benchmark: $1.85 per click (Average CPC)
+		$avg_cpc = 1.85;
+
+		return array(
+			'net_clicks' => $net_clicks,
+			'cpc_avg'    => $avg_cpc,
+			'estimated_value' => round($net_clicks * $avg_cpc, 2)
+		);
+	}
+
+	/**
+	 * PORTED: Monitors Indexing Persistence.
+	 * Checks if new posts are actually appearing in Google.
+	 */
+	public static function run_indexing_audit($limit = 5) {
+		global $wpdb;
+		$google = new VMSB_Google();
+		if ( ! $google->is_connected() ) return array();
+
+		$fourteen_days_ago = date( 'Y-m-d H:i:s', strtotime( '-14 days' ) );
+		$post_ids = $wpdb->get_col( $wpdb->prepare(
+			"SELECT ID FROM $wpdb->posts
+			 WHERE post_date < %s AND post_status = 'publish' AND post_type = 'post'
+			 AND ID NOT IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = '_vmsb_indexed_confirmed')
+			 LIMIT %d",
+			$fourteen_days_ago, $limit
+		) );
+
+		$logs = array();
+		foreach ( $post_ids as $pid ) {
+			$url = get_permalink($pid);
+			$m = $google->gsc_page_metrics($url, 30);
+
+			if ( ! is_wp_error($m) && $m['available'] && $m['impressions'] > 0 ) {
+				update_post_meta( $pid, '_vmsb_indexed_confirmed', current_time('mysql') );
+			} else {
+				// No impressions after 14 days. Triage required.
+				$logs[] = "Indexing Audit: Post '{$url}' is invisible after 14 days. Re-requesting indexing.";
+				if ( class_exists('VMSB_Indexing') ) {
+					( new VMSB_Indexing() )->submit($pid);
+				}
+			}
+		}
+		return $logs;
+	}
+
 	/* ---------------------------------------------------------------- recording */
 
 	public static function record( array $args ) {
