@@ -142,7 +142,13 @@
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"Popup Chat Handler\" -A 40 admin/assets/js/admin.js | head -60)",
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"vmsb-tag-gold\\\\|vmsb-tag-blue\\\\|vmsb-tag-good\\\\|vmsb-tag-crit\\\\|vmsb-tag-muted\\\\|vmsb-tag-purple\" admin/assets/css/admin.css | head -20)",
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"^\\\\.vmsb-tag {\" -A 6 admin/assets/css/admin.css)",
-      "mcp__claude-in-chrome__read_console_messages"
+      "mcp__claude-in-chrome__read_console_messages",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function scan\\(\\\\|function god_fix\\(\\\\|function god_fix_90\\(\\\\|function dismiss\\(\\\\|function revert\\(\\\\|function bulk_issue_action\\(\" includes/class-vmsb-rest.php -A 8)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function insert_internal_link\" -A 45 includes/class-vmsb-silo.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rn \"orphan_from_pillar\\\\|'pillar_id'\" --include=*.php .)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function apply\\\\|function revert\\\\|function get_local_metrics\" -A 3 includes/class-vmsb-rankmath.php | head -60)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"private function scan_index_coverage\" -A 45 includes/class-vmsb-fixer.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rn \"fixer->record\\(\\\\|\\\\$this->record\\(\" --include=*.php . | grep -v \"class-vmsb-fixer.php\")"
     ]
   }
 }

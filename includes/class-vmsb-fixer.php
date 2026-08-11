@@ -31,7 +31,7 @@ class VMSB_Fixer {
 
 	/* ---------------------------------------------------------------- ledger */
 
-	public function record( $object_type, $object_id, $rule, $severity, $detail, $suggested = array() ) {
+	public function record( $object_type, $object_id, $rule, $severity, $detail, $suggested = array(), $metrics = null ) {
 		global $wpdb;
 
 		$exists = $wpdb->get_var(
@@ -46,7 +46,7 @@ class VMSB_Fixer {
 			return (int) $exists;
 		}
 
-		$impact     = $this->calculate_impact( $rule, $severity, $object_id );
+		$impact     = $this->calculate_impact( $rule, $severity, $object_id, $metrics );
 		$confidence = VMSB_Outcome_Ledger::weight_for( $this->module_for_rule( $rule ) );
 
 		$wpdb->insert(
@@ -67,15 +67,23 @@ class VMSB_Fixer {
 		return (int) $wpdb->insert_id;
 	}
 
-	private function calculate_impact( $rule, $severity, $object_id ) {
+	/**
+	 * $metrics lets a caller that already pulled GSC data for this object in
+	 * the same pass (scan_posts(), scan_index_coverage()) hand it over
+	 * instead of triggering another live Search Console API call here - a
+	 * post with five flagged issues used to mean five extra round-trips for
+	 * data already fetched once, which is most of why a full scan burns its
+	 * time budget auditing so few posts and can eat into GSC's daily quota.
+	 */
+	private function calculate_impact( $rule, $severity, $object_id, $metrics = null ) {
 		$base = array( 'critical' => 80, 'high' => 50, 'medium' => 25, 'low' => 10 )[ $severity ] ?? 20;
 
 		// Boost impact for high-traffic pages
-		if ( $object_id ) {
+		if ( null === $metrics && $object_id ) {
 			$metrics = ( new VMSB_Google() )->gsc_page_metrics( get_permalink( $object_id ), 14 );
-			if ( ! is_wp_error( $metrics ) && $metrics['impressions'] > 500 ) {
-				$base *= 1.5;
-			}
+		}
+		if ( $metrics && ! is_wp_error( $metrics ) && ( $metrics['impressions'] ?? 0 ) > 500 ) {
+			$base *= 1.5;
 		}
 
 		return round( $base, 1 );
@@ -282,12 +290,14 @@ class VMSB_Fixer {
 		$n = 0;
 		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
 		$start_time = time();
+		$google     = new VMSB_Google();
+		$gsc_ready  = $google->is_connected();
 
 		foreach ( (array) $posts as $post ) {
 			// Anti-timeout safety, same guard god_fix() already uses: this loop
-			// makes a live GSC API call per post (zombie-content check below),
-			// so a full scan(200) with Search Console connected can run past a
-			// typical shared-host execution limit with nothing to show for it.
+			// makes one live GSC API call per post below, so a full scan(200)
+			// with Search Console connected can run past a typical shared-host
+			// execution limit with nothing to show for it.
 			if ( time() - $start_time > 25 ) {
 				$this->log->warn( 'fixer', "Scan pass reached time limit after auditing {$n} issues." );
 				break;
@@ -305,9 +315,18 @@ class VMSB_Fixer {
 				continue;
 			}
 
+			// One GSC fetch per post, reused by every record() call below via
+			// $metrics instead of each one triggering its own live API call -
+			// a post with five flagged issues used to mean five redundant
+			// round-trips for data already fetched once.
+			$metrics = $gsc_ready ? $google->gsc_page_metrics( get_permalink( $post->ID ), 30 ) : null;
+			if ( is_wp_error( $metrics ) ) {
+				$metrics = null;
+			}
+
 			// Meta fixes (Title, Description, Focus Keyword)
 			foreach ( $this->rankmath->audit( $post->ID ) as $issue ) {
-				$this->record( 'post', $post->ID, $issue['rule'], $issue['severity'], $issue['detail'] );
+				$this->record( 'post', $post->ID, $issue['rule'], $issue['severity'], $issue['detail'], array(), $metrics );
 				$n++;
 			}
 
@@ -316,12 +335,12 @@ class VMSB_Fixer {
 			$words = str_word_count( $text );
 
 			if ( $words < 300 ) {
-				$this->record( 'post', $post->ID, 'thin_content', 'high', "Only {$words} words of body copy." );
+				$this->record( 'post', $post->ID, 'thin_content', 'high', "Only {$words} words of body copy.", array(), $metrics );
 				$n++;
 			}
 
 			if ( ! has_post_thumbnail( $post->ID ) ) {
-				$this->record( 'post', $post->ID, 'missing_featured_image', 'medium', 'No featured image set.' );
+				$this->record( 'post', $post->ID, 'missing_featured_image', 'medium', 'No featured image set.', array(), $metrics );
 				$n++;
 			}
 
@@ -329,7 +348,7 @@ class VMSB_Fixer {
 			if ( $words > 500 && class_exists( 'VMSB_Entity' ) ) {
 				$entities = ( new VMSB_Entity() )->get_missing_entities( $post->ID );
 				if ( ! empty( $entities ) ) {
-					$this->record( 'post', $post->ID, 'semantic_gap', 'medium', 'Missing key semantic entities: ' . implode( ', ', array_slice( $entities, 0, 5 ) ) );
+					$this->record( 'post', $post->ID, 'semantic_gap', 'medium', 'Missing key semantic entities: ' . implode( ', ', array_slice( $entities, 0, 5 ) ), array(), $metrics );
 					$n++;
 				}
 			}
@@ -339,7 +358,7 @@ class VMSB_Fixer {
 				$aeo = new VMSB_AEO();
 				$aeo_audit = $aeo->audit( $post->ID );
 				if ( ! is_wp_error( $aeo_audit ) && $aeo_audit['score'] < 75 ) {
-					$this->record( 'post', $post->ID, 'aeo_gap', 'medium', 'Low Answer Engine Optimization score. Missing direct-answer structure.' );
+					$this->record( 'post', $post->ID, 'aeo_gap', 'medium', 'Low Answer Engine Optimization score. Missing direct-answer structure.', array(), $metrics );
 					$n++;
 				}
 			}
@@ -347,20 +366,20 @@ class VMSB_Fixer {
 			// World-Class Audit: Readability & UX
 			if ( $words > 800 ) {
 				if ( ! preg_match( '/<h[23][\s>]/i', $post->post_content ) ) {
-					$this->record( 'post', $post->ID, 'poor_readability', 'medium', 'Long article with no subheadings (H2/H3). High bounce risk.' );
+					$this->record( 'post', $post->ID, 'poor_readability', 'medium', 'Long article with no subheadings (H2/H3). High bounce risk.', array(), $metrics );
 					$n++;
 				}
 			}
 
 			// Headings.
 			if ( preg_match_all( '/<h1[\s>]/i', $post->post_content, $m ) && count( $m[0] ) > 0 ) {
-				$this->record( 'post', $post->ID, 'h1_in_body', 'medium', 'An H1 inside the body competes with the page title.' );
+				$this->record( 'post', $post->ID, 'h1_in_body', 'medium', 'An H1 inside the body competes with the page title.', array(), $metrics );
 				$n++;
 			}
 
 			// Images missing alt inside content.
 			if ( preg_match_all( '/<img(?![^>]*\balt=)[^>]*>/i', $post->post_content, $m ) ) {
-				$this->record( 'post', $post->ID, 'images_missing_alt', 'medium', count( $m[0] ) . ' inline images have no alt attribute.' );
+				$this->record( 'post', $post->ID, 'images_missing_alt', 'medium', count( $m[0] ) . ' inline images have no alt attribute.', array(), $metrics );
 				$n++;
 			}
 
@@ -372,28 +391,32 @@ class VMSB_Fixer {
 			// Detect previously overwritten or broken content (Rank Math score as signal)
 			$score = $this->rankmath->get_score( $post->ID );
 			if ( $score > 0 && $score < 60 ) {
-				$this->record( 'post', $post->ID, 'low_rankmath_score', 'high', "Post has a critically low Rank Math score ({$score}/100). Needs deep optimization." );
+				$this->record( 'post', $post->ID, 'low_rankmath_score', 'high', "Post has a critically low Rank Math score ({$score}/100). Needs deep optimization.", array(), $metrics );
 				$n++;
 			}
 
 			if ( $age_days > $staleness_days && $mod_days > ( $staleness_days * 0.8 ) ) {
-				$this->record( 'post', $post->ID, 'stale_content', 'medium', sprintf( 'Untouched for %d days.', (int) $mod_days ) );
+				$this->record( 'post', $post->ID, 'stale_content', 'medium', sprintf( 'Untouched for %d days.', (int) $mod_days ), array(), $metrics );
 				$n++;
 			}
 
-			// World-Class Audit: Zombie Content Detection (2000 Post / 200 Visitor Fix)
-			$metrics = ( new VMSB_Google() )->gsc_page_metrics( get_permalink($post->ID), 30 );
-			if ( ! is_wp_error($metrics) && $metrics['available'] ) {
-				if ( $metrics['clicks'] < 5 && $metrics['impressions'] < 50 && $age_days > 180 ) {
-					$this->record(
-						'post',
-						$post->ID,
-						'zombie_content',
-						'high',
-						"This post is 'Zombie Content'. In 6 months, it has earned near-zero traffic. It is dead weight dragging down your domain authority."
-					);
-					$n++;
-				}
+			// World-Class Audit: Zombie Content Detection (2000 Post / 200 Visitor Fix).
+			// $metrics is only null when GSC isn't connected or the call failed -
+			// gsc_page_metrics() returns a real zero-value array (not an
+			// 'available' flag, which it never actually sets) when a URL simply
+			// has no rows yet, and that zero-data case is itself a valid zombie
+			// signal for a page old enough to have been indexed by now.
+			if ( $metrics && $metrics['clicks'] < 5 && $metrics['impressions'] < 50 && $age_days > 180 ) {
+				$this->record(
+					'post',
+					$post->ID,
+					'zombie_content',
+					'high',
+					"This post is 'Zombie Content'. In 6 months, it has earned near-zero traffic. It is dead weight dragging down your domain authority.",
+					array(),
+					$metrics
+				);
+				$n++;
 			}
 		}
 
@@ -422,12 +445,20 @@ class VMSB_Fixer {
 			$imp = (int) $row['impressions'];
 			$pos = (float) $row['position'];
 
+			// This row already carries the same clicks/impressions/position/ctr
+			// shape gsc_page_metrics() returns - reusing it as $metrics means
+			// record() doesn't have calculate_impact() trigger its own extra
+			// live GSC call per issue, up to three times over on a row that
+			// happens to trip low_ctr_snippet, striking_distance, and
+			// keyword_cannibalization all at once.
+			$row_metrics = array( 'clicks' => (int) ( $row['clicks'] ?? 0 ), 'impressions' => $imp, 'position' => $pos, 'ctr' => $ctr );
+
 			if ( $imp > 200 && $ctr < 0.01 ) {
-				$this->record( 'post', $post_id, 'low_ctr_snippet', 'high', sprintf( '%d impressions, %.2f%% CTR at position %.1f. The snippet is not earning the click.', $imp, $ctr * 100, $pos ), array( 'position' => $pos, 'impressions' => $imp ) );
+				$this->record( 'post', $post_id, 'low_ctr_snippet', 'high', sprintf( '%d impressions, %.2f%% CTR at position %.1f. The snippet is not earning the click.', $imp, $ctr * 100, $pos ), array( 'position' => $pos, 'impressions' => $imp ), $row_metrics );
 				$n++;
 			}
 			if ( $pos > 4 && $pos <= 20 && $imp > 50 ) {
-				$this->record( 'post', $post_id, 'striking_distance', 'high', sprintf( 'Sitting at position %.1f — close enough that one strong revision can move it.', $pos ), array( 'position' => $pos ) );
+				$this->record( 'post', $post_id, 'striking_distance', 'high', sprintf( 'Sitting at position %.1f — close enough that one strong revision can move it.', $pos ), array( 'position' => $pos ), $row_metrics );
 				$n++;
 			}
 
@@ -437,7 +468,7 @@ class VMSB_Fixer {
 				if ( ! empty( $duplicates ) ) {
 					$other = get_post( $duplicates[0]['object_id'] );
 					if ( $other ) {
-						$this->record( 'post', $post_id, 'keyword_cannibalization', 'high', sprintf( 'This page competes with "%s" for the keyword "%s". They should likely be merged.', $other->post_title, $row['keys'][0] ), array( 'duplicate_id' => $other->ID ) );
+						$this->record( 'post', $post_id, 'keyword_cannibalization', 'high', sprintf( 'This page competes with "%s" for the keyword "%s". They should likely be merged.', $other->post_title, $row['keys'][0] ), array( 'duplicate_id' => $other->ID ), $row_metrics );
 						$n++;
 					}
 				}
@@ -541,7 +572,7 @@ class VMSB_Fixer {
 			'schema'         => array( 'missing_schema' ),
 			'internal_links' => array( 'orphan_from_pillar', 'orphan_page', 'not_marked_as_pillar', 'false_pillar', 'missing_pillar' ),
 			'taxonomy'       => array( 'missing_term_description', 'empty_archive', 'thin_tag', 'zombie_tag', 'duplicate_term', 'missing_silo_category' ),
-			'content'        => array( 'thin_content', 'stale_content', 'striking_distance', 'no_h2_structure', 'low_rankmath_score' ),
+			'content'        => array( 'thin_content', 'stale_content', 'striking_distance', 'no_h2_structure', 'poor_readability', 'low_rankmath_score' ),
 			'technical'      => array( 'robots_no_sitemap', 'weak_permalinks', 'search_engines_discouraged' ),
 		);
 
@@ -560,6 +591,15 @@ class VMSB_Fixer {
 	 * structural subheadings, and engagement loops).
 	 */
 	public function god_fix_90( $post_id ) {
+		// fix_issue() gates every other automated rewrite on this same toggle,
+		// but the Issues page's "Target 90+" button calls this method directly
+		// via its own REST route - without this check here too, turning off
+		// "Auto Optimization" in Settings did nothing to stop that one button
+		// from still doing a full 1,400+ word AI rewrite of a live page.
+		if ( ! (int) VMSB_Settings::get( 'feature_maintenance', 1 ) ) {
+			return new WP_Error( 'vmsb_maintenance', 'Automated Content Optimization is currently disabled in Settings.' );
+		}
+
 		$post = get_post( $post_id );
 		if ( ! $post ) return new WP_Error( 'vmsb_fix', 'Post not found.' );
 
@@ -657,6 +697,9 @@ class VMSB_Fixer {
 
 			case 'missing_focus_keyword':
 				return $this->fix_focus_keyword( $id );
+
+			case 'accidental_noindex':
+				return $this->fix_accidental_noindex( $id );
 
 			case 'images_missing_alt':
 				return $this->fix_inline_alts( $id );
@@ -827,6 +870,30 @@ class VMSB_Fixer {
 			. "Expand the article to naturally incorporate these entities. Do not just list them; integrate them into existing or new sections to provide more depth and value to the reader.";
 
 		return ( new VMSB_Content() )->improve_post( $post_id, 'semantic_gap', $instruction );
+	}
+
+	/**
+	 * A published post was flagged critical because it was accidentally set
+	 * to noindex in Rank Math - strip just that flag, leave any other robots
+	 * directive (nofollow, noarchive, etc.) untouched.
+	 */
+	private function fix_accidental_noindex( $post_id ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return new WP_Error( 'vmsb_fix', 'Post not found.' );
+		}
+
+		$front_page_id = (int) get_option( 'page_on_front' );
+		$blog_page_id  = (int) get_option( 'page_for_posts' );
+		if ( $post_id === $front_page_id || $post_id === $blog_page_id ) {
+			return new WP_Error( 'vmsb_fix', 'Safety: Cannot change robots meta for the Home or Blog page automatically.' );
+		}
+
+		$current = get_post_meta( $post_id, 'rank_math_robots', true );
+		$robots  = is_array( $current ) ? $current : array();
+		$cleaned = array_values( array_diff( $robots, array( 'noindex' ) ) );
+
+		return $this->rankmath->apply( $post_id, array( 'robots' => $cleaned ) );
 	}
 
 	private function fix_focus_keyword( $post_id ) {
