@@ -20,7 +20,6 @@ $vmsb_rising_trends = $vmsb_trends_engine->get_rising_signals(8);
 ?>
 
 <?php if ( ! $vmsb_is_nested ) : ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Strategic Content Factory</p>
@@ -36,6 +35,7 @@ $vmsb_rising_trends = $vmsb_trends_engine->get_rising_signals(8);
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="tasks-process" data-body='{"limit":5}'>Run Production Batch</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 <?php endif; ?>
 
 <?php if ( ! $vmsb_is_nested ) : ?>
@@ -414,7 +414,6 @@ $vmsb_rising_trends = $vmsb_trends_engine->get_rising_signals(8);
 
 	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 <?php endif; ?>
 
 <script>

@@ -46,7 +46,7 @@ class VMSB_Indexing {
 
 		if ( ! is_wp_error( $res ) ) {
 			update_post_meta( $post_id, '_vmsb_indexed_at', time() );
-			( new VMSB_Logger() )->log( "Indexing API: Submitted {$url}", 'info' );
+			( new VMSB_Logger() )->info( 'indexing', "Indexing API: Submitted {$url}" );
 		}
 
 		return $res;

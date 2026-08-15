@@ -8,7 +8,6 @@ defined( 'ABSPATH' ) || exit;
  */
 
 ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Continuous Improvement</p>
@@ -73,4 +72,4 @@ defined( 'ABSPATH' ) || exit;
 	</div>
 
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
+

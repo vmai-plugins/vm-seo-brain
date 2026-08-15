@@ -217,6 +217,24 @@ class VMSB_Admin {
 			border: 1px solid rgba(255,255,255,0.04);
 			box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 		}
+		.vmsb-chat-bubble > *:first-child { margin-top: 0; }
+		.vmsb-chat-bubble > *:last-child { margin-bottom: 0; }
+		.vmsb-chat-bubble p { margin: 0 0 10px; }
+		.vmsb-chat-bubble h3, .vmsb-chat-bubble h4,
+		.vmsb-chat-bubble h5, .vmsb-chat-bubble h6 {
+			margin: 16px 0 8px;
+			font-size: 14px;
+			font-weight: 700;
+			color: var(--vmsb-primary);
+		}
+		.vmsb-chat-bubble ul { margin: 0 0 10px; padding-left: 20px; }
+		.vmsb-chat-bubble li { margin-bottom: 6px; }
+		.vmsb-chat-bubble code {
+			background: rgba(255,255,255,0.07);
+			padding: 2px 6px;
+			border-radius: 4px;
+			font-size: 12px;
+		}
 		.vmsb-msg-user .vmsb-chat-bubble {
 			background: var(--vmsb-primary);
 			color: #000;
@@ -362,6 +380,7 @@ class VMSB_Admin {
 			'vmsb-growth'      => 'Growth',
 			'vmsb-production'  => 'Production',
 			'vmsb-pipeline'    => 'Pipeline',
+			'vmsb-agents'      => 'Agent Fleet',
 			'vmsb-seo'         => 'SEO Lab',
 			'vmsb-intelligence' => 'Intelligence',
 			'vmsb-analytics'   => 'Analytics',

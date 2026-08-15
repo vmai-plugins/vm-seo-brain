@@ -9,7 +9,6 @@ $orphans = $silo->orphans( 60 );
 ?>
 
 <?php if ( ! $vmsb_is_nested ) : ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Architecture</p>
@@ -24,6 +23,7 @@ $orphans = $silo->orphans( 60 );
 	</header>
 	<span class="wp-header-end"></span>
 <?php endif; ?>
+
 
 	<?php if ( ! $map ) : ?>
 		<div class="vmsb-empty">
@@ -216,5 +216,5 @@ $orphans = $silo->orphans( 60 );
 
 	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 <?php endif; ?>
+

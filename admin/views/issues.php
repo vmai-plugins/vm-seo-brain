@@ -94,7 +94,6 @@ foreach ( $exclude_types as $et ) {
 }
 ?>
 <?php if ( ! $vmsb_is_nested ) : ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Audit & Optimization</p>
@@ -407,8 +406,8 @@ foreach ( $exclude_types as $et ) {
 
 	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 <?php endif; ?>
+
 
 <script>
 jQuery(function($) {

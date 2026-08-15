@@ -130,7 +130,7 @@ class VMSB_Scheduler {
 		( new VMSB_Content() )->plan( 20 );
 
 		// Generate the executive narrative
-		( new VMSB_Reporting() )->generate_weekly_summary();
+		( new VMSB_Reporting() )->generate_boardroom_report();
 
 		if ( (int) VMSB_Settings::get( 'competitor_enabled' ) ) {
 			( new VMSB_Competitor() )->scan( 10 );

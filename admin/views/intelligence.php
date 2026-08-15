@@ -5,7 +5,6 @@ $vmsb_is_nested = defined('VMSB_NESTED') && VMSB_NESTED;
 
 ?>
 <?php if ( ! $vmsb_is_nested ) : ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Artificial Reasoning & Context</p>
@@ -52,5 +51,5 @@ $vmsb_is_nested = defined('VMSB_NESTED') && VMSB_NESTED;
 
 	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 <?php endif; ?>
+

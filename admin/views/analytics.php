@@ -13,7 +13,6 @@ $vmsb_stats       = $vmsb_performance->business_summary();
 $vmsb_roi_val     = VMSB_Outcome_Ledger::calculate_blitz_value();
 
 ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Growth Measurement</p>
@@ -165,4 +164,4 @@ $vmsb_roi_val     = VMSB_Outcome_Ledger::calculate_blitz_value();
 	</div>
 
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
+

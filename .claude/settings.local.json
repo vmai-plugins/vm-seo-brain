@@ -179,7 +179,14 @@
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-commander.php)",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-growth-engine.php)",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-gap-finder.php)",
-      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l admin/views/growth.php)"
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l admin/views/growth.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l '/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/admin/views/pipeline.php')",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l '/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/admin/assets/js/admin.js')",
+      "Bash(node --check \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/admin/assets/js/admin.js\")",
+      "Bash(command -v node)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l '/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/admin/class-vmsb-admin.php')",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" *)",
+      "Bash(tail -30 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")"
     ]
   }
 }

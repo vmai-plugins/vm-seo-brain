@@ -13,7 +13,6 @@ $planned_count = $k->count('planned');
 ?>
 
 <?php if ( ! $vmsb_is_nested ) : ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Keyword Intelligence</p>
@@ -309,8 +308,8 @@ $planned_count = $k->count('planned');
 
 	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 <?php endif; ?>
+
 
 <script>
 jQuery(function($) {

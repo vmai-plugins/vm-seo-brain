@@ -22,7 +22,6 @@ $checkout_base = 'https://vmstudio.digital/checkout/';
 $site_url = urlencode( home_url() );
 ?>
 
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Agency Resources</p>
@@ -191,4 +190,3 @@ $site_url = urlencode( home_url() );
 	</section>
 
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>

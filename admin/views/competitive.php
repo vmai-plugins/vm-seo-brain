@@ -18,7 +18,6 @@ $vmsb_hijacks        = $vmsb_thief->recent_hijacks( 10 );
 ?>
 
 <?php if ( ! $vmsb_is_nested ) : ?>
-<div class="wrap vmsb vmsb-competitive">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Beyond your own site</p>
@@ -275,5 +274,5 @@ $vmsb_hijacks        = $vmsb_thief->recent_hijacks( 10 );
 
 	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 <?php endif; ?>
+

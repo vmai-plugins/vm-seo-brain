@@ -12,7 +12,6 @@ global $wpdb;
 $vmsb_actions = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vmsb_actions ORDER BY created_at DESC LIMIT 50" );
 ?>
 
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Autonomous Integrity Control</p>
@@ -64,4 +63,3 @@ $vmsb_actions = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vmsb_actions O
 	</div>
 
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>

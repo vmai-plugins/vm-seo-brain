@@ -30,7 +30,6 @@ $vmsb_status_tone = array(
 );
 ?>
 <?php if ( ! $vmsb_is_nested ) : ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Autonomous Operations</p>
@@ -164,5 +163,5 @@ $vmsb_status_tone = array(
 
 	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 <?php endif; ?>
+

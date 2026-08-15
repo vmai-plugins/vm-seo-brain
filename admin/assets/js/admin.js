@@ -524,10 +524,52 @@
 		const popupClose = $( '#vmsb-commander-close' );
 		const chatClear = $( '#vmsb-chat-clear' );
 
+		// The Commander's replies come back as markdown (the AI is prompted
+		// as a strategist and writes ###/**bold**/bullet lists), but the
+		// bubble was inserting the escaped string verbatim - so the user
+		// read raw "### 1. Market Research" and "* **Analyze Demand:**"
+		// with every newline collapsed into one wall of text. Renders a
+		// deliberately small subset, applied AFTER escaping so nothing the
+		// model emits can inject markup.
+		function renderMarkdown( text ) {
+			const lines = esc( text ).split( /\r?\n/ );
+			let out = '', inList = false;
+
+			const inline = ( s ) => s
+				.replace( /`([^`]+)`/g, '<code>$1</code>' )
+				.replace( /\*\*([^*]+)\*\*/g, '<strong>$1</strong>' )
+				.replace( /(^|[\s(])\*([^*\n]+)\*(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>' );
+
+			for ( let line of lines ) {
+				const trimmed = line.trim();
+				const bullet  = trimmed.match( /^[*-]\s+(.*)$/ );
+				const heading = trimmed.match( /^(#{1,6})\s+(.*)$/ );
+
+				if ( bullet ) {
+					if ( ! inList ) { out += '<ul>'; inList = true; }
+					out += `<li>${inline( bullet[1] )}</li>`;
+					continue;
+				}
+				if ( inList ) { out += '</ul>'; inList = false; }
+
+				if ( heading ) {
+					const level = Math.min( 6, heading[1].length + 2 );
+					out += `<h${level}>${inline( heading[2] )}</h${level}>`;
+				} else if ( trimmed ) {
+					out += `<p>${inline( trimmed )}</p>`;
+				}
+			}
+			if ( inList ) out += '</ul>';
+			return out || esc( text );
+		}
+
 		function appendPopupMsg( text, type ) {
+			// Only the AI writes markdown; user text stays literal so typing
+			// something like *hello* shows exactly what was typed.
+			const body = type === 'ai' ? renderMarkdown( text ) : esc( text );
 			const html = `
 				<div class="vmsb-chat-msg vmsb-msg-${type}">
-					<div class="vmsb-chat-bubble">${esc(text)}</div>
+					<div class="vmsb-chat-bubble">${body}</div>
 				</div>
 			`;
 			popupHistory.append( html );
@@ -748,14 +790,30 @@
 		const tab = $( this );
 		const name = tab.data( 'tab' );
 
-		// Handle both header tabs and settings sidebar nav
-		const container = tab.closest('.vmsb-settings-layout').length ? '.vmsb-settings-layout' : 'body';
+		// Settings sidebar nav is its own layout, scope to it as before.
+		if ( tab.closest( '.vmsb-settings-layout' ).length ) {
+			const container = '.vmsb-settings-layout';
+			$(container).find( '.vmsb-tab, .vmsb-nav-item' ).removeClass( 'is-active' );
+			tab.addClass( 'is-active' );
+			$(container).find( '.vmsb-panel' ).removeClass( 'is-active' );
+			$(container).find( `[data-panel="${name}"]` ).addClass( 'is-active' );
+			return;
+		}
 
-		$(container).find( '.vmsb-tab, .vmsb-nav-item' ).removeClass( 'is-active' );
+		// Header tabs: scope to this tab bar's own group, not the whole
+		// page. Production's own tabs wrap the Content Factory panel,
+		// which embeds Pipeline's entire tab group inside it - both reuse
+		// "queue" as a data-tab/data-panel name. Matching against `body`
+		// cleared every group sharing a name at once, including the
+		// ancestor "content" panel of whichever group was just clicked,
+		// which made the whole tab go blank the moment a sub-tab other
+		// than the one coincidentally named "queue" was clicked.
+		const tabsBar = tab.closest( '.vmsb-tabs' );
+		tabsBar.find( '.vmsb-tab' ).removeClass( 'is-active' );
 		tab.addClass( 'is-active' );
 
-		$(container).find( '.vmsb-panel' ).removeClass( 'is-active' );
-		$(container).find( `[data-panel="${name}"]` ).addClass( 'is-active' );
+		tabsBar.siblings( '.vmsb-panel' ).removeClass( 'is-active' )
+			.filter( `[data-panel="${name}"]` ).addClass( 'is-active' );
 	} );
 
 	// AI Model Syncing

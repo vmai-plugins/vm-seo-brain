@@ -4,7 +4,6 @@ defined( 'ABSPATH' ) || exit;
 $logger = new VMSB_Logger();
 $logs   = $logger->recent( 150 );
 ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Operations</p>
@@ -50,4 +49,4 @@ $logs   = $logger->recent( 150 );
 			</tbody>
 		</table>
 	</div>
-</div>
+

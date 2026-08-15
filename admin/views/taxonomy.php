@@ -11,7 +11,6 @@ usort( $tags, fn($a, $b) => $b->count <=> $a->count );
 $fixer = new VMSB_Fixer();
 $issues = $fixer->open_issues( 100, '', '', 'missing_term_description,empty_archive,thin_tag,duplicate_term' );
 ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Topical Organization</p>
@@ -24,6 +23,7 @@ $issues = $fixer->open_issues( 100, '', '', 'missing_term_description,empty_arch
 		</div>
 	</header>
 	<span class="wp-header-end"></span>
+
 
 	<div class="vmsb-grid" style="grid-template-columns: 1fr 1fr; margin-bottom:30px;">
 		<div class="vmsb-card">
@@ -211,4 +211,4 @@ $issues = $fixer->open_issues( 100, '', '', 'missing_term_description,empty_arch
 	</div>
 
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
+

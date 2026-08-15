@@ -221,4 +221,11 @@ class VMSB_Task_Runner {
 		global $wpdb;
 		return $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . self::table() . ' ORDER BY id DESC LIMIT %d', (int) $limit ) );
 	}
+
+	public static function prune( $days = 14 ) {
+		global $wpdb;
+		return $wpdb->query( $wpdb->prepare(
+			"DELETE FROM " . self::table() . " WHERE status != 'queued' AND queued_at < DATE_SUB(NOW(), INTERVAL %d DAY)", (int) $days
+		) );
+	}
 }

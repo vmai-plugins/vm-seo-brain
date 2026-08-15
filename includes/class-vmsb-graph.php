@@ -150,4 +150,16 @@ class VMSB_Graph {
 
 		return array( 'nodes' => $nodes, 'links' => $links );
 	}
+
+	public static function get_link_density_map() {
+		global $wpdb;
+		return $wpdb->get_results(
+			"SELECT object_id as post_id, COUNT(*) as inbound_links, SUM(weight) as total_weight
+			 FROM " . self::table() . "
+			 WHERE predicate IN ('belongs_to', 'links_to', 'references')
+			 AND object_type = 'post'
+			 GROUP BY object_id
+			 ORDER BY inbound_links DESC"
+		);
+	}
 }

@@ -54,4 +54,25 @@ class VMSB_Duel {
 		}
 		return array( 'fixed' => $applied, 'details' => $gaps );
 	}
+
+	/**
+	 * Pick a post to duel unattended. duel() needs a focus keyword to have
+	 * anything to compare against, so this only ever selects posts that
+	 * actually have one rather than letting the scheduled task fail.
+	 */
+	public function duel_random() {
+		global $wpdb;
+		$post_id = (int) $wpdb->get_var(
+			"SELECT p.ID FROM {$wpdb->posts} p
+			 INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID
+			 WHERE p.post_status = 'publish'
+			   AND m.meta_key = 'rank_math_focus_keyword'
+			   AND m.meta_value != ''
+			 ORDER BY RAND() LIMIT 1"
+		);
+		if ( ! $post_id ) {
+			return new WP_Error( 'vmsb_duel', 'No published post has a focus keyword to duel on.' );
+		}
+		return $this->duel( $post_id );
+	}
 }

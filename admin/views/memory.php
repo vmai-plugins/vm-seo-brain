@@ -10,7 +10,6 @@ $coverage      = $total_targets > 0 ? round( $stats['total'] / $total_targets * 
 ?>
 
 <?php if ( ! $vmsb_is_nested ) : ?>
-<div class="wrap vmsb vmsb-memory">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Semantic memory</p>
@@ -53,5 +52,5 @@ $coverage      = $total_targets > 0 ? round( $stats['total'] / $total_targets * 
 
 	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 <?php endif; ?>
+

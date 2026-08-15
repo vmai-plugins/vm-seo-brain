@@ -7,7 +7,6 @@ $brain   = new VMSB_Brain();
 $profile = $brain->profile();
 $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Configuration</p>
@@ -385,4 +384,4 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 	</div>
 
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
+

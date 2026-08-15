@@ -254,4 +254,13 @@ class VMSB_ROI {
 
 		return round($score, 2);
 	}
+
+	public function counts() {
+		global $wpdb;
+		return array(
+			'open_leaks' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_issues WHERE rule = 'roi_leak' AND status = 'open'" ),
+			'ctas_added' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_vmsb_cta_inserted'" ),
+			'forecast'   => get_option( 'vmsb_conversion_forecast', null ),
+		);
+	}
 }
