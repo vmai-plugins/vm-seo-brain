@@ -117,7 +117,9 @@ class VMSB_REST {
 			'global-search'       => 'global_search',
 			'evaluate-pivot'      => 'evaluate_pivot',
 			'graph-data'          => 'graph_data',
+			'graph-sync'          => 'graph_sync',
 			'video-to-blog'       => 'video_to_blog',
+			'execute-opportunity' => 'execute_opportunity',
 			'generate-report'     => 'generate_report',
 			'notifications'       => 'notifications',
 		);
@@ -843,6 +845,160 @@ class VMSB_REST {
 		$res = VMSB_Actions::rollback( $id );
 		if ( is_wp_error($res) ) return $res;
 		return rest_ensure_response( array( 'success' => true ) );
+	}
+
+	/**
+	 * Task detail for the queue's "View" modal. The timeline is a JSON
+	 * column on the task row itself (see VMSB_Task_Runner::log_event), not
+	 * a separate events table.
+	 */
+	public function task_detail( $request ) {
+		global $wpdb;
+		$id  = (int) $request->get_param( 'id' );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vmsb_tasks WHERE id = %d", $id ) );
+		if ( ! $row ) {
+			return new WP_Error( 'vmsb_rest', 'Task not found.', array( 'status' => 404 ) );
+		}
+
+		$timeline = json_decode( (string) $row->timeline, true );
+		if ( ! is_array( $timeline ) ) {
+			$timeline = array();
+		}
+		// The modal reads every field unguarded, so never hand it a null.
+		$timeline = array_map( static function ( $t ) {
+			return array(
+				'time'  => isset( $t['time'] ) ? (string) $t['time'] : '',
+				'event' => isset( $t['event'] ) ? (string) $t['event'] : '',
+				'note'  => isset( $t['note'] ) ? (string) $t['note'] : '',
+			);
+		}, $timeline );
+
+		return rest_ensure_response( array(
+			'id'       => (int) $row->id,
+			'type'     => class_exists( 'VMSB_Strategist' ) ? VMSB_Strategist::agent_label( $row->task_type ) : (string) $row->task_type,
+			'status'   => (string) $row->status,
+			'score'    => (float) $row->score,
+			'reason'   => (string) $row->reason,
+			'error'    => isset( $row->last_error ) ? (string) $row->last_error : '',
+			'timeline' => $timeline,
+		) );
+	}
+
+	public function graph_data( $request ) {
+		$limit = (int) $request->get_param( 'limit' ) ?: 100;
+		return rest_ensure_response( VMSB_Graph::export_for_visualization( $limit ) );
+	}
+
+	public function graph_sync( $request ) {
+		VMSB_Graph::build_twin();
+		return rest_ensure_response( array( 'synced' => true, 'empty' => VMSB_Graph::is_empty() ) );
+	}
+
+	/**
+	 * Execute one opportunity from the Growth page. The Opportunity Engine
+	 * only ever proposes changes to posts that already exist, so every type
+	 * here routes to an existing surgical fixer rather than writing new
+	 * content - and anything without a resolvable object_id is refused
+	 * rather than silently doing nothing.
+	 */
+	public function execute_opportunity( $request ) {
+		$type      = (string) $request->get_param( 'type' );
+		$object_id = (int) $request->get_param( 'object_id' );
+		$target    = (string) $request->get_param( 'target' );
+
+		if ( ! $object_id ) {
+			return new WP_Error( 'vmsb_rest', 'This opportunity has no target post to act on.', array( 'status' => 400 ) );
+		}
+		if ( ! get_post( $object_id ) ) {
+			return new WP_Error( 'vmsb_rest', "Target post #{$object_id} no longer exists.", array( 'status' => 404 ) );
+		}
+
+		switch ( strtoupper( $type ) ) {
+			case 'CONVERSION_LEAK':
+				$res = ( new VMSB_ROI() )->insert_cta( $object_id );
+				break;
+			case 'CANNIBALIZATION':
+			case 'UPDATE_CONTENT':
+			case 'CONTENT_DECAY':
+			default:
+				// god_fix_90 is the surgical single-post improver the Issues
+				// screen uses; it records a revertible action either way.
+				$res = ( new VMSB_Fixer() )->god_fix_90( $object_id );
+				break;
+		}
+
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+
+		( new VMSB_Logger() )->info( 'intelligence', "Executed opportunity ({$type}) on '{$target}' (post #{$object_id})." );
+
+		return rest_ensure_response( array( 'executed' => true, 'type' => $type, 'object_id' => $object_id, 'result' => $res ) );
+	}
+
+	/**
+	 * Content Factory's Video-to-Blog Transformer. Accepts a pasted
+	 * transcript, or a YouTube URL when no transcript is given - there is no
+	 * transcript API wired up here, so a bare URL is answered honestly
+	 * instead of quietly inventing an article about a video nobody read.
+	 */
+	public function video_to_blog( $request ) {
+		$url        = trim( (string) $request->get_param( 'video_url' ) );
+		$transcript = trim( (string) $request->get_param( 'transcript' ) );
+
+		if ( ! $transcript ) {
+			return new WP_Error(
+				'vmsb_rest',
+				$url
+					? 'Paste the video transcript as well - this build cannot fetch captions from a URL on its own.'
+					: 'Provide a transcript (and optionally the video URL).',
+				array( 'status' => 400 )
+			);
+		}
+
+		$brain  = new VMSB_Brain();
+		$prompt = "Act as an SEO Content Strategist. Turn this video transcript into a publishable article.\n\n"
+			. ( $url ? "SOURCE VIDEO: {$url}\n\n" : '' )
+			. "TRANSCRIPT:\n" . mb_substr( $transcript, 0, 12000 ) . "\n\n"
+			. "TASK: Write a ~1500 word SEO article that stands on its own without the video. Keep every concrete "
+			. "fact, figure and example from the transcript; do not invent any that are not there. Use clear H2/H3 "
+			. "structure and a natural primary keyword.\n\n"
+			. 'Return JSON: {"title":"","primary_keyword":"","content":"","excerpt":""}';
+
+		$data = ( new VMSB_AI_Router() )->generate_json( $prompt, array(
+			'system'     => $brain->context_prompt(),
+			'complexity' => 'premium',
+			'persona'    => 'writer',
+			'action'     => 'video_to_blog',
+		) );
+
+		if ( ! is_array( $data ) || empty( $data['content'] ) || empty( $data['title'] ) ) {
+			return new WP_Error( 'vmsb_rest', 'The transformer could not produce an article from that transcript.', array( 'status' => 502 ) );
+		}
+
+		$post_id = wp_insert_post( array(
+			'post_title'   => $data['title'],
+			'post_content' => $data['content'],
+			'post_excerpt' => isset( $data['excerpt'] ) ? $data['excerpt'] : '',
+			'post_status'  => 'draft',
+			'post_type'    => 'post',
+		), true );
+
+		if ( is_wp_error( $post_id ) ) {
+			return $post_id;
+		}
+
+		if ( $url ) {
+			update_post_meta( $post_id, '_vmsb_source_video', esc_url_raw( $url ) );
+		}
+		( new VMSB_Logger() )->info( 'content', "Video-to-Blog created draft post #{$post_id}: {$data['title']}" );
+
+		return rest_ensure_response( array(
+			'created' => true,
+			'post_id' => $post_id,
+			'title'   => $data['title'],
+			'edit'    => get_edit_post_link( $post_id, 'raw' ),
+		) );
 	}
 
 	public function rollback_recent( $request ) {
