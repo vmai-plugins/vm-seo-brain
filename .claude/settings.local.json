@@ -192,7 +192,16 @@
       "Bash(SCRATCH=\"/c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad\" *)",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -d 'extension_dir=C:\\\\Users\\\\tripc\\\\AppData\\\\Roaming\\\\Local\\\\lightning-services\\\\php-8.2.29+0\\\\bin\\\\win64\\\\ext' -d extension=mysqli /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/probe_set.php)",
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public\" *)",
-      "Bash(awk '/<!-- APPROVALS -->/,/^ <\\\\/div>$/' admin/views/production.php)"
+      "Bash(awk '/<!-- APPROVALS -->/,/^ <\\\\/div>$/' admin/views/production.php)",
+      "Bash(grep -n 'SELECT \\\\* FROM {$this->table\\(\\)}\\\\|FROM {$this->table\\(\\)}' includes/class-vmsb-content.php)",
+      "Bash(grep -n -B2 -A4 '$status\\\\s*=' includes/class-vmsb-content.php)",
+      "Bash(grep -n '$status' includes/class-vmsb-content.php)",
+      "Bash(sed -i 's#/\\\\\\\\bdestinations?\\\\\\\\b/i#/\\\\\\\\bdestinations?\\\\\\\\b\\(?!-\\)/i#; s#/\\\\\\\\bevents?\\\\\\\\b/i#/\\\\\\\\bevents?\\\\\\\\b\\(?!-\\)/i#' /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/cpt_route.php)",
+      "Bash(sed -i 's#\\\\['\\\\''gonewild'\\\\'','\\\\''Some title'\\\\'','\\\\''Blog'\\\\'','\\\\''post'\\\\''\\\\],#['\\\\''gonewild'\\\\'','\\\\''Some title'\\\\'','\\\\''Blog'\\\\'','\\\\''post'\\\\''],\\\\n  ['\\\\'''\\\\'','\\\\''An event-driven guide'\\\\'','\\\\''Blog'\\\\'','\\\\''post'\\\\''],\\\\n  ['\\\\'''\\\\'','\\\\''Best Destinations for 2026'\\\\'','\\\\''Blog'\\\\'','\\\\''destinations'\\\\''],\\\\n  ['\\\\'''\\\\'','\\\\''Visit this destination.'\\\\'','\\\\''Blog'\\\\'','\\\\''destinations'\\\\''],#' /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/cpt_route.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/cpt_route.php)",
+      "Bash(awk '/Scenario: High-Quality CPT Support/,/^\t\t}$/' includes/class-vmsb-content.php)",
+      "Read(//c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/**)",
+      "Bash(grep -n '\\\\$today_key\\\\|\\\\$published_today\\\\|\\\\$cap\\\\b\\\\|\\\\$can_publish' includes/class-vmsb-content.php)"
     ]
   }
 }

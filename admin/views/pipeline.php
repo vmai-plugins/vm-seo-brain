@@ -13,6 +13,10 @@ $vmsb_stats = $vmsb_content_engine->stats();
 $vmsb_pub_today = (int) get_option( 'vmsb_pub_' . gmdate('Ymd'), 0 );
 $vmsb_daily_cap = (int) VMSB_Settings::get( 'posts_per_day', 3 );
 
+// The daily cap only throttles anything when posts can actually go live;
+// in review-first mode every run drafts and the cap never applies.
+$vmsb_publishing_live = (int) VMSB_Settings::get( 'auto_publish' ) && ! (int) VMSB_Settings::get( 'require_review' );
+
 // Discovery Data
 $vmsb_trends_engine = new VMSB_Trends();
 $vmsb_velocity_signals = $vmsb_trends_engine->analyze_velocity();
@@ -69,11 +73,15 @@ $vmsb_rising_trends = $vmsb_trends_engine->get_rising_signals(8);
 					<span class="vmsb-stage-icon">⚡</span>
 					<div class="vmsb-stage-meta">
 						<span class="vmsb-stage-count"><?php echo (int)$vmsb_pub_today; ?><small>/<?php echo (int)$vmsb_daily_cap; ?></small></span>
-						<span class="vmsb-stage-label">Daily Velocity</span>
+						<span class="vmsb-stage-label">Published Today</span>
 					</div>
 				</div>
 				<div class="vmsb-bar" style="height:8px; margin: 10px 0;"><span style="width:<?php echo esc_attr( min(100, ($vmsb_pub_today / ($vmsb_daily_cap ?: 1)) * 100) ); ?>%; background: var(--good);"></span></div>
-				<p class="vmsb-stage-desc"><?php echo esc_html( max(0, $vmsb_daily_cap - $vmsb_pub_today) ); ?> hyper-growth slots left.</p>
+				<?php if ( $vmsb_publishing_live ) : ?>
+					<p class="vmsb-stage-desc"><?php echo esc_html( max(0, $vmsb_daily_cap - $vmsb_pub_today) ); ?> publish slots left today.</p>
+				<?php else : ?>
+					<p class="vmsb-stage-desc">Review-first mode — drafts are unlimited and the cap only applies once auto-publish is on.</p>
+				<?php endif; ?>
 			</div>
 		</div>
 	</div>

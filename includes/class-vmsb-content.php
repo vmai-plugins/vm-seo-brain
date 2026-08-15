@@ -485,12 +485,24 @@ class VMSB_Content {
 			return new WP_Error( 'vmsb_production', 'Automated Content Production is currently disabled in Settings.' );
 		}
 
-		// Global Drip Cap Check (Best of Autopilot)
-		$today_key       = 'vmsb_pub_' . gmdate( 'Ymd' );
-		$published_today = (int) get_option( $today_key, 0 );
-		$cap             = (int) VMSB_Settings::get( 'posts_per_day', 3 );
-		if ( $published_today >= $cap ) {
-			return new WP_Error( 'vmsb_drip', "Daily publish cap of {$cap} reached. Drip scheduling in effect." );
+		// Global Drip Cap Check (Best of Autopilot).
+		//
+		// Only gate on this when the run can actually publish. With
+		// auto_publish off or require_review on, $status below is always
+		// 'draft', so nothing this call does will ever hit the site - yet
+		// this check used to run regardless and the counter below used to
+		// increment on drafts too. The result was that a review-first setup
+		// produced posts_per_day drafts and then refused to generate
+		// anything else for the rest of the day, reporting a "publish cap"
+		// it had never actually published against.
+		$can_publish = (int) VMSB_Settings::get( 'auto_publish' ) && ! (int) VMSB_Settings::get( 'require_review' );
+		if ( $can_publish ) {
+			$today_key       = 'vmsb_pub_' . gmdate( 'Ymd' );
+			$published_today = (int) get_option( $today_key, 0 );
+			$cap             = (int) VMSB_Settings::get( 'posts_per_day', 3 );
+			if ( $published_today >= $cap ) {
+				return new WP_Error( 'vmsb_drip', "Daily publish cap of {$cap} reached. Drip scheduling in effect." );
+			}
 		}
 
 		global $wpdb;
@@ -698,16 +710,36 @@ class VMSB_Content {
 		$status = ( $auto && ! $review && ! $held ) ? 'publish' : 'draft';
 
 		// Scenario: High-Quality CPT Support (Destinations, Events, etc.)
-		$post_type = $item->content_type;
-		// CPT Routing Logic (Travel Scenario Upgrade)
-		if ( 'blog' === $post_type || empty($post_type) ) {
-			$post_type = 'post';
+		//
+		// An explicitly recorded content_type always wins. The guesses below
+		// used to run unconditionally and overwrite it, so a plain blog post
+		// merely titled "How to pick a destination" was filed as a
+		// 'destinations' entry, and any plan whose cluster label happened to
+		// collide with a registered post type slug was rerouted out of the
+		// post type it was deliberately planned as.
+		$post_type = ( 'blog' === $item->content_type || empty( $item->content_type ) ) ? '' : $item->content_type;
+
+		if ( $post_type && ! post_type_exists( $post_type ) ) {
+			// Recorded type has since been unregistered - fall back rather
+			// than create an orphan nothing can manage.
+			$this->log->warn( 'content', "Plan #{$item->id} wanted post type '{$post_type}', which no longer exists. Falling back." );
+			$post_type = '';
 		}
 
-		if ( strpos( strtolower($item->title), 'destination' ) !== false && post_type_exists('destinations') ) {
-			$post_type = 'destinations';
-		} elseif ( !empty($item->cluster) && post_type_exists($item->cluster) ) {
-			$post_type = $item->cluster;
+		if ( ! $post_type ) {
+			// Nothing explicit - infer, but only from a standalone word. The
+			// trailing lookahead keeps compounds like "destination-style" or
+			// "event-driven" out, since those describe an article about the
+			// subject rather than an entry of that type.
+			if ( post_type_exists( 'destinations' ) && preg_match( '/\bdestinations?\b(?!-)/i', (string) $item->title ) ) {
+				$post_type = 'destinations';
+			} elseif ( post_type_exists( 'events' ) && preg_match( '/\bevents?\b(?!-)/i', (string) $item->title ) ) {
+				$post_type = 'events';
+			} elseif ( ! empty( $item->cluster ) && post_type_exists( strtolower( $item->cluster ) ) ) {
+				$post_type = strtolower( $item->cluster );
+			} else {
+				$post_type = 'post';
+			}
 		}
 
 		$post_id = wp_insert_post(
@@ -858,11 +890,20 @@ class VMSB_Content {
 
 		( new VMSB_Keywords() )->mark( $item->primary_keyword, 'published', $post_id );
 
-		// Increment drip counter
-		$today_key = 'vmsb_pub_' . gmdate( 'Ymd' );
-		update_option( $today_key, (int) get_option( $today_key, 0 ) + 1 );
-
 		if ( 'publish' === $status ) {
+			// Drip counter tracks posts that actually went live, so a
+			// review-first setup is never throttled by drafts it queued for
+			// a human. autoload 'no' because this is read on demand and a
+			// new key is created every day - left autoloading, a year of
+			// them rides along on every single request forever.
+			$today_key = 'vmsb_pub_' . gmdate( 'Ymd' );
+			$today_val = (int) get_option( $today_key, 0 ) + 1;
+			if ( false === get_option( $today_key, false ) ) {
+				add_option( $today_key, $today_val, '', 'no' );
+			} else {
+				update_option( $today_key, $today_val );
+			}
+
 			$this->ping_sitemap();
 			do_action( 'vmsb_post_produced', $post_id );
 		}
