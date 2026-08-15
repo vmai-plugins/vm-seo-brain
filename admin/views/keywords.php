@@ -1,6 +1,8 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
+$vmsb_is_nested = defined('VMSB_NESTED') && VMSB_NESTED;
+
 $k         = new VMSB_Keywords();
 $striking  = $k->striking_distance( 50 );
 $ctr       = $k->ctr_losers( 50 );
@@ -9,6 +11,8 @@ $gaps      = $k->content_gaps( 50 );
 $total_count = $k->count();
 $planned_count = $k->count('planned');
 ?>
+
+<?php if ( ! $vmsb_is_nested ) : ?>
 <div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
@@ -22,6 +26,7 @@ $planned_count = $k->count('planned');
 			</p>
 		</div>
 	</header>
+<?php endif; ?>
 
 	<?php
 	// Onboarding guidance: the two things that most determine result
@@ -301,8 +306,10 @@ $planned_count = $k->count('planned');
 		</section>
 	<?php endforeach; ?>
 
+	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
 </div>
+<?php endif; ?>
 
 <script>
 jQuery(function($) {

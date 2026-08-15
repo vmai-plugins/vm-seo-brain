@@ -1,11 +1,56 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Nested-safe Issues View.
+ */
+$vmsb_is_nested = defined('VMSB_NESTED') && VMSB_NESTED;
+
 global $wpdb;
 $fixer   = new VMSB_Fixer();
 $counts  = $fixer->counts();
 $pending = ( new VMSB_Content() )->pending_reviews( 50 );
 $fixed   = $fixer->fixed_issues( 25 );
+
+// God Mode's autonomous overnight pass runs through the same task queue
+// every other agent uses, and VMSB_Task_Runner already stores the full
+// result (fixed count + per-issue report) on every row - it was just
+// never decoded anywhere, so a nightly auto_fix_queue run left no trace
+// beyond a generic "done" status. "Recently Fixed" above shows individual
+// fixes but never which ones came from the same run.
+$fix_runs = array();
+$run_issue_types = array();
+if ( class_exists( 'VMSB_Task_Runner' ) ) {
+	$referenced_ids = array();
+	foreach ( VMSB_Task_Runner::recent( 40 ) as $t ) {
+		if ( 'auto_fix_queue' === $t->task_type && in_array( $t->status, array( 'done', 'failed' ), true ) ) {
+			$fix_runs[] = $t;
+			$decoded = json_decode( (string) $t->result, true );
+			foreach ( ( isset( $decoded['report'] ) ? (array) $decoded['report'] : array() ) as $r ) {
+				if ( ! empty( $r['id'] ) ) {
+					$referenced_ids[] = (int) $r['id'];
+				}
+			}
+			if ( count( $fix_runs ) >= 8 ) {
+				break;
+			}
+		}
+	}
+	// $r['object'] is the numeric ID of whatever the issue targeted, and its
+	// meaning depends entirely on the issue's object_type - for a term-scoped
+	// rule like empty_archive, it's a term ID, not a post ID. Blindly calling
+	// get_post() on it can coincidentally match a real, unrelated post whose
+	// ID happens to equal that term ID, producing a wrong link to a random
+	// page. Look up the real object_type per issue instead of guessing.
+	if ( $referenced_ids ) {
+		$rows = $wpdb->get_results(
+			"SELECT id, object_type FROM {$wpdb->prefix}vmsb_issues WHERE id IN (" . implode( ',', array_unique( $referenced_ids ) ) . ")"
+		);
+		foreach ( $rows as $row ) {
+			$run_issue_types[ (int) $row->id ] = $row->object_type;
+		}
+	}
+}
 
 // The filter field below is named vmsb_post_type, not post_type - WordPress
 // core treats any `post_type` query var on admin.php as a signal that the
@@ -48,6 +93,7 @@ foreach ( $exclude_types as $et ) {
 	unset( $post_types[ $et ] );
 }
 ?>
+<?php if ( ! $vmsb_is_nested ) : ?>
 <div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
@@ -63,6 +109,7 @@ foreach ( $exclude_types as $et ) {
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="god-fix" data-confirm="God Fix will change live pages automatically. Revert any change later from the logs. Continue?">God Fix</button>
 		</div>
 	</header>
+<?php endif; ?>
 
 	<?php if ( $pending ) : ?>
 	<section class="vmsb-card" style="margin-bottom:24px; border-left: 3px solid var(--gold);">
@@ -136,6 +183,71 @@ foreach ( $exclude_types as $et ) {
 				</tbody>
 			</table>
 		</div>
+	</section>
+	<?php endif; ?>
+
+	<?php if ( $fix_runs ) : ?>
+	<section class="vmsb-card" style="margin-bottom:24px; border-left: 3px solid var(--accent-purple);">
+		<div class="vmsb-flex-space" style="margin-bottom: 14px;">
+			<h2 style="margin:0;">God Mode Run History <span class="vmsb-tag vmsb-tag-purple" style="margin-left:8px;"><?php echo count( $fix_runs ); ?></span></h2>
+			<p class="vmsb-note" style="margin:0;">What the autonomous overnight fix pass actually did each time it ran, not just a status badge.</p>
+		</div>
+		<?php foreach ( $fix_runs as $run ) :
+			$result = json_decode( (string) $run->result, true );
+			$result = is_array( $result ) ? $result : array();
+			$when   = $run->ran_at ? human_time_diff( strtotime( $run->ran_at ) ) . ' ago' : '—';
+			$report = isset( $result['report'] ) ? (array) $result['report'] : array();
+		?>
+			<div style="padding:12px 0; border-bottom:1px solid var(--line);">
+				<?php if ( isset( $result['error'] ) ) : ?>
+					<div class="vmsb-flex-space">
+						<strong style="color:var(--crit);">Run failed</strong>
+						<span class="vmsb-note"><?php echo esc_html( $when ); ?></span>
+					</div>
+					<p class="vmsb-note" style="margin:4px 0 0;"><?php echo esc_html( $result['error'] ); ?></p>
+				<?php elseif ( empty( $report ) && ! empty( $result['message'] ) ) : ?>
+					<div class="vmsb-flex-space">
+						<span>Skipped</span>
+						<span class="vmsb-note"><?php echo esc_html( $when ); ?></span>
+					</div>
+					<p class="vmsb-note" style="margin:4px 0 0;"><?php echo esc_html( $result['message'] ); ?></p>
+				<?php else :
+					$fixed_n  = (int) ( $result['fixed'] ?? count( array_filter( $report, static fn( $r ) => ! empty( $r['ok'] ) ) ) );
+					$failed_n = count( array_filter( $report, static fn( $r ) => empty( $r['ok'] ) ) );
+				?>
+					<div class="vmsb-flex-space" style="margin-bottom:8px;">
+						<strong><?php echo $fixed_n; ?> fixed<?php echo $failed_n ? ', ' . $failed_n . ' failed' : ''; ?></strong>
+						<span class="vmsb-note"><?php echo esc_html( $when ); ?></span>
+					</div>
+					<?php if ( $report ) : ?>
+						<ul style="margin:0; padding-left:18px; font-size:12px; color:var(--muted);">
+							<?php foreach ( $report as $r ) :
+								$label      = esc_html( ucfirst( str_replace( '_', ' ', isset( $r['rule'] ) ? $r['rule'] : '' ) ) );
+								$obj_link   = '';
+								$issue_type = isset( $r['id'], $run_issue_types[ (int) $r['id'] ] ) ? $run_issue_types[ (int) $r['id'] ] : '';
+								if ( ! empty( $r['object'] ) ) {
+									if ( 'post' === $issue_type && get_post( $r['object'] ) ) {
+										$obj_link = ' — <a href="' . esc_url( get_edit_post_link( $r['object'] ) ) . '" target="_blank">' . esc_html( get_the_title( $r['object'] ) ) . '</a>';
+									} elseif ( 'term' === $issue_type ) {
+										$term = get_term( $r['object'] );
+										if ( $term && ! is_wp_error( $term ) ) {
+											$obj_link = ' — <a href="' . esc_url( get_edit_term_link( $r['object'], $term->taxonomy ) ) . '" target="_blank">' . esc_html( $term->name ) . '</a>';
+										}
+									}
+								}
+							?>
+								<li style="margin-bottom:4px;">
+									<?php echo ! empty( $r['ok'] ) ? '✅' : '❌'; ?>
+									<?php echo $label; ?><?php echo $obj_link; // phpcs:ignore -- built above from esc_url()/esc_html() only ?>
+									<?php if ( ! empty( $r['pending_review'] ) ) : ?><span class="vmsb-tag vmsb-tag-gold" style="margin-left:4px;">Pending Review</span><?php endif; ?>
+									<?php if ( empty( $r['ok'] ) && ! empty( $r['message'] ) ) : ?> — <span class="vmsb-note"><?php echo esc_html( $r['message'] ); ?></span><?php endif; ?>
+								</li>
+							<?php endforeach; ?>
+						</ul>
+					<?php endif; ?>
+				<?php endif; ?>
+			</div>
+		<?php endforeach; ?>
 	</section>
 	<?php endif; ?>
 
@@ -292,8 +404,10 @@ foreach ( $exclude_types as $et ) {
 		</div>
 	<?php endif; ?>
 
+	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
 </div>
+<?php endif; ?>
 
 <script>
 jQuery(function($) {

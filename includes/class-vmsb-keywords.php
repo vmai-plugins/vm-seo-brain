@@ -80,11 +80,15 @@ class VMSB_Keywords {
 		return $n;
 	}
 
-	public function research( $seed_limit = 40 ) {
+	public function research( $seed_limit = 40, $custom_seed = '' ) {
 		$found = 0;
-		$found += $this->pull_search_console();
-		$found += $this->expand_autocomplete( $seed_limit );
-		$found += $this->expand_with_ai();
+		if ( $custom_seed ) {
+			$found += $this->expand_with_ai( $custom_seed );
+		} else {
+			$found += $this->pull_search_console();
+			$found += $this->expand_autocomplete( $seed_limit );
+			$found += $this->expand_with_ai();
+		}
 
 		// 2026 Strategy: Competitor Gap Hijacking
 		if ( class_exists( 'VMSB_Competitor' ) ) {
@@ -130,16 +134,26 @@ class VMSB_Keywords {
 			}
 		}
 
-		if ( ! $this->google->is_connected() ) {
-			return 0;
-		}
-		$rows = $this->google->gsc_query( array( 'query' ), 90, 1000 );
-		if ( is_wp_error( $rows ) ) {
-			$this->log->warn( 'keywords', 'Search Console pull failed: ' . $rows->get_error_message() );
-			return 0;
-		}
+if ( ! $this->google->is_connected() ) {
+        return 0;
+    }
 
-		return $this->process_gsc_rows( $rows, 'gsc' );
+    // Cached version of GSC query to reduce API calls and stay within quota.
+    $transient_key = 'vmsb_gsc_query_' . md5( wp_json_encode( array( 'query' ) . 90 . 1000 ) );
+    $cached_rows   = get_transient( $transient_key );
+    if ( false !== $cached_rows ) {
+        $rows = $cached_rows;
+    } else {
+        $rows = $this->google->gsc_query( array( 'query' ), 90, 1000 );
+        if ( is_wp_error( $rows ) ) {
+            $this->log->warn( 'keywords', 'Search Console pull failed: ' . $rows->get_error_message() );
+            return 0;
+        }
+        // Cache for 12 hours to stay within Google Search Console API limits.
+        set_transient( $transient_key, $rows, 12 * HOUR_IN_SECONDS );
+    }
+
+    return $this->process_gsc_rows( $rows, 'gsc' );
 	}
 
 	private function process_gsc_rows( $rows, $source ) {
@@ -237,27 +251,36 @@ class VMSB_Keywords {
 	}
 
 	/**
-	 * For brand new sites with no GSC history, the business profile is the seed.
+	 * For brand new sites or new niches, the business profile or custom seed is the seed.
 	 */
-	public function expand_with_ai() {
+	public function expand_with_ai( $custom_seed = '' ) {
 		$profile = $this->brain->profile();
+		$context = $custom_seed ? "Niche Expansion: {$custom_seed}" : "Business Profile: " . wp_json_encode($profile);
 
-		$prompt = "Produce a keyword universe for this business.\n"
+		$prompt = "Produce a keyword universe for this niche expansion.\n"
+			. "NICHE: {$context}\n"
 			. "Cover the full funnel: informational, commercial investigation, transactional, and navigational.\n"
-			. "Include long-tail questions real buyers type. Include location modifiers only if the business is local.\n"
+			. "Include location modifiers for cities in Madhya Pradesh if relevant.\n"
 			. "For each keyword, estimate the Global Search Volume (monthly) and identify likely SERP Features (e.g. Featured Snippet, People Also Ask, Video).\n"
 			. "Do not include keywords the business cannot credibly rank for or serve.\n\n"
 			. 'Return JSON: {"keywords":[{"keyword":"","intent":"informational|commercial|transactional|navigational","funnel":"top|middle|bottom","cluster":"","est_difficulty":0,"est_volume":0,"serp_features":[]}]}';
 
-		$data = $this->ai->generate_json(
-			$prompt,
-			array(
-				'system'      => $this->brain->context_prompt(),
-				'max_tokens'  => 3000,
-				'temperature' => 0.5,
-				'cache_ttl'   => DAY_IN_SECONDS,
-			)
-		);
+		$transient_key = 'vmsb_ai_expand_' . md5( $prompt );
+		$cached_data   = get_transient( $transient_key );
+		if ( false !== $cached_data ) {
+			$data = $cached_data;
+		} else {
+			$data = $this->ai->generate_json(
+				$prompt,
+				array(
+					'system'      => $this->brain->context_prompt(),
+					'max_tokens'  => 3000,
+					'temperature' => 0.5,
+					'cache_ttl'   => DAY_IN_SECONDS,
+				)
+			);
+			set_transient( $transient_key, $data, 6 * HOUR_IN_SECONDS );
+		}
 
 		$count       = 0;
 		$semrush_on  = class_exists( 'VMSB_External_Data' ) && VMSB_External_Data::semrush_configured();
@@ -619,5 +642,19 @@ class VMSB_Keywords {
 			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$this->table()} WHERE status = %s", $status ) );
 		}
 		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table()}" );
+	}
+
+	public function get_distribution() {
+		global $wpdb;
+		return array(
+			'top3'  => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table()} WHERE position BETWEEN 1 AND 3" ),
+			'top10' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table()} WHERE position BETWEEN 4 AND 10" ),
+			'top50' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table()} WHERE position BETWEEN 11 AND 50" ),
+		);
+	}
+
+	public function get_keyword_intent_for_post( $post_id ) {
+		global $wpdb;
+		return $wpdb->get_var( $wpdb->prepare( "SELECT intent FROM {$this->table()} WHERE post_id = %d LIMIT 1", $post_id ) ) ?: 'informational';
 	}
 }

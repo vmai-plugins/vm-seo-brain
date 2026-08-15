@@ -1,11 +1,15 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
+$vmsb_is_nested = defined('VMSB_NESTED') && VMSB_NESTED;
+
 $stats = class_exists( 'VMSB_Vector_Store' ) ? VMSB_Vector_Store::stats() : array( 'total' => 0, 'pending' => 0, 'provider' => 'local', 'model' => '-', 'last_indexed' => null );
 
 $total_targets = (int) $stats['total'] + (int) $stats['pending'];
 $coverage      = $total_targets > 0 ? round( $stats['total'] / $total_targets * 100 ) : 100;
 ?>
+
+<?php if ( ! $vmsb_is_nested ) : ?>
 <div class="wrap vmsb vmsb-memory">
 	<header class="vmsb-head">
 		<div>
@@ -18,6 +22,7 @@ $coverage      = $total_targets > 0 ? round( $stats['total'] / $total_targets * 
 			<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="rebuild-index" data-confirm="Clear the whole index and re-embed every page? Do this after changing the embedding model.">Rebuild</button>
 		</div>
 	</header>
+<?php endif; ?>
 
 	<div class="vmsb-cards">
 		<div class="vmsb-card">
@@ -45,16 +50,7 @@ $coverage      = $total_targets > 0 ? round( $stats['total'] / $total_targets * 
 		</div>
 	<?php endif; ?>
 
-	<div class="vmsb-console" id="vmsb-output" hidden>
-		
-	</div>
-
-	<section class="vmsb-section">
-		<h2>How the brain uses this</h2>
-		<ul class="vmsb-bullets">
-			<li><strong>Before publishing</strong> — a new draft is compared against every existing page by meaning. A near-duplicate is blocked, not just flagged.</li>
-			<li><strong>Internal linking</strong> — the silo builder picks link targets that are actually related, instead of anything sharing a category.</li>
-			<li><strong>Cannibalisation</strong> — pages that are semantically close <em>and</em> competing for the same query surface as issues to merge or differentiate.</li>
-		</ul>
-	</section>
+	<?php if ( ! $vmsb_is_nested ) : ?>
+	<div id="vmsb-output" class="vmsb-output" hidden></div>
 </div>
+<?php endif; ?>

@@ -1,10 +1,14 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
+$vmsb_is_nested = defined('VMSB_NESTED') && VMSB_NESTED;
+
 $silo    = new VMSB_Silo();
 $map     = $silo->map_for_display();
 $orphans = $silo->orphans( 60 );
 ?>
+
+<?php if ( ! $vmsb_is_nested ) : ?>
 <div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
@@ -18,6 +22,7 @@ $orphans = $silo->orphans( 60 );
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="god-fix" data-body='{"scope":["internal_links"]}'>Fix linking</button>
 		</div>
 	</header>
+<?php endif; ?>
 
 	<?php if ( ! $map ) : ?>
 		<div class="vmsb-empty">
@@ -208,5 +213,7 @@ $orphans = $silo->orphans( 60 );
 		</ul>
 	<?php endif; ?>
 
+	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
 </div>
+<?php endif; ?>

@@ -357,27 +357,15 @@ class VMSB_Admin {
 			array( $this, 'render_dashboard' )
 		);
 
-		// learning.php, logs.php and memory.php were fully built (real
-		// queries, working action buttons, matching the rest of the design
-		// system) but never registered here - admin.php?page=vmsb-learning
-		// et al. is a plain WordPress core menu slug, so without an
-		// add_submenu_page() call for it, WP's own routing blocks the
-		// request before render_page() ever runs. Complete pages that no
-		// user could ever reach.
+		// The Brain UX Overhaul: Job-oriented navigation buckets.
 		$pages = array(
-			'vmsb-issues'     => 'Issues',
-			'vmsb-keywords'   => 'Keywords',
-			'vmsb-silo'       => 'Silos',
-			'vmsb-taxonomy'   => 'Taxonomy',
-			'vmsb-pipeline'   => 'Pipeline',
-			'vmsb-growth'     => 'Growth Plan',
-			'vmsb-agents'     => 'Agents',
-			'vmsb-memory'     => 'Memory',
-			'vmsb-competitive'=> 'Competitive',
-			'vmsb-learning'   => 'Learning',
-			'vmsb-logs'       => 'Logs',
-			'vmsb-plans'      => 'Billing & Usage',
-			'vmsb-settings'   => 'Settings',
+			'vmsb-growth'      => 'Growth',
+			'vmsb-production'  => 'Production',
+			'vmsb-seo'         => 'SEO Lab',
+			'vmsb-intelligence' => 'Intelligence',
+			'vmsb-analytics'   => 'Analytics',
+			'vmsb-learning'    => 'Learning',
+			'vmsb-settings'    => 'Settings',
 		);
 
 		foreach ( $pages as $slug => $label ) {
@@ -409,10 +397,25 @@ class VMSB_Admin {
 	}
 
 	public function render_dashboard() {
+		echo '<div class="vmsb-header-utility" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">';
+		self::breadcrumbs();
+		echo '<div style="display:flex; align-items:center; gap:20px;">';
+		echo '<div class="vmsb-global-search"><span>🔍</span><input type="text" placeholder="Global Brain Search..."></div>';
+		echo '<div class="vmsb-notification-hub" id="vmsb-notifications-trigger">🔔<span class="vmsb-count" hidden></span></div>';
+		echo '</div>';
+		echo '</div>';
 		$this->view( 'dashboard' );
 	}
 
 	public function render_page() {
+		echo '<div class="vmsb-header-utility" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">';
+		self::breadcrumbs();
+		echo '<div style="display:flex; align-items:center; gap:20px;">';
+		echo '<div class="vmsb-global-search"><span>🔍</span><input type="text" placeholder="Global Brain Search..."></div>';
+		echo '<div class="vmsb-notification-hub" id="vmsb-notifications-trigger">🔔<span class="vmsb-count" hidden></span></div>';
+		echo '</div>';
+		echo '</div>';
+		echo '</div>';
 		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : 'vmsb';
 		$view = str_replace( 'vmsb-', '', $page );
 		$this->view( $view );
@@ -527,5 +530,18 @@ class VMSB_Admin {
 			return;
 		}
 		printf( '<div class="notice notice-%s is-dismissible"><p>%s</p></div>', esc_attr( $messages[ $key ][0] ), esc_html( $messages[ $key ][1] ) );
+	}
+
+	public static function breadcrumbs() {
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : 'vmsb';
+		$label = str_replace( 'vmsb-', '', $page );
+		$label = ucwords( str_replace( '-', ' ', $label ) );
+		if ( $page === 'vmsb' ) $label = 'Dashboard';
+
+		echo '<nav class="vmsb-breadcrumbs" style="margin-bottom:20px; font-size:12px; color:var(--muted);">';
+		echo '<a href="' . admin_url('admin.php?page=vmsb') . '" style="color:inherit; text-decoration:none;">Brain</a>';
+		echo ' <span style="margin:0 8px; opacity:0.5;">&rarr;</span> ';
+		echo '<span style="color:var(--gold-soft); font-weight:600;">' . esc_html($label) . '</span>';
+		echo '</nav>';
 	}
 }

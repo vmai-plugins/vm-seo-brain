@@ -263,6 +263,47 @@ class VMSB_Competitor {
 		return $total_strikes;
 	}
 
+	/**
+	 * DEEP DUEL: Performs a surgical page-by-page comparison against top-ranking URLs.
+	 * Ported & Hardened for VM SEO Brain X.
+	 */
+	public function perform_deep_duel( $post_id, $competitor_url = '' ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) return new WP_Error( 'not_found', 'Post not found.' );
+
+		$keyword = ( new VMSB_RankMath() )->get_focus_keyword($post_id) ?: $post->post_title;
+
+		$this->log->info( 'competitor', "Intelligence Duel: Analyzing #{$post_id} vs Market Leaders for '{$keyword}'..." );
+
+		// 1. Infiltrator Pass: Get LIVE blueprint of the competition
+		$serp_agent = new VMSB_SERP();
+		$blueprint  = $serp_agent->get_blueprint( $keyword );
+
+		// 2. Duelist Pass: Compare our content against the elite benchmark
+		$prompt = "Act as an SEO Content Duelist.\n"
+			. "OUR POST: \"{$post->post_title}\"\n"
+			. "OUR CONTENT EXCERPT: " . wp_trim_words($post->post_content, 500) . "\n\n"
+			. "COMPETITOR BENCHMARK (from Top 3):\n"
+			. "- Target Word Count: {$blueprint['min_word_count']}\n"
+			. "- Essential Entities: " . implode(', ', $blueprint['required_entities']) . "\n"
+			. "- Tactical Gap Found: {$blueprint['tactical_gap']}\n\n"
+			. "TASK: Identify exactly what we are missing to hit #1.\n"
+			. "Return JSON: {\"entity_gap\":[], \"formatting_gap\":[], \"missing_sections\":[], \"strike_plan\":\"\"}";
+
+		$data = $this->ai->generate_json( $prompt, array( 'complexity' => 'premium', 'persona' => 'thief' ) );
+
+		if ( ! is_array($data) ) return new WP_Error( 'ai_fail', 'Duelist analysis failed.' );
+
+		update_post_meta( $post_id, '_vmsb_deep_duel_result', $data );
+
+		// 3. Autonomous Decision: If we are 'behind', queue a content healer pass
+		if ( ! empty($data['missing_sections']) ) {
+			( new VMSB_Fixer() )->record( 'post', $post_id, 'duel_gap', 'medium', "Competitive Gap: Rival content has superior depth in " . implode(', ', array_slice($data['missing_sections'], 0, 2)) );
+		}
+
+		return $data;
+	}
+
 	/* ---------------------------------------------------------------- shared-query overlap */
 
 	/**
@@ -339,9 +380,8 @@ class VMSB_Competitor {
 	}
 
 	/**
-	 * Ask the model to reason about a competitor against our weak queries. No
-	 * scraping - this is directional intelligence, not a rank tracker; Tier 3
-	 * clients (SEMrush/Ahrefs) sharpen it further when configured.
+	 * Ask the model to reason about a competitor against our weak queries.
+	 * Upgraded with Infiltrator logic to detect "Tactical Gaps".
 	 */
 	private function assess( $domain, array $weak_queries ) {
 		if ( ! $weak_queries ) {
@@ -349,22 +389,24 @@ class VMSB_Competitor {
 		}
 
 		$brain  = new VMSB_Brain();
-		$prompt = "Competitor domain: {$domain}\n\n"
-			. "We rank weakly (position 6+) for these queries, ordered by how much search volume they get:\n"
-			. wp_json_encode( array_slice( $weak_queries, 0, 15 ) ) . "\n\n"
-			. "Based on what you know about this domain and how a site like it typically covers these topics, which of these queries is this competitor likely to already own or contest strongly? "
-			. "Only include a query if you have a real basis to expect they compete on it - do not guess to fill the list.\n\n"
-			. 'Return JSON: {"threat_score":0,"gaps":[{"query":"","reason":"","angle":""}]}'
-			. "\nthreat_score is 0-100, how much this competitor overlaps with our search footprint overall.";
+		$prompt = "Act as a Competitive Infiltrator.\n"
+			. "COMPETITOR: {$domain}\n\n"
+			. "Our site ranks weakly (Pos 6-15) for these high-volume queries:\n"
+			. wp_json_encode( array_slice( $weak_queries, 0, 10 ) ) . "\n\n"
+			. "TASK:\n"
+			. "1. Identify 3 keywords from this list that this competitor LIKELY owns with superior depth.\n"
+			. "2. Identify the 'Tactical Gap' (e.g., they have a tool we don't, or they use 2025 data).\n"
+			. "3. Propose a 'Strike Angle' to beat them.\n\n"
+			. 'Return JSON: {"threat_score":0,"gaps":[{"query":"","reason":"","angle":"","tactical_gap":""}]}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 900, 'temperature' => 0.3 ) );
+		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'complexity' => 'premium', 'persona' => 'thief' ) );
 		if ( ! is_array( $data ) ) {
 			return new WP_Error( 'vmsb_competitor', $this->ai->get_last_error() ?: 'No usable response.' );
 		}
 
 		return array(
 			'threat_score' => (float) ( $data['threat_score'] ?? 0 ),
-			'gaps'         => array_slice( (array) ( $data['gaps'] ?? array() ), 0, 10 ),
+			'gaps'         => array_slice( (array) ( $data['gaps'] ?? array() ), 0, 5 ),
 			'assessed_at'  => current_time( 'mysql' ),
 		);
 	}

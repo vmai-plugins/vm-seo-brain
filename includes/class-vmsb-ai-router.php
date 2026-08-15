@@ -126,11 +126,23 @@ class VMSB_AI_Router {
 			}
 		}
 
+		// Apply Strategic Pivot Directives
+		$pivot = $brain->recall( 'intelligence', 'current_strategy_pivot' );
+		if ( $pivot && ! empty($pivot['new_directives']) ) {
+			$args['system'] .= "\n\nCURRENT STRATEGIC PIVOT: {$pivot['pivot_name']}\nDIRECTIVES: " . implode(' | ', (array)$pivot['new_directives']);
+		}
+
 		// Sentient Heartbeat: Notify logs that the Brain is reasoning
 		$this->log->info( 'brain', "AI Generation Started: Persona '{$args['persona']}' processing task.", array( 'tokens_est' => $args['max_tokens'] ) );
 
+		// get_chain() already filters and dedupes with SORT_REGULAR, which
+		// correctly compares its array-shaped [provider, model] entries
+		// element-by-element. Re-deduping here with array_unique()'s default
+		// SORT_STRING cast every one of those entries to a string, throwing
+		// "Array to string conversion" and corrupting the REST response body
+		// (the warning gets echoed before the JSON, so res.json() fails
+		// client-side) on every premium/cheap-complexity call.
 		$chain = $this->get_chain( $args );
-		$chain = array_values( array_unique( array_filter( $chain ) ) );
 
 		$errors = array();
 		foreach ( $chain as $provider_config ) {
@@ -154,18 +166,35 @@ class VMSB_AI_Router {
 				continue;
 			}
 
-			$start_time = microtime(true);
-			$result = $this->$method( $prompt, $args );
-			$latency = microtime(true) - $start_time;
+			// World-Class Resilience: Individual Provider Retry with Backoff
+			$provider_attempts = 0;
+			$max_provider_attempts = 2;
+			$result = array('ok' => false);
 
-			if ( ! empty( $result['ok'] ) && '' !== trim( $result['text'] ) ) {
-				$this->count_call();
-				$this->record_latency( $provider, $latency );
-				VMSB_AI_Circuit::success( $provider ); // RESET provider circuit
-				VMSB_Health::reset_failures();
-				$result['provider'] = $provider;
-				$result['model']    = $result['model'] ?? ($args['forced_model'] ?? 'unknown');
+			while ( $provider_attempts < $max_provider_attempts ) {
+				$start_time = microtime(true);
+				$result = $this->$method( $prompt, $args );
+				$latency = microtime(true) - $start_time;
 
+				if ( ! empty( $result['ok'] ) && '' !== trim( $result['text'] ) ) {
+					$this->count_call();
+					$this->record_latency( $provider, $latency );
+					VMSB_AI_Circuit::success( $provider ); // RESET provider circuit
+					VMSB_Health::reset_failures();
+					$result['provider'] = $provider;
+					$result['model']    = $result['model'] ?? ($args['forced_model'] ?? 'unknown');
+					break; // Exit retry loop on success
+				}
+
+				$provider_attempts++;
+				if ( $provider_attempts < $max_provider_attempts ) {
+					$sleep_sec = pow(2, $provider_attempts); // 2s, 4s backoff
+					$this->log->warn('ai', "Provider {$provider} failed. Retrying in {$sleep_sec}s... (" . ($result['error'] ?? 'timeout') . ")");
+					sleep($sleep_sec);
+				}
+			}
+
+			if ( ! empty( $result['ok'] ) ) {
 				// Record Usage
 				if ( class_exists('VMSB_Usage') ) {
 					VMSB_Usage::record( array(
@@ -181,32 +210,34 @@ class VMSB_AI_Router {
 					set_transient( $cache_key, $result, (int) $args['cache_ttl'] );
 				}
 
-				// Quality Recursive Correction (from Autopilot)
+				// World-Class Peer Review Loop (Ported from Autopilot ASP)
 				if ( $args['persona'] === 'wordsmith' && $args['max_tokens'] > 2000 && $args['attempt'] < 2 ) {
-					// World-Class Critque Logic: EEAT, Specificity, and Human-Like Flow.
-					// This is a plain "REVISE: ..." / "PASS" verdict, not JSON - use
-					// generate() directly, generate_json() forces a JSON-only system
-					// prompt that contradicts the format asked for here and made the
-					// verdict fail to parse on every call.
-					$quality_check = $this->generate(
-						"Act as a Senior Editor. Review this generated content for EEAT and Rank Math 90+ optimization. "
-						. "Criteria: 1. Is the Focus Keyword in the first paragraph? 2. Is it in an H2/H3? 3. Is paragraph length short? 4. Is the tone truly expert? "
-						. "If score < 85, reply with 'REVISE: [Specific technical critique]'. Otherwise reply 'PASS'.\n\n"
-						. "CONTENT: " . wp_trim_words($result['text'], 800),
-						array('max_tokens' => 300, 'persona' => 'auditor')
-					);
+
+					// 1. Auditor Pass: Critique against elite standards
+					$audit_prompt = "Act as a Senior SEO Editor. Critique this draft against our Elite Standards:\n"
+						. "1. INFORMATION GAIN: Does it offer unique insights or data that Top 3 winners miss?\n"
+						. "2. EEAT: Is the expert tone credible and specific to the brand?\n"
+						. "3. SGE READINESS: Are there clear, quotable blocks for AI search engines?\n"
+						. "4. RANK MATH: Are keyword placements surgical and density natural?\n\n"
+						. "DRAFT CONTENT:\n" . wp_trim_words($result['text'], 1000) . "\n\n"
+						. "TASK: Provide a Grade (0-100) and if < 85, list 3 'Rewrite Directives'. Otherwise reply 'PASS'.";
+
+					$quality_check = $this->generate( $audit_prompt, array('max_tokens' => 500, 'persona' => 'auditor', 'complexity' => 'premium') );
 
 					$verdict = ! empty( $quality_check['ok'] ) ? trim( $quality_check['text'] ) : '';
-					if ( 0 === stripos( $verdict, 'REVISE' ) ) {
-						$critique = trim( preg_replace( '/^REVISE:\s*/i', '', $verdict ) ) ?: 'Content lacks sufficient expert depth and brand alignment.';
-						( new VMSB_Logger() )->warn( 'ai', 'Content Quality Refiner: Re-writing with technical critique: ' . $critique );
+
+					if ( 0 !== stripos( $verdict, 'PASS' ) && $args['attempt'] < 2 ) {
+						( new VMSB_Logger() )->warn( 'ai', 'Peer Review Loop: Auditor identified gaps. Initiating recursive refinement pass.' );
+
 						$args['attempt']++;
-						// Reset to the caller's original system prompt before retrying -
-						// $args['system'] has already had the persona instruction and
-						// mistakes-memory block folded in once; recursing with it as-is
-						// would fold them in a second time on top of themselves.
-						$args['system'] = $original_system;
-						return $this->generate( $prompt . "\n\nCRITICAL EDITOR FEEDBACK: {$critique}\nFocus on providing more technical specifics and brand-first expertise.", $args );
+						$args['system'] = $original_system; // Reset system prompt
+
+						$refinement_prompt = $prompt . "\n\n"
+							. "CRITICAL PEER REVIEW FEEDBACK:\n"
+							. "{$verdict}\n\n"
+							. "STRICT INSTRUCTION: Refine the content to fix these gaps. Ensure 100% brand alignment and high information gain.";
+
+						return $this->generate( $refinement_prompt, $args );
 					}
 				}
 
@@ -299,13 +330,27 @@ class VMSB_AI_Router {
 		$text = preg_replace( '/(}|\])[^}\]]*$/s', '$1', $text ); // Strip everything after last } or ]
 		$text = trim( $text );
 
+		// Salvage Step 0.5: Fix stray "}" or "]" in the middle of the string
+		// Sometimes models hallucinate the end of a block inside a content field.
+		// We only apply this if standard decoding fails.
+
 		// Salvage Step 1: Standard Parse
 		$data = json_decode( $text, true );
 		if ( JSON_ERROR_NONE === json_last_error() ) {
 			return $data;
 		}
 
-		// Salvage Step 2: Fix trailing commas (common LLM mistake)
+		// Salvage Step 2: Recursive Deep Salvage (Handle early closure hallucinations)
+		// If the model closed a block prematurely, e.g., "...Deal size." } ], "next_key":...
+		// We look for patterns like " } ], " or " } , " and try to remove the erroneous closure.
+		$salvaged = preg_replace( '/"(\s*)\}\s*\]\s*,\s*"/', '"$1, "', $text );
+		$salvaged = preg_replace( '/"(\s*)\}\s*,\s*"/', '"$1, "', $salvaged );
+		$data = json_decode( $salvaged, true );
+		if ( JSON_ERROR_NONE === json_last_error() ) {
+			return $data;
+		}
+
+		// Salvage Step 3: Fix trailing commas (common LLM mistake)
 		$fixed = preg_replace( '/,\s*([\]\}])/', '$1', $text );
 		$data  = json_decode( $fixed, true );
 		if ( JSON_ERROR_NONE === json_last_error() ) {

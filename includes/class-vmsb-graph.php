@@ -104,18 +104,50 @@ class VMSB_Graph {
 	}
 
 	/**
-	 * Data provider for the Internal Link Heatmap.
-	 * Calculates 'Link Juice' flow based on inbound edges.
+	 * Export the graph in a format suitable for D3.js or other node-based visualizers.
 	 */
-	public static function get_link_density_map() {
+	public static function export_for_visualization( $limit = 100 ) {
 		global $wpdb;
-		return $wpdb->get_results(
-			"SELECT object_id as post_id, COUNT(*) as inbound_links, SUM(weight) as total_weight
-			 FROM " . self::table() . "
-			 WHERE predicate IN ('belongs_to', 'links_to', 'references')
-			 AND object_type = 'post'
-			 GROUP BY object_id
-			 ORDER BY inbound_links DESC"
-		);
+		$table = self::table();
+
+		$edges = $wpdb->get_results( $wpdb->prepare( "SELECT subject_id, subject_type, predicate, object_id, object_type FROM {$table} LIMIT %d", $limit ) );
+
+		$nodes = array();
+		$links = array();
+		$node_indices = array();
+
+		foreach ( $edges as $e ) {
+			$s_id = "{$e->subject_type}_{$e->subject_id}";
+			$o_id = "{$e->object_type}_{$e->object_id}";
+
+			if ( ! isset($node_indices[$s_id]) ) {
+				$node_indices[$s_id] = count($nodes);
+				$nodes[] = array(
+					'id'    => $s_id,
+					'name'  => ($e->subject_type === 'post') ? get_the_title($e->subject_id) : $e->subject_id,
+					'type'  => $e->subject_type,
+					'group' => ($e->subject_type === 'post') ? 1 : 2
+				);
+			}
+
+			if ( ! isset($node_indices[$o_id]) ) {
+				$node_indices[$o_id] = count($nodes);
+				$nodes[] = array(
+					'id'    => $o_id,
+					'name'  => ($e->object_type === 'post') ? get_the_title($e->object_id) : $e->object_id,
+					'type'  => $e->object_type,
+					'group' => ($e->object_type === 'post') ? 1 : ($e->object_type === 'entity' ? 3 : 2)
+				);
+			}
+
+			$links[] = array(
+				'source' => $s_id,
+				'target' => $o_id,
+				'value'  => 1,
+				'label'  => $e->predicate
+			);
+		}
+
+		return array( 'nodes' => $nodes, 'links' => $links );
 	}
 }

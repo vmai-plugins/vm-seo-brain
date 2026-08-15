@@ -161,12 +161,17 @@
 		if ( route === 'revert' )          { return 'Reverted. The page is back to how it was before the fix.'; }
 		if ( route === 'pending-approve' ) { return 'Draft approved and published.'; }
 		if ( route === 'pending-reject' )  { return 'Draft discarded — issue reopened.'; }
+		if ( route === 'action-rollback' ) { return 'Action rolled back successfully.'; }
+		if ( route === 'rollback-recent' ) { return data.reverted + ' action(s) reverted to their previous state.'; }
 		if ( route === 'license-verify' )  { return 'Success! Your ' + data.plan + ' plan is now active.'; }
+		if ( route === 'opportunity-scan' ) { return 'Found ' + data.found + ' opportunities. Refreshing...'; }
+		if ( route === 'evaluate-pivot' ) { return 'Strategic Pivot decided: ' + data.pivot_name; }
+		if ( route === 'video-to-blog' ) { return 'Video transformed. New pillar post queued in Content Factory.'; }
 		return JSON.stringify( data, null, 2 );
 	}
 
 	function reloadIfNeeded( route ) {
-		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert', 'license-verify', 'cluster-architect', 'battle-roadmap', 'growth-scan', 'growth-suggestion-approve', 'growth-suggestion-reject', 'agents-run-strategist' ];
+		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert', 'license-verify', 'cluster-architect', 'battle-roadmap', 'growth-scan', 'growth-suggestion-approve', 'growth-suggestion-reject', 'agents-run-strategist', 'opportunity-scan', 'evaluate-pivot', 'action-rollback', 'video-to-blog' ];
 		if ( routes.indexOf( route ) !== -1 ) {
 			const msg = ( route === 'import-topics' || route === 'pull-bulk-topics' ) ? '&vmsb_msg=import_done' : ( route === 'license-verify' ? '&vmsb_msg=license_active' : '' );
 			setTimeout( () => {
@@ -422,6 +427,92 @@
 		}
 	} );
 
+	// Global Search Handler
+	let searchTimeout;
+	$( document ).on( 'input', '.vmsb-global-search input', function() {
+		const q = $(this).val();
+		const wrapper = $(this).parent();
+		clearTimeout(searchTimeout);
+
+		if ( q.length < 3 ) {
+			$('.vmsb-search-results').remove();
+			return;
+		}
+
+		searchTimeout = setTimeout( async () => {
+			try {
+				const results = await call('global-search', { q: q });
+				$('.vmsb-search-results').remove();
+
+				if ( results.length ) {
+					let html = '<div class="vmsb-search-results" style="position:absolute; top:100%; left:0; right:0; background:var(--panel); border:1px solid var(--line); border-radius:12px; margin-top:10px; z-index:1000; box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden;">';
+					results.forEach( r => {
+						html += `<a href="${r.url}" style="display:block; padding:12px 15px; text-decoration:none; color:var(--text); border-bottom:1px solid rgba(255,255,255,0.03);">
+							<span class="vmsb-tag" style="font-size:9px; margin-bottom:5px;">${esc(r.type)}</span>
+							<strong style="display:block; font-size:13px;">${esc(r.label)}</strong>
+							<small class="vmsb-note">${esc(r.note)}</small>
+						</a>`;
+					});
+					html += '</div>';
+					wrapper.append(html);
+				}
+			} catch (e) {}
+		}, 300);
+	});
+
+	$(document).on('click', function(e) {
+		if ( ! $(e.target).closest('.vmsb-global-search').length ) {
+			$('.vmsb-search-results').remove();
+		}
+		if ( ! $(e.target).closest('#vmsb-notifications-trigger').length ) {
+			$('.vmsb-notification-dropdown').remove();
+		}
+	});
+
+	// Notifications Hub
+	async function loadNotifications() {
+		try {
+			const notes = await call('notifications', {});
+			const trigger = $('#vmsb-notifications-trigger');
+			const badge = trigger.find('.vmsb-count');
+
+			if ( notes.length ) {
+				badge.text(notes.length).prop('hidden', false);
+			} else {
+				badge.prop('hidden', true);
+			}
+		} catch (e) {}
+	}
+
+	$( document ).on( 'click', '#vmsb-notifications-trigger', async function() {
+		const trigger = $(this);
+		if ( $('.vmsb-notification-dropdown').length ) {
+			$('.vmsb-notification-dropdown').remove();
+			return;
+		}
+
+		try {
+			const notes = await call('notifications', {});
+			let html = '<div class="vmsb-notification-dropdown">';
+
+			if ( ! notes.length ) {
+				html += '<div style="padding:30px; text-align:center;"><p class="vmsb-note">No active alerts.</p></div>';
+			} else {
+				notes.forEach( n => {
+					html += `<a href="${n.url}" class="vmsb-note-item level-${n.level}">
+						<strong>${esc(n.title)}</strong>
+						<p>${esc(n.message)}</p>
+					</a>`;
+				});
+			}
+			html += '</div>';
+			trigger.parent().css('position', 'relative').append(html);
+		} catch (e) {}
+	});
+
+	loadNotifications();
+	setInterval(loadNotifications, 60000);
+
 	// Modern Popup Chat Handler
 	const popupRoot = $( '#vmsb-commander-root' );
 	if ( popupRoot.length ) {
@@ -549,6 +640,66 @@
 			btn.text('🧠');
 		}
 	});
+
+	// Task Detail View
+	$( document ).on( 'click', '[data-vmsb-task-view]', async function() {
+		const id = $( this ).data( 'vmsb-task-view' );
+		const btn = $( this );
+		const label = btn.text();
+		btn.text( '…' );
+
+		try {
+			const data = await call( 'task-detail', { id: id } );
+
+			const timelineHtml = data.timeline.map( t => `
+				<div class="vmsb-timeline-item" style="display:flex; gap:15px; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.03);">
+					<span class="vmsb-note" style="width:140px; flex-shrink:0;">${t.time}</span>
+					<div style="flex:1;">
+						<strong style="display:block; font-size:13px; color:var(--gold-soft);">${esc(t.event)}</strong>
+						<p class="vmsb-note" style="margin:4px 0 0;">${esc(t.note)}</p>
+					</div>
+				</div>
+			` ).join('');
+
+			const html = `<div class="vmsb-insight-overlay">
+				<div class="vmsb-insight-modal">
+					<header>
+						<h3>Task Detail: #${data.id} — ${esc(data.type)}</h3>
+						<button class="vmsb-modal-close">✕</button>
+					</header>
+					<div class="vmsb-insight-body">
+						<div class="vmsb-flex-space" style="margin-bottom:25px;">
+							<div>
+								<span class="vmsb-note">Status</span>
+								<div class="vmsb-tag ${data.status === 'done' ? 'vmsb-tag-good' : (data.status === 'failed' ? 'vmsb-tag-crit' : 'vmsb-tag-blue')}">${esc(data.status.toUpperCase())}</div>
+							</div>
+							<div style="text-align:right;">
+								<span class="vmsb-note">Priority Score</span>
+								<div style="font-size:24px; font-weight:800; font-family:var(--serif); color:var(--gold);">${data.score}</div>
+							</div>
+						</div>
+
+						<h4 style="margin-bottom:15px; font-size:14px; text-transform:uppercase;">Execution Timeline</h4>
+						<div class="vmsb-timeline-container" style="max-height:400px; overflow-y:auto; padding-right:10px;">
+							${timelineHtml || '<p class="vmsb-note">No timeline events recorded.</p>'}
+						</div>
+
+						${data.error ? `
+							<div class="vmsb-alert" style="margin-top:20px; border-color:var(--crit); background:rgba(255,77,77,0.05);">
+								<strong>Last Error:</strong><br>${esc(data.error)}
+							</div>
+						` : ''}
+					</div>
+				</div>
+			</div>`;
+
+			$( 'body' ).append( html );
+		} catch ( e ) {
+			alert( 'Failed to load task details.' );
+		} finally {
+			btn.text( label );
+		}
+	} );
 
 	// Pending-Review Draft Preview
 	$( document ).on( 'click', '[data-vmsb-pending-view]', async function() {
@@ -747,5 +898,9 @@
 			btn.prop('disabled', false).text(label);
 		}
 	});
+
+	// Expose for inline usage
+	VMSB.call = call;
+	VMSB.api  = call;
 
 } )( jQuery );

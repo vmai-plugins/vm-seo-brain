@@ -95,6 +95,27 @@ class VMSB_AEO {
 	}
 
 	/**
+	 * SGE Mastery: Generate advanced content features for AI Search Engines.
+	 * Includes Comparison Tables, Quick Summaries, and "AI Snapshot" blocks.
+	 */
+	public function generate_sge_features( $post_id ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) return array();
+
+		$brain  = new VMSB_Brain();
+		$prompt = "Act as an SGE Optimization Specialist (Search Generative Experience).\n"
+			. "ARTICLE: \"{$post->post_title}\"\n"
+			. "CONTENT: " . mb_substr( wp_strip_all_tags($post->post_content), 0, 5000 ) . "\n\n"
+			. "TASK: Create high-utility features that AI search engines (Gemini/Perplexity) love to quote.\n"
+			. "1. A 'Key Takeaways' summary block.\n"
+			. "2. A 'Comparison Table' or 'Fact Sheet' if the content involves choices, data, or technical specs.\n"
+			. "3. A 'Quick Definition' for the primary term.\n\n"
+			. 'Return JSON: {"summary_html":"","table_html":"","definition_html":"","features_added":[]}';
+
+		return $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'complexity' => 'premium', 'persona' => 'auditor' ) );
+	}
+
+	/**
 	 * Insert a direct-answer block for the strongest question, if one is
 	 * missing near the top. Routed through the rollback-style revert payload
 	 * so it can be undone like any other fix.

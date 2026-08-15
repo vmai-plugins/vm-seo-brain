@@ -56,6 +56,11 @@ class VMSB_Strategist {
 			'hydrate_pipeline' => array( 'content',     0.5, 40 ),
 			'sheet_sync'       => array( 'content',     0.5, 30 ),
 			'growth_scan'      => array( 'growth',      1.0, 55 ),
+			'content_defense'  => array( 'brain',       1.5, 75 ),
+			'semantic_mesh'    => array( 'silo',        1.0, 50 ),
+			'video_pipeline'   => array( 'content',     2.0, 60 ),
+			'freshness_boost'  => array( 'brain',       1.0, 55 ),
+			'opportunity_scan' => array( 'brain',       1.0, 50 ),
 		);
 	}
 
@@ -94,6 +99,10 @@ class VMSB_Strategist {
 			'competitor_blitz'=> 'competitor_enabled',
 			'sheet_sync'      => 'google_refresh_token',
 			'growth_scan'     => 'auto_growth_mode',
+			'content_defense' => 'learning_enabled',
+			'semantic_mesh'   => 'vector_enabled',
+			'video_pipeline'  => 'content_enabled',
+			'freshness_boost' => 'god_mode',
 		)[ $task ] ?? null;
 	}
 
@@ -172,6 +181,11 @@ class VMSB_Strategist {
 			'silo_integrity'   => "Finds the weakest content silo and queues supporting posts to reinforce it.",
 			'niche_expansion'  => 'Expands the keyword universe into adjacent, unclaimed territory.',
 			'monitor_decay'    => 'Flags pages that are losing traffic before the drop becomes serious.',
+			'content_defense'  => 'Strategic monitor that auto-heals posts that have lost their Top 3 position.',
+			'semantic_mesh'    => 'Builds a dense web of internal links based on semantic vector distance.',
+			'video_pipeline'   => 'Generates YouTube scripts and video AI prompts for your best-performing content.',
+			'freshness_boost'  => 'Injects real-time "Live Intelligence Updates" into high-traffic content to signal authority.',
+			'opportunity_scan' => 'Runs the 21-step discovery cycle to identify growth gaps.',
 			'social_recycle'   => 'Repackages recent posts into a social distribution pack (LinkedIn/X/Facebook/YouTube).',
 			'link_autopilot'   => 'Funnels internal link authority toward rising pages automatically.',
 			'competitor_blitz' => 'Aggressively targets keywords where competitors are ranking but vulnerable.',
@@ -216,6 +230,11 @@ class VMSB_Strategist {
 			'hydrate_pipeline' => 'Pipeline Hydrator',
 			'sheet_sync'       => 'Sheet Sync Agent',
 			'growth_scan'      => 'Growth Scanner',
+			'content_defense'  => 'Strategic Defender',
+			'semantic_mesh'    => 'Semantic Mesher',
+			'video_pipeline'   => 'Video Producer',
+			'freshness_boost'  => 'Freshness Scout',
+			'opportunity_scan' => 'Opportunity Engine',
 		);
 		return isset( $labels[ $task ] ) ? $labels[ $task ] : ucwords( str_replace( '_', ' ', $task ) );
 	}
@@ -387,6 +406,18 @@ class VMSB_Strategist {
 			case 'sheet_sync':
 				return $state['gsc_connected'] ? $base : 0;
 
+			case 'content_defense':
+				return $state['published_posts'] >= 5 ? $base : 0;
+
+			case 'semantic_mesh':
+				return $state['published_posts'] >= 10 ? $base : 0;
+
+			case 'video_pipeline':
+				return $state['published_posts'] >= 5 ? $base : 0;
+
+			case 'freshness_boost':
+				return $state['published_posts'] >= 3 ? $base : 0;
+
 			case 'growth_scan':
 				$last = (int) get_option( 'vmsb_last_growth_scan', 0 );
 				if ( ( time() - $last ) < DAY_IN_SECONDS ) {
@@ -421,6 +452,10 @@ class VMSB_Strategist {
 			case 'auto_fix_queue': $parts[] = 'draining the 4000+ issues queue'; break;
 			case 'silo_integrity': $parts[] = 'plugging authority gaps in weak silos'; break;
 			case 'monitor_decay':  $parts[] = 'rescuing traffic-dropping pages'; break;
+			case 'content_defense': $parts[] = 'healing Top 3 drops'; break;
+			case 'semantic_mesh':   $parts[] = 'weaving internal link web'; break;
+			case 'video_pipeline':  $parts[] = 'generating viral production packs'; break;
+			case 'freshness_boost': $parts[] = 'signaling QDF authority'; break;
 			case 'thief_scout':    $parts[] = 'hijacking competitor gaps'; break;
 			case 'social_recycle': $parts[] = 'generating social distribution packs'; break;
 			case 'link_autopilot': $parts[] = 'funneling Juice to rising stars'; break;

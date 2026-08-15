@@ -15,10 +15,13 @@ class VMSB_Internal_Link_Autopilot {
 
 	/**
 	 * Run an authority-funneling pass.
-	 * Advanced 2026: Hierarchy + Cross-Silo Bridges.
+	 * Advanced 2026: Hierarchy + Cross-Silo Bridges + Juice Rebalancing.
 	 */
 	public function funnel_authority( $limit = 10 ) {
 		$this->rescue_orphans( 5 );
+
+		// 0. Juice Rebalancing (Funnel to Rising Stars)
+		$fixed = $this->rebalance_juice( 3 );
 
 		$silo_engine = new VMSB_Silo();
 		$silos = $silo_engine->map_for_display();
@@ -54,6 +57,38 @@ class VMSB_Internal_Link_Autopilot {
 			$this->log->info( 'silo', "Authority Funnel: Successfully established {$fixed} internal connections." );
 		}
 
+		return $fixed;
+	}
+
+	/**
+	 * Juice Rebalancer: Funnels internal link authority to "Rising Stars".
+	 * Rising Stars = High impressions, position 4-15 (striking distance).
+	 */
+	public function rebalance_juice( $limit = 3 ) {
+		$keywords = new VMSB_Keywords();
+		$stars = $keywords->striking_distance( 10 );
+		if ( ! $stars ) return 0;
+
+		$fixed = 0;
+		$silo_engine = new VMSB_Silo();
+
+		foreach ( $stars as $star ) {
+			if ( $fixed >= $limit ) break;
+			if ( ! $star->post_id ) continue;
+
+			// Find top semantic relatives to link FROM
+			$relatives = VMSB_Vector_Store::related_posts( $star->post_id, 3 );
+			foreach ( $relatives as $rel ) {
+				if ( ! $this->has_link( $rel['ID'], $star->post_id ) ) {
+					$res = $silo_engine->insert_internal_link( $rel['ID'], $star->post_id );
+					if ( ! is_wp_error($res) ) {
+						$fixed++;
+						$this->log->info( 'silo', "Juice Rebalance: Funneled authority from #{$rel['ID']} to Rising Star #{$star->post_id}." );
+						break; // One link per star per pass to maintain natural flow
+					}
+				}
+			}
+		}
 		return $fixed;
 	}
 

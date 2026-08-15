@@ -17,22 +17,27 @@ class VMSB_Decay {
 
 	/**
 	 * Scan for decaying content.
-	 * Advanced 2026: Dual-Window detection (Standard & Rapid).
+	 * Advanced 2026: Multi-Signal detection including Predictive Velocity and Semantic Staleness.
 	 */
 	public function monitor( $limit = 10 ) {
 		if ( ! $this->google->is_connected() ) {
 			return 0;
 		}
 
-		// Pull traffic data for comparison
-		$current = $this->google->gsc_query( array( 'page' ), 30, 500 );
+		// Pull traffic data for comparison (last 28 days)
+		$current = $this->google->gsc_query( array( 'page', 'query' ), 28, 500 );
 		if ( is_wp_error( $current ) ) return 0;
 
 		$found = 0;
+		$processed_urls = array();
+
 		foreach ( $current as $row ) {
 			if ( $found >= $limit ) break;
 
 			$url = $row['keys'][0];
+			if ( in_array($url, $processed_urls) ) continue;
+			$processed_urls[] = $url;
+
 			$post_id = url_to_postid( $url );
 			if ( ! $post_id ) continue;
 
@@ -41,8 +46,25 @@ class VMSB_Decay {
 
 			$clicks_now = (int) $row['clicks'];
 			$imp_now    = (int) $row['impressions'];
+			$pos_now    = (float) $row['position'];
 
-			// 1. Rapid Decay Check (Last 7 days vs previous 7 days)
+			// 1. Semantic Staleness Check: Year-based outdating (e.g. "Best of 2024")
+			$post = get_post($post_id);
+			$prev_year = (int)date('Y') - 1;
+			if ( stripos($post->post_title, (string)$prev_year) !== false ) {
+				( new VMSB_Fixer() )->record( 'post', $post_id, 'semantic_stale', 'high', "Semantic Staleness: Title uses an outdated year ({$prev_year})." );
+				$found++;
+				continue;
+			}
+
+			// 2. CTR Anomaly: High reach, low engagement
+			if ( $imp_now > 1000 && ($clicks_now / $imp_now) < 0.01 ) {
+				( new VMSB_Fixer() )->record( 'post', $post_id, 'low_ctr_anomaly', 'medium', "CTR Anomaly: Page has high impressions ({$imp_now}) but <1% CTR. Snippet needs re-optimization." );
+				$found++;
+				continue;
+			}
+
+			// 3. Rapid Decay Check (Last 7 days vs previous 7 days)
 			$rapid_metrics = $this->google->gsc_page_metrics( $url, 7, 0 );
 			$prev_7_metrics = $this->google->gsc_page_metrics( $url, 7, 8 );
 
@@ -54,8 +76,8 @@ class VMSB_Decay {
 				}
 			}
 
-			// 2. Standard Decay Check (30 days)
-			if ( $clicks_now < 30 ) continue; // Ignore very low traffic pages
+			// 4. Standard Decay Check (30 days)
+			if ( $clicks_now < 30 ) continue;
 
 			$prev_metrics = $this->google->gsc_page_metrics( $url, 30, 31 );
 			if ( empty( $prev_metrics ) || is_wp_error( $prev_metrics ) || (int)$prev_metrics['clicks'] === 0 ) continue;

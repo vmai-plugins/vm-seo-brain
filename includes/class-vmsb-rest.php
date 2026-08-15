@@ -109,6 +109,17 @@ class VMSB_REST {
 			'verify-ai'           => 'verify_ai',
 			'test-image-provider' => 'test_image_provider',
 			'sync-models'         => 'sync_models',
+			'opportunity-scan'    => 'opportunity_scan',
+			'action-rollback'     => 'action_rollback',
+			'rollback-recent'     => 'rollback_recent',
+			'task-detail'         => 'task_detail',
+			'task-cancel'         => 'task_cancel',
+			'global-search'       => 'global_search',
+			'evaluate-pivot'      => 'evaluate_pivot',
+			'graph-data'          => 'graph_data',
+			'video-to-blog'       => 'video_to_blog',
+			'generate-report'     => 'generate_report',
+			'notifications'       => 'notifications',
 		);
 
 		foreach ( $routes as $path => $callback ) {
@@ -818,5 +829,79 @@ class VMSB_REST {
 			return rest_ensure_response( array( $provider => $models ) );
 		}
 		return rest_ensure_response( VMSB_Model_Sync::sync_all() );
+	}
+
+	public function opportunity_scan( $request ) {
+		$engine = new VMSB_Opportunity_Engine();
+		$count = $engine->discover_all();
+		$ops = (new VMSB_Brain())->recall('intelligence', 'active_opportunities');
+		return rest_ensure_response( array( 'found' => $count, 'opportunities' => $ops ) );
+	}
+
+	public function action_rollback( $request ) {
+		$id = (int) $request->get_param( 'id' );
+		$res = VMSB_Actions::rollback( $id );
+		if ( is_wp_error($res) ) return $res;
+		return rest_ensure_response( array( 'success' => true ) );
+	}
+
+	public function rollback_recent( $request ) {
+		global $wpdb;
+		$count = (int) $request->get_param( 'count' ) ?: 5;
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}vmsb_actions WHERE rollback_status != 'completed' ORDER BY created_at DESC LIMIT %d", $count ) );
+
+		$reverted = 0;
+		foreach ( $ids as $id ) {
+			if ( ! is_wp_error( VMSB_Actions::rollback($id) ) ) $reverted++;
+		}
+		return rest_ensure_response( array( 'reverted' => $reverted ) );
+	}
+
+	public function evaluate_pivot( $request ) {
+		$pivot = (new VMSB_Brain())->evaluate_and_replan();
+		return rest_ensure_response( $pivot );
+	}
+
+	public function generate_report( $request ) {
+		$res = (new VMSB_Reporting())->generate_boardroom_report();
+		if ( ! $res ) return new WP_Error( 'vmsb_rest', 'Failed to generate boardroom report.' );
+		return rest_ensure_response( array( 'success' => true, 'report' => $res ) );
+	}
+
+	public function notifications( $request ) {
+		return rest_ensure_response( VMSB_Notifications::get_all() );
+	}
+
+	public function global_search( $request ) {
+		global $wpdb;
+		$q = sanitize_text_field( $request->get_param( 'q' ) );
+		if ( strlen($q) < 3 ) return array();
+
+		$results = array();
+
+		// 1. Keywords
+		$kws = $wpdb->get_results( $wpdb->prepare( "SELECT keyword, position FROM {$wpdb->prefix}vmsb_keywords WHERE keyword LIKE %s LIMIT 5", '%' . $q . '%' ) );
+		foreach ( $kws as $k ) $results[] = array( 'type' => 'Keyword', 'label' => $k->keyword, 'note' => "Pos #{$k->position}", 'url' => admin_url('admin.php?page=vmsb-seo&tab=keywords') );
+
+		// 2. Posts
+		$posts = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_title FROM {$wpdb->posts} WHERE post_title LIKE %s AND post_status = 'publish' LIMIT 5", '%' . $q . '%' ) );
+		foreach ( $posts as $p ) $results[] = array( 'type' => 'Page', 'label' => $p->post_title, 'note' => 'Published', 'url' => get_edit_post_link($p->ID) );
+
+		// 3. Tasks
+		$tasks = $wpdb->get_results( $wpdb->prepare( "SELECT id, task_type, reason FROM {$wpdb->prefix}vmsb_tasks WHERE reason LIKE %s LIMIT 3", '%' . $q . '%' ) );
+		foreach ( $tasks as $t ) $results[] = array( 'type' => 'Task', 'label' => VMSB_Strategist::agent_label($t->task_type), 'note' => $t->reason, 'url' => admin_url('admin.php?page=vmsb-production') );
+
+		// 4. Competitors
+		$comps = $wpdb->get_results( $wpdb->prepare( "SELECT domain, label FROM {$wpdb->prefix}vmsb_competitors WHERE domain LIKE %s OR label LIKE %s LIMIT 3", '%' . $q . '%', '%' . $q . '%' ) );
+		foreach ( $comps as $c ) $results[] = array( 'type' => 'Competitor', 'label' => $c->label ?: $c->domain, 'note' => $c->domain, 'url' => admin_url('admin.php?page=vmsb-seo&tab=competitors') );
+
+		return rest_ensure_response( $results );
+	}
+
+	public function task_cancel( $request ) {
+		global $wpdb;
+		$id = (int) $request->get_param( 'id' );
+		$wpdb->delete( "{$wpdb->prefix}vmsb_tasks", array( 'id' => $id ) );
+		return rest_ensure_response( array( 'success' => true ) );
 	}
 }

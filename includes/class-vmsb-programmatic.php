@@ -37,16 +37,24 @@ class VMSB_Programmatic {
 
 	/**
 	 * Build a set of plan rows from a template + variable list.
-	 * Enhanced with Sentient Brief logic to ensure 100/100 quality.
+	 * Enhanced with Sentient Brief logic, Uniqueness Gates, and Dry Run support.
 	 */
-	public function build_set( $template, array $variables, $base_keyword = '' ) {
+	public function build_set( $template, array $variables, $base_keyword = '', $dry_run = false ) {
 		if ( ! $this->is_enabled() ) {
 			return new WP_Error( 'vmsb_pseo', 'Programmatic SEO is not enabled.' );
 		}
 
 		$combos = self::expand( $template, $variables );
 		if ( ! $combos ) {
-			return new WP_Error( 'vmsb_pseo', 'No combinations produced from the template and variables.' );
+			return new WP_Error( 'vmsb_pseo', 'No combinations produced.' );
+		}
+
+		if ( $dry_run ) {
+			$previews = array();
+			foreach ( array_slice($combos, 0, 5) as $combo ) {
+				$previews[] = strtr( $template, self::braces( $combo ) );
+			}
+			return array( 'dry_run' => true, 'count' => count($combos), 'previews' => $previews );
 		}
 
 		$remaining = $this->remaining_today();
@@ -57,24 +65,34 @@ class VMSB_Programmatic {
 		}
 
 		$created = 0;
+		$this->log->info( 'programmatic', "Building pSEO batch for template: '{$template}'" );
+
+		// Travel Scenario Logic: Detect CPT Target
+		$target_cpt = 'post';
+		if ( strpos(strtolower($template), 'destination') !== false && post_type_exists('destinations') ) {
+			$target_cpt = 'destinations';
+		} elseif ( strpos(strtolower($template), 'event') !== false && post_type_exists('events') ) {
+			$target_cpt = 'events';
+		}
+
 		foreach ( $combos as $combo ) {
 			$title = strtr( $template, self::braces( $combo ) );
 			$var_value = reset($combo); // Usually first var is the main one (city/product)
 
-			// PORTED: Sentient Brief Generation
+			// PORTED: Sentient Brief Generation (Pre-researching uniqueness)
 			$brief = $this->generate_sentient_brief( $title, $var_value );
 
 			$row = array(
-				'row_uid'            => substr(md5($title . '|pseo'), 0, 24),
+				'row_uid'            => substr(md5($title . '|' . wp_json_encode($combo)), 0, 24),
 				'title'              => $title,
 				'primary_keyword'    => trim( $base_keyword . ' ' . implode( ' ', $combo ) ),
 				'cluster'            => 'programmatic',
 				'intent'             => 'transactional',
-				'content_type'       => 'programmatic',
-				'brief'              => $brief,
+				'content_type'       => $target_cpt, // Use detected CPT
+				'brief'              => "SENTIENT pSEO BRIEF: " . $brief,
 				'internal_links'     => wp_json_encode( array() ),
 				'target_words'       => 1200,
-				'priority'           => 1.0,
+				'priority'           => 1.5,
 				'status'             => 'planned',
 				'created_at'         => current_time( 'mysql' ),
 				'updated_at'         => current_time( 'mysql' ),

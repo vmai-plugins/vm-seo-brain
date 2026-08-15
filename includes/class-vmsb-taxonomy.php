@@ -179,7 +179,7 @@ class VMSB_Taxonomy {
 		$data = $this->ai->generate_json(
 			"Write the archive copy for a WordPress {$taxonomy} named \"{$term->name}\".\n"
 			. 'Posts inside it: ' . implode( ' | ', $titles ) . "\n\n"
-			. "The description is a real introduction a reader benefits from, 120 to 200 words, explaining what this topic covers and who it is for. Not a keyword list.\n"
+			. "The description is a high-impact introduction for the archive page, between 60 and 90 words. Focus on utility and topical depth. No fluff.\n"
 			. "The SEO title is under 60 characters. The meta description is under 155 characters and gives a reason to click.\n\n"
 			. 'Return JSON: {"seo_title":"","meta_description":"","archive_intro":"","focus_keyword":""}',
 			array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 900, 'temperature' => 0.5 )

@@ -121,6 +121,17 @@ class VMSB_Health {
 			);
 		}
 
+		// GA4 Intelligence Health
+		$ga4 = new VMSB_GA4();
+		if ( $ga4->is_connected() ) {
+			$ga4_audit = $ga4->audit_integrity();
+			$checks['ga4'] = array(
+				'label'  => 'Google Analytics 4',
+				'ok'     => $ga4_audit['ok'],
+				'detail' => $ga4_audit['ok'] ? "Healthy. {$ga4_audit['events_detected']} events tracked." : "Tracking Issues: " . ($ga4_audit['message'] ?? 'Critical events missing.'),
+			);
+		}
+
 		// AI Link Genius Pro Integration
 		if ( class_exists( 'AILG_Core' ) ) {
 			global $wpdb;

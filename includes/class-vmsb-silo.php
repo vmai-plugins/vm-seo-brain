@@ -297,6 +297,77 @@ class VMSB_Silo {
 	}
 
 	/**
+	 * Semantic Mesh: Builds natural links between semantically related posts
+	 * regardless of their silo structure. Uses Vector Distance for discovery.
+	 */
+	public function build_semantic_mesh( $limit = 5 ) {
+		if ( ! (int) VMSB_Settings::get( 'vector_enabled' ) || ! class_exists( 'VMSB_Vector_Store' ) ) {
+			return array( 'skipped' => 'Vector store disabled' );
+		}
+
+		$this->log->info( 'silo', 'Executing Semantic Mesh pass (High-Fidelity Mode)...' );
+
+		global $wpdb;
+		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
+		$types_sql  = "'" . implode( "','", array_map( 'esc_sql', $safe_types ) ) . "'";
+
+		// Pick posts that need linking (prioritizing new or least-linked ones)
+		$post_ids = $wpdb->get_col( $wpdb->prepare(
+			"SELECT p.ID FROM {$wpdb->posts} p
+			 LEFT JOIN {$wpdb->postmeta} m ON p.ID = m.post_id AND m.meta_key = '_vmsb_last_mesh'
+			 WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql})
+			 ORDER BY m.meta_value ASC, p.post_date DESC LIMIT %d",
+			(int) $limit
+		) );
+
+		if ( ! $post_ids ) return array( 'linked' => 0 );
+
+		$linked_total = 0;
+		foreach ( $post_ids as $id ) {
+			// Find top 3 semantic relatives with high similarity (>0.80)
+			$relatives = VMSB_Vector_Store::related_posts( $id, 3, 0.80 );
+			if ( ! $relatives ) continue;
+
+			foreach ( $relatives as $rel ) {
+				// Don't link if already connected
+				if ( $this->has_connection( $id, $rel['ID'] ) ) continue;
+
+				// Decide direction: link FROM older/established post TO the target
+				$source_id = $id;
+				$target_id = $rel['ID'];
+
+				$res = $this->insert_internal_link( $source_id, $target_id );
+				if ( ! is_wp_error($res) && $res !== true ) {
+					$linked_total++;
+					VMSB_Actions::record( array(
+						'object_type' => 'post',
+						'object_id'   => $source_id,
+						'action_type' => 'semantic_link',
+						'before'      => $res['post_content'],
+						'after'       => get_post_field('post_content', $source_id),
+						'reason'      => "Semantic Mesh: Linking to related authority '{$rel['title']}' (Score: {$rel['score']})"
+					) );
+				}
+			}
+			update_post_meta( $id, '_vmsb_last_mesh', time() );
+		}
+
+		return array( 'linked' => $linked_total );
+	}
+
+	private function has_connection( $id1, $id2 ) {
+		$c1 = get_post_field('post_content', $id1);
+		$u2 = get_permalink($id2);
+		if ( strpos($c1, $u2) !== false ) return true;
+
+		$c2 = get_post_field('post_content', $id2);
+		$u1 = get_permalink($id1);
+		if ( strpos($c2, $u1) !== false ) return true;
+
+		return false;
+	}
+
+	/**
 	 * A visual map for the dashboard.
 	 * Upgraded to provide data for the Radar Chart (Strength and Concentration).
 	 */

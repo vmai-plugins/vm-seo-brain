@@ -148,7 +148,20 @@
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rn \"orphan_from_pillar\\\\|'pillar_id'\" --include=*.php .)",
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function apply\\\\|function revert\\\\|function get_local_metrics\" -A 3 includes/class-vmsb-rankmath.php | head -60)",
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"private function scan_index_coverage\" -A 45 includes/class-vmsb-fixer.php)",
-      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rn \"fixer->record\\(\\\\|\\\\$this->record\\(\" --include=*.php . | grep -v \"class-vmsb-fixer.php\")"
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rn \"fixer->record\\(\\\\|\\\\$this->record\\(\" --include=*.php . | grep -v \"class-vmsb-fixer.php\")",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function monitor\" -A 30 includes/class-vmsb-decay.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function plan_expansion\" -A 50 includes/class-vmsb-niche-planner.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function discover_fresh_clusters\\\\|function plan_for_silo\" -A 25 includes/class-vmsb-niche-planner.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"CREATE TABLE.*vmsb_plan\\\\b\" -A 30 vm-seo-brain.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rln \"vmsb_plan \\(\" --include=*.php . ; echo \"---\"; grep -rln \"CREATE TABLE\" --include=*.php . )",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"CREATE TABLE\" vm-seo-brain.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rn \"content_type\" --include=*.php . )",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rn \"site_custom_post_types\" --include=*.php .)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function gather_evidence\" -A 40 includes/class-vmsb-brain.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"public function plan_specific\" -A 25 includes/class-vmsb-content.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-cluster-architect.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function get_chain\" -A 40 includes/class-vmsb-ai-router.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-actions.php)"
     ]
   }
 }

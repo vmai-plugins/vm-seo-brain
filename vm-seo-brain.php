@@ -53,7 +53,7 @@ spl_autoload_register(
  */
 final class VMSB_Install {
 
-	const DB_VERSION = '1.10.0'; // 1.10.0: + vmsb_keywords.serp_features
+	const DB_VERSION = '1.11.1'; // 1.11.1: Fixed dbDelta syntax for tasks table
 
 	public static function activate() {
 		self::tables();
@@ -123,10 +123,11 @@ final class VMSB_Install {
 			UNIQUE KEY keyword (keyword),
 			KEY cluster (cluster),
 			KEY opportunity (opportunity),
-			KEY status (status),
-			KEY impressions (impressions),
-			KEY position (position),
-			KEY source (source)
+		KEY status (status),
+		KEY impressions (impressions),
+		KEY position (position),
+		KEY source (source),
+		KEY post_status (post_id, status)
 		) {$charset};";
 
 		// Content plan / editorial queue mirrored to Google Sheets.
@@ -179,7 +180,8 @@ final class VMSB_Install {
 			PRIMARY KEY (id),
 			KEY object (object_type, object_id),
 			KEY rule (rule),
-			KEY status (status)
+			KEY status (status),
+			KEY rule_status (rule, status)
 		) {$charset};";
 
 		// Daily metric snapshots powering the growth model.
@@ -209,6 +211,28 @@ final class VMSB_Install {
 			PRIMARY KEY (id),
 			KEY channel (channel),
 			KEY created_at (created_at)
+		) {$charset};";
+
+		// Centralized Action Log (X-Standard: Rollback & Explainability).
+		$sql[] = "CREATE TABLE {$p}actions (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			task_id BIGINT UNSIGNED NULL,
+			object_type VARCHAR(32) NOT NULL,
+			object_id BIGINT UNSIGNED NOT NULL,
+			action_type VARCHAR(64) NOT NULL,
+			before_value LONGTEXT NULL,
+			after_value LONGTEXT NULL,
+			reason TEXT NULL,
+			model VARCHAR(64) NULL,
+			tokens_in INT DEFAULT 0,
+			tokens_out INT DEFAULT 0,
+			cost FLOAT DEFAULT 0,
+			rollback_status VARCHAR(32) DEFAULT 'none',
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (id),
+			KEY task_id (task_id),
+			KEY object (object_type, object_id),
+			KEY action_type (action_type)
 		) {$charset};";
 
 		// Semantic vectors: every post/cluster embedded for meaning-based search.
@@ -336,11 +360,17 @@ final class VMSB_Install {
 			score FLOAT NOT NULL DEFAULT 0,
 			reason VARCHAR(255) NULL,
 			status VARCHAR(20) NOT NULL DEFAULT 'queued',
+			attempts TINYINT UNSIGNED DEFAULT 0,
+			max_attempts TINYINT UNSIGNED DEFAULT 3,
+			retry_after DATETIME NULL,
+			last_error TEXT NULL,
+			timeline LONGTEXT NULL,
 			result LONGTEXT NULL,
 			queued_at DATETIME NOT NULL,
 			ran_at DATETIME NULL,
-			PRIMARY KEY (id),
-			KEY status_score (status, score)
+			PRIMARY KEY  (id),
+			KEY status_score (status, score),
+			KEY retry (status, retry_after)
 		) {$charset};";
 
 		$sql[] = "CREATE TABLE {$p}graph (

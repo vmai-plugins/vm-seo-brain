@@ -42,8 +42,18 @@ class VMSB_Scheduler {
 	/* ---------------------------------------------------------------- runs */
 
 	public function run_hourly() {
+		global $wpdb;
 		$content = new VMSB_Content();
 		$content->pull_from_sheet();
+
+		// Cleanup: Reset items stuck in 'writing' for > 3 hours (likely timeout)
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->prefix}vmsb_plan SET status = 'failed', last_error = 'Writing timeout or server crash.'
+				 WHERE status = 'writing' AND updated_at < %s",
+				gmdate( 'Y-m-d H:i:s', time() - ( 3 * HOUR_IN_SECONDS ) )
+			)
+		);
 
 		$due   = $content->due_items( max( 1, (int) ceil( (int) VMSB_Settings::get( 'posts_per_day' ) / 8 ) ) );
 		foreach ( $due as $item ) {

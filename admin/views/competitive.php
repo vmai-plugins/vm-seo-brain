@@ -1,19 +1,23 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-$competitor    = new VMSB_Competitor();
-$backlinks     = new VMSB_Backlinks();
-$programmatic  = new VMSB_Programmatic();
-$thief         = new VMSB_Thief();
+$vmsb_is_nested = defined('VMSB_NESTED') && VMSB_NESTED;
 
-$competitors    = $competitor->list_all();
-$competitor_ct  = $competitor->counts();
-$prospects      = $backlinks->list_by_status( '', 40 );
-$backlink_ct    = $backlinks->counts();
-$pseo_stats     = $programmatic->stats();
-$market_latest  = ( new VMSB_Market() )->latest();
-$hijacks        = $thief->recent_hijacks( 10 );
+$vmsb_competitor_engine = new VMSB_Competitor();
+$vmsb_backlinks_engine  = new VMSB_Backlinks();
+$vmsb_programmatic      = new VMSB_Programmatic();
+$vmsb_thief             = new VMSB_Thief();
+
+$vmsb_competitors    = $vmsb_competitor_engine->list_all();
+$vmsb_competitor_ct  = $vmsb_competitor_engine->counts();
+$vmsb_prospects      = $vmsb_backlinks_engine->list_by_status( '', 40 );
+$vmsb_backlink_ct    = $vmsb_backlinks_engine->counts();
+$vmsb_pseo_stats     = $vmsb_programmatic->stats();
+$vmsb_market_latest  = ( new VMSB_Market() )->latest();
+$vmsb_hijacks        = $vmsb_thief->recent_hijacks( 10 );
 ?>
+
+<?php if ( ! $vmsb_is_nested ) : ?>
 <div class="wrap vmsb vmsb-competitive">
 	<header class="vmsb-head">
 		<div>
@@ -22,6 +26,7 @@ $hijacks        = $thief->recent_hijacks( 10 );
 			<p class="vmsb-sub">Competitor gaps, backlink pipeline, answer-engine readiness, and topical authority — everything that isn't purely about fixing your own pages.</p>
 		</div>
 	</header>
+<?php endif; ?>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">
 		<button class="vmsb-tab is-active" data-tab="market">⚔️ Market Rivals</button>
@@ -38,14 +43,14 @@ $hijacks        = $thief->recent_hijacks( 10 );
 				<?php if ( VMSB_License::has_feature('competitor_hijack') ) : ?>
 					<button class="vmsb-btn vmsb-btn-gold vmsb-btn-sm" data-vmsb="competitor-scan" data-body='{"limit":10}'>Sync Market Intelligence</button>
 				<?php else : ?>
-					<a href="<?php echo admin_url('admin.php?page=vmsb-plans'); ?>" class="vmsb-btn vmsb-btn-gold vmsb-btn-sm">Unlock Competitor Intelligence</a>
+					<a href="<?php echo esc_url( admin_url('admin.php?page=vmsb-plans') ); ?>" class="vmsb-btn vmsb-btn-gold vmsb-btn-sm">Unlock Competitor Intelligence</a>
 				<?php endif; ?>
 			</div>
 
 			<div class="vmsb-grid" style="margin-top:20px;">
 				<div class="vmsb-card vmsb-card-wide" style="grid-column: span 2;">
 					<h3 style="font-size:14px; text-transform:uppercase; color:var(--muted); margin-bottom:15px;">Market Authority Leaderboard</h3>
-					<?php if ( ! $competitors ) : ?>
+					<?php if ( ! $vmsb_competitors ) : ?>
 						<div class="vmsb-empty"><h2>No competitors tracked yet</h2><p>Add one below to start the intelligence engine.</p></div>
 					<?php else : ?>
 						<div class="vmsb-table-wrap">
@@ -53,27 +58,27 @@ $hijacks        = $thief->recent_hijacks( 10 );
 								<thead><tr><th>Domain</th><th>Market Overlap</th><th>Authority Gaps</th><th>Velocity</th><th>Action</th></tr></thead>
 								<tbody>
 								<?php
-								$my_count = (int) wp_count_posts( 'post' )->publish;
-								$velocity_report = $competitor->get_velocity_report();
+								$vmsb_my_count = (int) wp_count_posts( 'post' )->publish;
+								$vmsb_velocity_report = $vmsb_competitor_engine->get_velocity_report();
 
-								foreach ( $competitors as $c ) :
-									$v_match = array_filter($velocity_report, fn($v) => $v->domain === $c->domain);
-									$v_data = reset($v_match);
-									$ratio = $v_data ? ($v_data->post_count / ($my_count ?: 1)) : 1;
+								foreach ( $vmsb_competitors as $vmsb_c ) :
+									$vmsb_v_match = array_filter($vmsb_velocity_report, fn($v) => $v->domain === $vmsb_c->domain);
+									$vmsb_v_data = reset($vmsb_v_match);
+									$vmsb_ratio = $vmsb_v_data ? ($vmsb_v_data->post_count / ($vmsb_my_count ?: 1)) : 1;
 								?>
 									<tr>
-										<td><strong><?php echo esc_html( $c->label ?: $c->domain ); ?></strong><br><code><?php echo esc_html( $c->domain ); ?></code></td>
+										<td><strong><?php echo esc_html( $vmsb_c->label ?: $vmsb_c->domain ); ?></strong><br><code><?php echo esc_html( $vmsb_c->domain ); ?></code></td>
 										<td>
 											<div style="display:flex; align-items:center; gap:8px;">
-												<div class="vmsb-bar" style="width:80px; height:6px; margin:0;"><span style="width:<?php echo (float)$c->overlap_score; ?>%; background:var(--gold);"></span></div>
-												<span style="font-size:11px;"><?php echo round($c->overlap_score); ?>%</span>
+												<div class="vmsb-bar" style="width:80px; height:6px; margin:0;"><span style="width:<?php echo (float)$vmsb_c->overlap_score; ?>%; background:var(--gold);"></span></div>
+												<span style="font-size:11px;"><?php echo esc_html( round($vmsb_c->overlap_score) ); ?>%</span>
 											</div>
 										</td>
-										<td><span class="vmsb-tag vmsb-tag-gold"><?php echo (int) $c->shared_keywords; ?> Gaps Found</span></td>
-										<td><span class="vmsb-sev sev-<?php echo $ratio > 1.2 ? 'high' : 'low'; ?>"><?php echo round($ratio, 1); ?>x your size</span></td>
+										<td><span class="vmsb-tag vmsb-tag-gold"><?php echo (int) $vmsb_c->shared_keywords; ?> Gaps Found</span></td>
+										<td><span class="vmsb-sev sev-<?php echo $vmsb_ratio > 1.2 ? 'high' : 'low'; ?>"><?php echo esc_html( round($vmsb_ratio, 1) ); ?>x your size</span></td>
 										<td class="vmsb-row-actions">
-											<button class="vmsb-mini-btn" data-vmsb="competitor-duel" data-id="0" data-body='{"domain":"<?php echo esc_attr($c->domain); ?>"}'>Scout Gaps</button>
-											<button class="vmsb-mini-btn" data-vmsb="competitor-remove" data-id="<?php echo (int) $c->id; ?>" data-confirm="Stop tracking <?php echo esc_attr( $c->domain ); ?>?">Remove</button>
+											<button class="vmsb-mini-btn" data-vmsb="competitor-duel" data-id="0" data-body='{"domain":"<?php echo esc_attr($vmsb_c->domain); ?>"}'>Scout Gaps</button>
+											<button class="vmsb-mini-btn" data-vmsb="competitor-remove" data-id="<?php echo (int) $vmsb_c->id; ?>" data-confirm="Stop tracking <?php echo esc_attr( $vmsb_c->domain ); ?>?">Remove</button>
 										</td>
 									</tr>
 								<?php endforeach; ?>
@@ -82,9 +87,6 @@ $hijacks        = $thief->recent_hijacks( 10 );
 						</div>
 					<?php endif; ?>
 
-					<!-- competitor-add existed as a working REST route with no form
-					     anywhere to reach it - the empty state above literally said
-					     "Add one below" while nothing was below it. -->
 					<div id="vmsb-competitor-add-form" class="vmsb-inline-form" style="margin-top:16px; gap:10px;">
 						<input type="text" name="domain" placeholder="rival-domain.com" style="flex:1; min-width:180px;">
 						<input type="text" name="label" placeholder="Display name (optional)" style="flex:1; min-width:160px;">
@@ -94,41 +96,41 @@ $hijacks        = $thief->recent_hijacks( 10 );
 
 				<div class="vmsb-card">
 					<h3 style="font-size:14px; text-transform:uppercase; color:var(--muted); margin-bottom:15px;">Market Pulse</h3>
-					<?php if ( empty($market_latest) ) : ?>
+					<?php if ( empty($vmsb_market_latest) ) : ?>
 						<p class="vmsb-note">No market assessment found.</p>
 						<button class="vmsb-btn vmsb-btn-ghost vmsb-btn-block" data-vmsb="market-assess">Analyze Niche</button>
 					<?php else : ?>
 						<div class="vmsb-alert" style="border-left: 4px solid var(--good); background:rgba(95, 167, 120, 0.05); margin-bottom:15px;">
-							<p><strong><?php echo esc_html(ucfirst($market_latest['saturation'])); ?> Niche</strong></p>
+							<p><strong><?php echo esc_html(ucfirst($vmsb_market_latest['saturation'])); ?> Niche</strong></p>
 						</div>
-						<p class="vmsb-note" style="color:var(--text); line-height:1.5;"><?php echo esc_html($market_latest['recommendation']); ?></p>
+						<p class="vmsb-note" style="color:var(--text); line-height:1.5;"><?php echo esc_html($vmsb_market_latest['recommendation']); ?></p>
 					<?php endif; ?>
 				</div>
 			</div>
 
 			<div class="vmsb-card" style="margin-top:20px;">
 				<h3 style="font-size:14px; text-transform:uppercase; color:var(--muted); margin-bottom:15px;">Live Hijack Feed</h3>
-				<p class="vmsb-note" style="margin:0 0 15px;">Keywords Thief Mode and Blitz have queued from rival gaps. These were always landing in the Content Plan with a [THIEF]/[BLITZ] prefix and nothing surfaced them here specifically until now.</p>
-				<?php if ( ! $hijacks ) : ?>
+				<p class="vmsb-note" style="margin:0 0 15px;">Keywords Thief Mode and Blitz have queued from rival gaps.</p>
+				<?php if ( ! $vmsb_hijacks ) : ?>
 					<div class="vmsb-empty"><h2>No hijacks yet</h2><p>Run Sync Market Intelligence above, or wait for God Mode's competitor_blitz task if it's enabled.</p></div>
 				<?php else : ?>
 					<div class="vmsb-table-wrap">
 						<table class="vmsb-table vmsb-table-full">
 							<thead><tr><th>Keyword</th><th>Target</th><th>Mode</th><th>Status</th><th>Queued</th></tr></thead>
 							<tbody>
-							<?php foreach ( $hijacks as $h ) : ?>
+							<?php foreach ( $vmsb_hijacks as $vmsb_h ) : ?>
 								<tr>
 									<td>
-										<?php if ( $h->post_id && get_post( $h->post_id ) ) : ?>
-											<a href="<?php echo esc_url( get_edit_post_link( $h->post_id ) ); ?>"><?php echo esc_html( $h->primary_keyword ); ?></a>
+										<?php if ( $vmsb_h->post_id && get_post( $vmsb_h->post_id ) ) : ?>
+											<a href="<?php echo esc_url( get_edit_post_link( $vmsb_h->post_id ) ); ?>"><?php echo esc_html( $vmsb_h->primary_keyword ); ?></a>
 										<?php else : ?>
-											<strong><?php echo esc_html( $h->primary_keyword ); ?></strong>
+											<strong><?php echo esc_html( $vmsb_h->primary_keyword ); ?></strong>
 										<?php endif; ?>
 									</td>
-									<td><?php echo $h->target_domain ? '<code>' . esc_html( $h->target_domain ) . '</code>' : '<span class="vmsb-note">—</span>'; ?></td>
-									<td><span class="vmsb-tag <?php echo $h->is_blitz ? 'vmsb-tag-crit' : 'vmsb-tag-gold'; ?>"><?php echo $h->is_blitz ? 'Blitz' : 'Thief'; ?></span></td>
-									<td><span class="vmsb-sev state-<?php echo esc_attr( $h->status ); ?>"><?php echo esc_html( $h->status ); ?></span></td>
-									<td class="vmsb-note"><?php echo esc_html( human_time_diff( strtotime( $h->created_at ) ) . ' ago' ); ?></td>
+									<td><?php echo $vmsb_h->target_domain ? '<code>' . esc_html( $vmsb_h->target_domain ) . '</code>' : '<span class="vmsb-note">—</span>'; ?></td>
+									<td><span class="vmsb-tag <?php echo $vmsb_h->is_blitz ? 'vmsb-tag-crit' : 'vmsb-tag-gold'; ?>"><?php echo $vmsb_h->is_blitz ? 'Blitz' : 'Thief'; ?></span></td>
+									<td><span class="vmsb-sev state-<?php echo esc_attr( $vmsb_h->status ); ?>"><?php echo esc_html( $vmsb_h->status ); ?></span></td>
+									<td class="vmsb-note"><?php echo esc_html( human_time_diff( strtotime( $vmsb_h->created_at ) ) . ' ago' ); ?></td>
 								</tr>
 							<?php endforeach; ?>
 							</tbody>
@@ -145,30 +147,30 @@ $hijacks        = $thief->recent_hijacks( 10 );
 			<p class="vmsb-sub">Converting relationships into domain authority.</p>
 
 			<?php if ( ! (int) VMSB_Settings::get( 'backlink_enabled' ) ) : ?>
-				<p class="vmsb-status-line is-warning">⚠️ Outreach is off in Settings → God Mode. Discovery (below) still works either way - it only reasons about prospects and sends nothing - but drafting and sending pitches stays locked until you opt in with a sender name and email.</p>
+				<p class="vmsb-status-line is-warning">⚠️ Outreach is off in Settings → God Mode. Discovery (below) still works either way.</p>
 			<?php endif; ?>
 
 			<div class="vmsb-btn-row">
 				<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="backlink-shield" data-body='{"limit":30}'>Scan for Dead Outbound Links</button>
-				<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="backlink-discover-recent" data-body='{"limit":5}' title="Runs discovery for published posts that have no prospects yet">Discover Prospects for Recent Posts</button>
+				<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="backlink-discover-recent" data-body='{"limit":5}'>Discover Prospects for Recent Posts</button>
 			</div>
 
-			<?php if ( ! $prospects ) : ?>
-				<div class="vmsb-empty"><h2>No prospects yet</h2><p>New posts get prospects automatically once published (if outreach is enabled in Settings) - or click "Discover Prospects for Recent Posts" above to backfill existing ones.</p></div>
+			<?php if ( ! $vmsb_prospects ) : ?>
+				<div class="vmsb-empty"><h2>No prospects yet</h2><p>Click "Discover Prospects for Recent Posts" above to start.</p></div>
 			<?php else : ?>
 				<div class="vmsb-table-wrap">
 					<table class="vmsb-table vmsb-table-full">
 						<thead><tr><th>Target Domain</th><th>Status</th><th>Relevance</th><th>Target Page</th><th>Contact</th></tr></thead>
 						<tbody>
-						<?php foreach ( $prospects as $p ) : ?>
+						<?php foreach ( $vmsb_prospects as $vmsb_p ) : ?>
 							<tr>
-								<td><strong><?php echo esc_html( $p->domain ); ?></strong></td>
-								<td><span class="vmsb-verdict v-<?php echo esc_attr( $p->status ); ?>"><?php echo esc_html( $p->status ); ?></span></td>
-								<td><?php echo esc_html( round( (float) $p->relevance * 100 ) ); ?>%</td>
-								<td><?php if ( $p->target_post_id && get_post( $p->target_post_id ) ) : ?><a href="<?php echo esc_url( get_edit_post_link( $p->target_post_id ) ); ?>"><?php echo esc_html( wp_trim_words(get_the_title( $p->target_post_id ), 5) ); ?></a><?php else : ?>—<?php endif; ?></td>
+								<td><strong><?php echo esc_html( $vmsb_p->domain ); ?></strong></td>
+								<td><span class="vmsb-verdict v-<?php echo esc_attr( $vmsb_p->status ); ?>"><?php echo esc_html( $vmsb_p->status ); ?></span></td>
+								<td><?php echo esc_html( round( (float) $vmsb_p->relevance * 100 ) ); ?>%</td>
+								<td><?php if ( $vmsb_p->target_post_id && get_post( $vmsb_p->target_post_id ) ) : ?><a href="<?php echo esc_url( get_edit_post_link( $vmsb_p->target_post_id ) ); ?>"><?php echo esc_html( wp_trim_words(get_the_title( $vmsb_p->target_post_id ), 5) ); ?></a><?php else : ?>—<?php endif; ?></td>
 								<td>
-									<?php if ($p->contact_email) : ?>
-										<button class="vmsb-mini-btn" data-vmsb="backlink-draft" data-id="<?php echo $p->id; ?>">Draft Pitch</button>
+									<?php if ($vmsb_p->contact_email) : ?>
+										<button class="vmsb-mini-btn" data-vmsb="backlink-draft" data-id="<?php echo esc_attr($vmsb_p->id); ?>">Draft Pitch</button>
 									<?php else : ?>
 										<span class="vmsb-note">No email found</span>
 									<?php endif; ?>
@@ -185,9 +187,9 @@ $hijacks        = $thief->recent_hijacks( 10 );
 	<div class="vmsb-panel" data-panel="roi">
 		<!-- ===================== ROI + CTR + FORECAST ===================== -->
 		<?php
-		$roi_counts = ( new VMSB_ROI() )->counts();
-		$forecast   = ( new VMSB_Forecaster() )->latest();
-		$running    = ( new VMSB_CTR() )->running();
+		$vmsb_roi_counts = ( new VMSB_ROI() )->counts();
+		$vmsb_forecast   = ( new VMSB_Forecaster() )->latest();
+		$vmsb_running    = ( new VMSB_CTR() )->running();
 		?>
 		<section class="vmsb-section">
 			<h2>Click-Through Experiments</h2>
@@ -195,15 +197,15 @@ $hijacks        = $thief->recent_hijacks( 10 );
 
 			<div class="vmsb-cards" style="margin:20px 0;">
 				<div class="vmsb-card">
-					<span class="vmsb-card-num"><?php echo (int) $roi_counts['open_leaks']; ?></span>
+					<span class="vmsb-card-num"><?php echo (int) $vmsb_roi_counts['open_leaks']; ?></span>
 					<span class="vmsb-card-label">Conversion Leaks</span>
-					<?php if ( $roi_counts['open_leaks'] ) : ?>
+					<?php if ( $vmsb_roi_counts['open_leaks'] ) : ?>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-issues&rule=roi_leak' ) ); ?>" class="vmsb-note" style="display:block; margin-top:6px;">View &amp; fix on Issues →</a>
 					<?php endif; ?>
 				</div>
-				<div class="vmsb-card"><span class="vmsb-card-num"><?php echo count( $running ); ?></span><span class="vmsb-card-label">Live CTR Tests</span></div>
+				<div class="vmsb-card"><span class="vmsb-card-num"><?php echo count( $vmsb_running ); ?></span><span class="vmsb-card-label">Live CTR Tests</span></div>
 				<div class="vmsb-card">
-					<span class="vmsb-card-num vmsb-card-sm" style="color:var(--good);"><?php echo $forecast ? esc_html( ucfirst( $forecast['trend'] ) ) : '—'; ?></span>
+					<span class="vmsb-card-num vmsb-card-sm" style="color:var(--good);"><?php echo $vmsb_forecast ? esc_html( ucfirst( $vmsb_forecast['trend'] ) ) : '—'; ?></span>
 					<span class="vmsb-card-label">Growth Forecast</span>
 				</div>
 			</div>
@@ -214,17 +216,17 @@ $hijacks        = $thief->recent_hijacks( 10 );
 				<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="ctr-conclude">Finalize All Due Tests</button>
 			</div>
 
-			<?php if ( $running ) : ?>
+			<?php if ( $vmsb_running ) : ?>
 				<div class="vmsb-table-wrap">
 					<table class="vmsb-table vmsb-table-full">
 						<thead><tr><th>Experiment Page</th><th>Variant Target</th><th>Baseline</th><th>Due Date</th></tr></thead>
 						<tbody>
-						<?php foreach ( $running as $exp ) : ?>
+						<?php foreach ( $vmsb_running as $vmsb_exp ) : ?>
 							<tr>
-								<td><a href="<?php echo esc_url( get_edit_post_link( $exp->post_id ) ); ?>"><?php echo esc_html( get_the_title( $exp->post_id ) ); ?></a></td>
-								<td><code><?php echo esc_html( $exp->variant_value ); ?></code></td>
-								<td><?php echo esc_html( round( $exp->baseline_ctr * 100, 2 ) ); ?>%</td>
-								<td><?php echo esc_html( mysql2date( 'j M', $exp->concludes_at ) ); ?></td>
+								<td><a href="<?php echo esc_url( get_edit_post_link( $vmsb_exp->post_id ) ); ?>"><?php echo esc_html( get_the_title( $vmsb_exp->post_id ) ); ?></a></td>
+								<td><code><?php echo esc_html( $vmsb_exp->variant_value ); ?></code></td>
+								<td><?php echo esc_html( round($vmsb_exp->baseline_ctr * 100, 2) ); ?>%</td>
+								<td><?php echo esc_html( mysql2date( 'j M', $vmsb_exp->concludes_at ) ); ?></td>
 							</tr>
 						<?php endforeach; ?>
 						</tbody>
@@ -247,9 +249,9 @@ $hijacks        = $thief->recent_hijacks( 10 );
 						<div id="vmsb-pseo-form" class="vmsb-stack-form" style="max-width:100%;">
 							<label>Title Template</label>
 							<input type="text" name="template" placeholder="{service} in {city}">
-							<label>Variable Name <small>(the single placeholder above these values fill in, e.g. "city")</small></label>
+							<label>Variable Name</label>
 							<input type="text" name="variable_name" placeholder="city">
-							<label>Base Keyword <small>(optional)</small></label>
+							<label>Base Keyword</label>
 							<input type="text" name="base_keyword" placeholder="best plumber">
 							<label>Values <small>(one per line)</small></label>
 							<textarea name="values" data-list rows="4" placeholder="Indore&#10;Bhopal&#10;Pune"></textarea>
@@ -257,18 +259,20 @@ $hijacks        = $thief->recent_hijacks( 10 );
 						</div>
 					<?php else : ?>
 						<p class="vmsb-note" style="margin-bottom: 20px;">Automate thousands of high-intent local or service pages instantly.</p>
-						<a href="<?php echo admin_url('admin.php?page=vmsb-plans'); ?>" class="vmsb-btn vmsb-btn-gold vmsb-btn-block">Unlock Programmatic SEO</a>
+						<a href="<?php echo esc_url( admin_url('admin.php?page=vmsb-plans') ); ?>" class="vmsb-btn vmsb-btn-gold vmsb-btn-block">Unlock Programmatic SEO</a>
 					<?php endif; ?>
 				</div>
 
 				<div class="vmsb-card">
 					<h3>Global Expansion</h3>
-					<p class="vmsb-note">Target new locations using your best-performing content as a blueprint. Visit the <strong>Growth Plan</strong> page for advanced trend scouting.</p>
+					<p class="vmsb-note">Target new locations using your best-performing content as a blueprint.</p>
 					<button class="vmsb-btn vmsb-btn-ghost vmsb-btn-block" data-vmsb="traffic-forecast">Refresh Opportunity Map</button>
 				</div>
 			</div>
 		</section>
 	</div>
 
+	<?php if ( ! $vmsb_is_nested ) : ?>
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
 </div>
+<?php endif; ?>

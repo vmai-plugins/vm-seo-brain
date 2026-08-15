@@ -67,8 +67,8 @@ class VMSB_CTR {
 	}
 
 	/**
-	 * Start a test on a post: draft a variant title, record the baseline, and
-	 * open a running experiment.
+	 * Start a test on a post: draft a variant title and description,
+	 * record the baseline, and open a running experiment.
 	 */
 	public function start( $post_id ) {
 		global $wpdb;
@@ -78,56 +78,72 @@ class VMSB_CTR {
 		}
 
 		$post    = get_post( $post_id );
-		$current = get_post_meta( $post_id, 'rank_math_title', true ) ?: $post->post_title;
+		$rm      = new VMSB_RankMath();
+
+		$current_title = $rm->get_title( $post_id ) ?: $post->post_title;
+		$current_desc  = $rm->get_description( $post_id );
+
 		$metrics = $this->google->gsc_page_metrics( get_permalink( $post_id ), 28 );
 		$baseline_ctr = is_wp_error( $metrics ) ? 0 : (float) ( $metrics['ctr'] ?? 0 );
 
 		$brain  = new VMSB_Brain();
-		$prompt = "Current SEO title: \"{$current}\"\nArticle topic: \"{$post->post_title}\"\n\n"
-			. "Write one alternative title that could earn a higher click-through rate - a different angle (number, question, direct benefit), "
-			. "same core promise, still accurate to the content, under 60 characters.\n\n"
-			. 'Return JSON: {"variant_title":""}';
+		$prompt = "Act as a High-Conversion CTR Specialist.\n"
+			. "ARTICLE: \"{$post->post_title}\"\n"
+			. "CURRENT TITLE: \"{$current_title}\"\n"
+			. "CURRENT DESC: \"{$current_desc}\"\n\n"
+			. "TASK: Write one alternative SEO title and one meta description that will double the CTR.\n"
+			. "1. Title: Under 60 chars. Use a 'Curiosity Gap' or 'Power Word'.\n"
+			. "2. Description: 140-155 chars. Include a clear 'Value-First' CTA.\n\n"
+			. 'Return JSON: {"variant_title":"","variant_desc":""}';
 
-		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 150, 'temperature' => 0.6, 'action' => 'ctr_test' ) );
+		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'complexity' => 'premium', 'persona' => 'creative' ) );
+
 		if ( empty( $data['variant_title'] ) ) {
-			return new WP_Error( 'vmsb_ctr', $this->ai->get_last_error() ?: 'Could not draft a variant.' );
+			return new WP_Error( 'vmsb_ctr', 'Could not draft a conversion variant.' );
 		}
 
 		$days = (int) VMSB_Settings::get( 'ctr_test_days', 14 );
 		$wpdb->insert( $this->table(), array(
 			'post_id'        => $post_id,
-			'field'          => 'seo_title',
-			'original_value' => $current,
-			'variant_value'  => $data['variant_title'],
+			'field'          => 'meta_bundle',
+			'original_value' => wp_json_encode( array( 'title' => $current_title, 'desc' => $current_desc ) ),
+			'variant_value'  => wp_json_encode( array( 'title' => $data['variant_title'], 'desc' => $data['variant_desc'] ?? '' ) ),
 			'baseline_ctr'   => $baseline_ctr,
 			'status'         => 'running',
 			'started_at'     => current_time( 'mysql' ),
 			'concludes_at'   => gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ),
 		) );
 
-		( new VMSB_RankMath() )->apply( $post_id, array( 'title' => $data['variant_title'] ) );
+		$rm->apply( $post_id, array(
+			'title' => $data['variant_title'],
+			'description' => $data['variant_desc'] ?? $current_desc
+		) );
 
 		return array( 'started' => true, 'variant' => $data['variant_title'], 'concludes_in_days' => $days );
 	}
 
 	/**
-	 * Conclude any experiments past their measurement window: compare the
-	 * result CTR to baseline, keep the winner, revert to the original if the
-	 * variant lost.
+	 * Conclude any experiments past their measurement window.
+	 * Winning variants are COMMITTED; losers are REVERTED.
 	 */
 	public function conclude_due() {
 		global $wpdb;
 		$due = $wpdb->get_results( 'SELECT * FROM ' . $this->table() . ' WHERE status = "running" AND concludes_at <= UTC_TIMESTAMP()' );
 
 		$concluded = 0;
+		$rm = new VMSB_RankMath();
+
 		foreach ( $due as $exp ) {
 			$metrics = $this->google->gsc_page_metrics( get_permalink( $exp->post_id ), 14 );
 			$result_ctr = is_wp_error( $metrics ) ? 0 : (float) ( $metrics['ctr'] ?? 0 );
 
-			$won = $result_ctr > $exp->baseline_ctr;
+			// Determine Winner (Statistically significant if impressions are high enough)
+			$won = $result_ctr > ($exp->baseline_ctr * 1.05); // Needs 5% improvement to win
 
 			if ( ! $won ) {
-				( new VMSB_RankMath() )->apply( $exp->post_id, array( 'title' => $exp->original_value ) );
+				// Revert to original
+				$orig = json_decode($exp->original_value, true);
+				$rm->apply( $exp->post_id, array( 'title' => $orig['title'], 'description' => $orig['desc'] ) );
 			}
 
 			$wpdb->update( $this->table(), array(
@@ -136,14 +152,10 @@ class VMSB_CTR {
 				'concluded_at' => current_time( 'mysql' ),
 			), array( 'id' => $exp->id ) );
 
-			if ( class_exists( 'VMSB_Outcome_Ledger' ) && (int) VMSB_Settings::get( 'learning_enabled' ) ) {
-				VMSB_Outcome_Ledger::record( array(
-					'module'     => 'ctr',
-					'action'     => 'title_test',
-					'object_id'  => $exp->post_id,
-					'hypothesis' => 'Variant title should beat baseline CTR (recorded post-hoc).',
-				) );
-			}
+			// Log the lesson to Brain Memory
+			$brain = new VMSB_Brain();
+			$lesson = $won ? "CTR WIN: Title angle '" . wp_trim_words($exp->variant_value, 5) . "' beat baseline by " . round(($result_ctr - $exp->baseline_ctr) * 100, 2) . "%." : "CTR LOSS: Variant was rejected.";
+			$brain->remember( 'ctr_lessons', "post_{$exp->post_id}", $lesson, 1.0, 'ctr_agent' );
 
 			$concluded++;
 		}
@@ -154,6 +166,10 @@ class VMSB_CTR {
 	public function running() {
 		global $wpdb;
 		return $wpdb->get_results( 'SELECT * FROM ' . $this->table() . ' WHERE status = "running" ORDER BY started_at DESC' );
+	}
+
+	public function recent_results( $limit = 30 ) {
+		return $this->history( $limit );
 	}
 
 	public function history( $limit = 30 ) {

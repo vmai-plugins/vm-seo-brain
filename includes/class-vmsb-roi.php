@@ -82,9 +82,7 @@ class VMSB_ROI {
 	}
 
 	/**
-	 * Insert a CTA grounded in the business's actual conversion goal and
-	 * services - not a generic "contact us", something that matches what the
-	 * page is actually about.
+	 * Sentient Sniper: Insert a surgical CTA matched to search intent.
 	 */
 	public function insert_cta( $post_id ) {
 		$post = get_post( $post_id );
@@ -96,7 +94,7 @@ class VMSB_ROI {
 		}
 
 		if ( class_exists( 'VMSB_Integrations' ) && VMSB_Integrations::is_elementor_page( $post_id ) && (int) VMSB_Settings::get( 'elementor_safe_mode', 1 ) ) {
-			return new WP_Error( 'vmsb_roi', 'This page is built in Elementor - CTA append to post_content is skipped to avoid corrupting the layout.' );
+			return new WP_Error( 'vmsb_roi', 'This page is built in Elementor - surgical insertion skipped to avoid layout corruption.' );
 		}
 
 		$goal  = VMSB_Settings::get( 'conversion_goal' );
@@ -105,44 +103,63 @@ class VMSB_ROI {
 			return new WP_Error( 'vmsb_roi', 'No conversion goal set in Settings.' );
 		}
 
-		$brain  = new VMSB_Brain();
-		$prompt = "Article: \"{$post->post_title}\"\nExcerpt: " . wp_trim_words( wp_strip_all_tags( $post->post_content ), 100 ) . "\n\n"
-			. "Conversion goal for this business: {$goal}\nStyle: {$style}\n\n"
-			. "Write one short CTA block (2-3 sentences max, HTML with a single <a> link using href=\"#contact\" as a placeholder) "
-			. "that connects THIS article's specific topic to the conversion goal - not generic.\n\n"
-			. 'Return JSON: {"html":""}';
+		// Detect Intent and Context
+		$keyword = ( new VMSB_RankMath() )->get_focus_keyword( $post_id );
+		global $wpdb;
+		$kw_data = $wpdb->get_row( $wpdb->prepare( "SELECT intent FROM {$wpdb->prefix}vmsb_keywords WHERE keyword = %s", $keyword ) );
+		$intent = $kw_data ? $kw_data->intent : 'informational';
 
-		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 300, 'temperature' => 0.4, 'action' => 'roi_sweep' ) );
-		if ( empty( $data['html'] ) ) {
-			return new WP_Error( 'vmsb_roi', $this->ai->get_last_error() ?: 'Could not draft a CTA.' );
+		$brain  = new VMSB_Brain();
+		$prompt = "Act as an Elite Conversion Rate Optimizer (CRO).\n"
+			. "ARTICLE: \"{$post->post_title}\"\n"
+			. "INTENT: {$intent}\n"
+			. "BUSINESS GOAL: {$goal}\n"
+			. "STYLE: {$style}\n\n"
+			. "TASK: Create a surgical CTA block for this article.\n"
+			. "1. If intent is INFORMATIONAL: Offer a valuable 'Lead Magnet' (e.g., Free Guide, Checklist, or Deep Insight) related to the topic.\n"
+			. "2. If intent is TRANSACTIONAL/COMMERCIAL: Offer a 'Direct Path' (e.g., Free Quote, Consultation, or Product Demo).\n"
+			. "3. Tone must be highly relevant to the article context—not a generic footer.\n\n"
+			. 'Return JSON: {"headline":"","body":"","button_text":"","target_url":"#contact","html_block":""}';
+
+		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 600, 'complexity' => 'premium', 'persona' => 'creative' ) );
+
+		if ( empty( $data['html_block'] ) ) {
+			// Fallback to basic HTML construction if the model failed the specific field
+			if ( ! empty($data['headline']) ) {
+				$data['html_block'] = "<div class='vmsb-cta-box'><h4>{$data['headline']}</h4><p>{$data['body']}</p><a href='{$data['target_url']}' class='vmsb-cta-btn'>{$data['button_text']}</a></div>";
+			} else {
+				return new WP_Error( 'vmsb_roi', 'Could not generate surgical CTA.' );
+			}
 		}
 
-		$block   = '<div class="vmsb-cta">' . wp_kses_post( $data['html'] ) . '</div>';
-		$updated = $post->post_content . "\n\n" . $block;
-		$before  = $post->post_content;
+		$before = $post->post_content;
+		$block  = "\n\n<!-- wp:group {\"className\":\"vmsb-sentient-cta\"} -->\n"
+				. "<div class=\"wp-block-group vmsb-sentient-cta\">" . $data['html_block'] . "</div>\n"
+				. "<!-- /wp:group -->\n\n";
+
+		// SURGICAL PLACEMENT: Try to find the second H2 or the middle of the post
+		$parts = preg_split( '/(<h2[^>]*>.*?<\/h2>)/is', $before, -1, PREG_SPLIT_DELIM_CAPTURE );
+		if ( count( $parts ) >= 5 ) {
+			// Insert after the second H2 (parts[1] is 1st H2, parts[2] is text, parts[3] is 2nd H2)
+			$updated = $parts[0] . $parts[1] . $parts[2] . $parts[3] . $block . implode( '', array_slice( $parts, 4 ) );
+		} else {
+			// Fallback: Append to end
+			$updated = $before . $block;
+		}
 
 		wp_update_post( array( 'ID' => $post_id, 'post_content' => $updated ) );
 		update_post_meta( $post_id, '_vmsb_cta_inserted', 1 );
+		update_post_meta( $post_id, '_vmsb_cta_data', $data );
 
 		if ( class_exists( 'VMSB_Outcome_Ledger' ) && (int) VMSB_Settings::get( 'learning_enabled' ) ) {
 			VMSB_Outcome_Ledger::record( array(
 				'module'     => 'roi',
-				'action'     => 'insert_cta',
+				'action'     => 'sniper_cta',
 				'object_id'  => $post_id,
-				'hypothesis' => 'Adding a CTA to a high-traffic page with no conversion path should improve business impact.',
+				'hypothesis' => "Surgical {$intent} CTA match should increase goal completion rate.",
 			) );
 		}
 
-		// Flat post_id/post_content, not nested under a 'revert' key - this
-		// return value IS the issue's revert_payload verbatim (see
-		// VMSB_Fixer::fix_issue()'s docblock), and VMSB_Fixer::revert() only
-		// ever looks for a top-level post_content key. The nested shape this
-		// used to return meant a revert would silently fall through to a
-		// RankMath-meta revert with nothing to actually revert, mark the
-		// issue 'reverted', and leave the CTA sitting in the post untouched -
-		// same class of bug as the earlier fix_orphan()/revert() fix this
-		// session, just never reachable until roi_leak got wired into
-		// fix_issue()'s dispatch.
 		return array( 'inserted' => true, 'post_id' => $post_id, 'post_content' => $before );
 	}
 
@@ -215,12 +232,26 @@ class VMSB_ROI {
 		return $data;
 	}
 
-	public function counts() {
-		global $wpdb;
-		return array(
-			'open_leaks'  => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_issues WHERE rule = 'roi_leak' AND status = 'open'" ),
-			'ctas_added'  => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_vmsb_cta_inserted'" ),
-			'forecast'    => get_option( 'vmsb_conversion_forecast', null ),
-		);
+	public function calculate_revenue_opportunity( $post_id ) {
+		$ga4 = new VMSB_GA4();
+		if ( ! $ga4->is_connected() ) return 0;
+
+		$post = get_post($post_id);
+		$path = wp_parse_url(get_permalink($post_id), PHP_URL_PATH);
+
+		$metrics = $ga4->get_all_landing_page_metrics( 30 );
+		$page_data = $metrics[$path] ?? array('sessions' => 0, 'conversions' => 0, 'revenue' => 0);
+
+		// Revenue Opportunity Score = (Sessions * Avg Order Value * Potential Conversion Rate)
+		// Or if we have real revenue, use that as the baseline.
+		$current_revenue = (float) $page_data['revenue'];
+		$avg_order_value = $current_revenue > 0 && $page_data['conversions'] > 0 ? ($current_revenue / $page_data['conversions']) : 50; // Default $50
+
+		$intent = (new VMSB_Keywords())->get_keyword_intent_for_post($post_id);
+		$intent_multiplier = ($intent === 'transactional' || $intent === 'commercial') ? 2.5 : 1.0;
+
+		$score = ( ($page_data['sessions'] + 1) * $avg_order_value * 0.02 ) * $intent_multiplier;
+
+		return round($score, 2);
 	}
 }

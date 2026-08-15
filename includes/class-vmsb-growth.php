@@ -241,39 +241,57 @@ class VMSB_Growth {
 
 	/**
 	 * A plain-language read of the target, written to be useful rather than reassuring.
+	 * Upgraded for Intelligence Hub boardroom reporting.
 	 */
 	public function verdict() {
 		$s = $this->status();
 
 		if ( 0 === $s['achieved'] && 0 === $s['baseline_30d'] ) {
 			return array(
-				'tone'    => 'warning',
-				'message' => 'No historical data found. The Sentient Brain has initialized "Fresh Start" mode: targeting high-velocity trends and competitor gaps to build your first 50,000 visitors.',
+				'verdict'   => 'Fresh Start',
+				'tone'      => 'warning',
+				'reason'    => 'No historical data found in Google Search Console or GA4.',
+				'next_step' => 'The Brain has initialized high-velocity trend scouting to build your initial authority.',
+				'message'   => 'No historical data found. The Sentient Brain has initialized "Fresh Start" mode: targeting high-velocity trends and competitor gaps to build your first 50,000 visitors.',
 			);
 		}
 
+		$projected_fmt = number_format( $s['projected'] );
+		$target_fmt    = number_format( $s['target'] );
+
 		if ( $s['on_track'] ) {
 			return array(
-				'tone'    => 'good',
-				'message' => sprintf( 'On pace for roughly %s sessions by day %d, against a target of %s.', number_format( $s['projected'] ), $s['window'], number_format( $s['target'] ) ),
+				'verdict'   => 'Growth On Track',
+				'tone'      => 'good',
+				'reason'    => "Current organic velocity ({$s['daily_now']} sessions/day) is sufficient to hit the target.",
+				'next_step' => 'Maintain current publishing frequency and focus on internal link reinforcement.',
+				'message'   => sprintf( 'On pace for roughly %s sessions by day %d, against a target of %s.', $projected_fmt, $s['window'], $target_fmt ),
 			);
 		}
 
 		$multiple = $s['gap_multiple'];
-		$msg = sprintf(
-			'Projected %s sessions by day %d against a target of %s. Current pace is %s sessions a day; the target needs %s.',
-			number_format( $s['projected'] ),
-			$s['window'],
-			number_format( $s['target'] ),
+		$verdict  = $multiple > 3 ? 'Aggressive Gap' : 'Behind Pace';
+
+		$reason = sprintf(
+			'Projected %s sessions vs target of %s. Current pace (%s/day) is %.1f%% of required speed.',
+			$projected_fmt,
+			$target_fmt,
 			number_format( $s['daily_now'], 1 ),
-			number_format( $s['required_daily'], 1 )
+			$s['daily_now'] > 0 ? ( $s['daily_now'] / $s['required_daily'] * 100 ) : 0
 		);
 
+		$next_step = 'Activate Quantum modes to bridge the visibility gap via competitor hijacks.';
 		if ( $multiple && $multiple > 5 ) {
-			$msg .= sprintf( ' That is a %sx jump, which organic search alone does not deliver in this window on an established index. Either extend the window, or pair this with paid, email, or social distribution.', $multiple );
+			$next_step = 'The target requires a 5x jump. Enable God Mode and High-Velocity production immediately.';
 		}
 
-		return array( 'tone' => 'warning', 'message' => $msg );
+		return array(
+			'verdict'   => $verdict,
+			'tone'      => 'warning',
+			'reason'    => $reason,
+			'next_step' => $next_step,
+			'message'   => $reason . ' ' . $next_step
+		);
 	}
 
 	public function series( $days = 60 ) {

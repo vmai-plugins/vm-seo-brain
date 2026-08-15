@@ -133,6 +133,71 @@ class VMSB_Brain {
 		return $this->recall( 'intelligence', 'current_seo_policy', 'Focus on high-quality E-E-A-T and helpful content.' );
 	}
 
+	/**
+	 * Strategic Pivot: Evaluates 30-day performance and decides if we
+	 * should change, repeat, or stop the current growth strategy.
+	 */
+	public function evaluate_and_replan() {
+		$stats = (new VMSB_Lifecycle())->audit_all_assets();
+		$outcomes = VMSB_Outcome_Ledger::counts();
+		$profile = $this->profile();
+
+		$this->log->info( 'brain', 'Intelligence Cycle: Starting Strategic Pivot evaluation...' );
+
+		$prompt = "Act as the Master Strategy Loop. Evaluate the last 30 days of SEO performance.\n\n"
+			. "BUSINESS PROFILE: {$profile['description']}\n"
+			. "PERFORMANCE SNAPSHOT: " . wp_json_encode(array_map('count', $stats)) . "\n"
+			. "OUTCOME VERDICTS: Wins: {$outcomes['wins']}, Losses: {$outcomes['losses']}, Net Clicks: {$outcomes['net_clicks']}\n\n"
+			. "TASK: Decide the 'Strategic Pivot' for the next 30 days.\n"
+			. "1. Are we over-indexed on topics that don't convert? (Pivoting focus).\n"
+			. "2. Are we winning on specific clusters? (Double down).\n"
+			. "3. Is our 'Sentient AI' making consistent tone mistakes? (Adjust personas).\n\n"
+			. 'Return JSON: {"pivot_name":"","pivot_reason":"","new_directives":[], "focus_clusters":[], "persona_adjustments":{}}';
+
+		$pivot = $this->ai->generate_json( $prompt, array( 'complexity' => 'premium', 'persona' => 'strategist' ) );
+
+		if ( ! empty($pivot['pivot_name']) ) {
+			$this->remember( 'intelligence', 'current_strategy_pivot', $pivot, 1.0, 'master_loop' );
+			$this->log->info( 'brain', "Strategic Pivot Activated: '{$pivot['pivot_name']}'. Directives: " . implode(', ', (array)$pivot['new_directives']) );
+
+			// Log this to the universal action log
+			VMSB_Actions::record( array(
+				'object_type' => 'site',
+				'object_id'   => 0,
+				'action_type' => 'strategic_pivot',
+				'before'      => $this->recall('intelligence', 'current_strategy_pivot'),
+				'after'       => $pivot,
+				'reason'      => "Strategic Evaluation Cycle completed."
+			) );
+		}
+
+		return $pivot;
+	}
+
+	/**
+	 * Get a high-level strategic briefing for the dashboard.
+	 */
+	public function get_strategic_briefing() {
+		$verdict = (new VMSB_Growth())->verdict();
+		$ops = $this->recall('intelligence', 'active_opportunities', array());
+		$lifecycle = VMSB_Lifecycle::get_stats();
+
+		$html = "<p><strong>Current State:</strong> " . esc_html($verdict['message']) . "</p>";
+
+		if ( ! empty($ops) ) {
+			$top = $ops[0];
+			$html .= "<p>Brain found <strong>" . count($ops) . " new opportunities</strong>. The highest-leverage move is <strong>" . esc_html(str_replace('_', ' ', $top['type'])) . "</strong> on <em>\"" . esc_html($top['target']) . "\"</em>.</p>";
+		} else {
+			$html .= "<p>No new opportunities identified in the last scan. Your current authority silos are stable.</p>";
+		}
+
+		if ( ! empty($lifecycle['stats']['decaying']) ) {
+			$html .= "<p>⚠️ <strong>Critical Alert:</strong> " . (int)$lifecycle['stats']['decaying'] . " high-value pages are showing signs of rapid traffic decay.</p>";
+		}
+
+		return $html;
+	}
+
 	/* ---------------------------------------------------------------- understanding */
 
 	/**
@@ -151,7 +216,7 @@ class VMSB_Brain {
 		$prompt = "Read this evidence from a WordPress site and describe the business behind it.\n\n"
 			. $evidence
 			. "\n\nReturn JSON with exactly these keys:\n"
-			. '{"business_name":"","business_type":"","one_line":"","description":"","services":[],"products":[],"audience":[],"pain_points":[],"locations":[],"service_area_type":"local|national|global","competitors":[],"topical_authority_pillars":[],"commercial_pages":[],"content_gaps_hypothesis":[],"tone":"","language":"","confidence":0.0}';
+			. '{"business_name":"","business_type":"","one_line":"","description":"","services":[],"products":[],"audience":[],"pain_points":[],"locations":[],"service_area_type":"local|national|global","competitors":[],"topical_authority_pillars":[],"commercial_pages":[],"site_custom_post_types":[],"content_gaps_hypothesis":[],"tone":"","language":"","confidence":0.0}';
 
 		$data = $this->ai->generate_json( $prompt, array( 'system' => $system, 'max_tokens' => 2200, 'temperature' => 0.3 ) );
 
@@ -200,6 +265,12 @@ class VMSB_Brain {
 		$stored   = (array) $this->recall( 'business', '', array() );
 		$settings = VMSB_Settings::all();
 
+		// Recover CPT catalog from stored data if present
+		$cpts = array();
+		if ( isset($stored['site_custom_post_types']) ) {
+			$cpts = $stored['site_custom_post_types'];
+		}
+
 		return array(
 			'name'        => $settings['business_name'],
 			'type'        => $settings['business_type'],
@@ -214,6 +285,7 @@ class VMSB_Brain {
 			'pillars'     => isset( $stored['topical_authority_pillars'] ) ? $stored['topical_authority_pillars'] : array(),
 			'pain_points' => isset( $stored['pain_points'] ) ? $stored['pain_points'] : array(),
 			'commercial'  => isset( $stored['commercial_pages'] ) ? $stored['commercial_pages'] : array(),
+			'cpts'        => $cpts,
 			'raw'         => $stored,
 		);
 	}
@@ -291,14 +363,22 @@ class VMSB_Brain {
 			$out[] = 'RECENT POST TITLES: ' . implode( ' | ', wp_list_pluck( $posts, 'post_title' ) );
 		}
 
-		// Custom Post Type Discovery: Look for Destinations, Events, etc.
-		$cpt_types = get_post_types( array( 'public' => true, '_builtin' => false ), 'names' );
-		foreach ( $cpt_types as $type ) {
-			if ( in_array($type, array('product', 'elementor_library')) ) continue;
-			$cpt_posts = get_posts( array( 'post_type' => $type, 'posts_per_page' => 10 ) );
-			if ( $cpt_posts ) {
-				$out[] = strtoupper( $type ) . " ENTRIES: " . implode( ' | ', wp_list_pluck( $cpt_posts, 'post_title' ) );
-			}
+		// Custom Post Type Discovery: Deep catalog for Destinations, Events, etc.
+		$cpt_types = get_post_types( array( 'public' => true, '_builtin' => false ), 'objects' );
+		$cpt_catalog = array();
+		foreach ( $cpt_types as $type_obj ) {
+			if ( in_array($type_obj->name, array('product', 'elementor_library')) ) continue;
+
+			$cpt_posts = get_posts( array( 'post_type' => $type_obj->name, 'posts_per_page' => 5 ) );
+			$cpt_catalog[] = array(
+				'slug' => $type_obj->name,
+				'label' => $type_obj->label,
+				'description' => $type_obj->description ?: 'Content related to ' . $type_obj->label,
+				'examples' => wp_list_pluck( $cpt_posts, 'post_title' )
+			);
+		}
+		if ( ! empty($cpt_catalog) ) {
+			$out[] = "SITE CUSTOM POST TYPES (Catalog):\n" . wp_json_encode($cpt_catalog);
 		}
 
 		// WooCommerce inventory, if present.

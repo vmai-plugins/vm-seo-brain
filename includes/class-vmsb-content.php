@@ -39,9 +39,6 @@ class VMSB_Content {
 
 	/* ---------------------------------------------------------------- planning */
 
-	/**
-	 * Turn the keyword gaps into a real editorial calendar.
-	 */
 	public function plan( $count = 20 ) {
 		$keywords = new VMSB_Keywords();
 		$gaps     = $keywords->content_gaps( $count * 2 );
@@ -63,18 +60,22 @@ class VMSB_Content {
 			);
 		}
 
-		$silo = ( new VMSB_Silo() )->map_for_display();
+		$silo   = ( new VMSB_Silo() )->map_for_display();
+		$profile = $this->brain->profile();
+		$cpt_context = ! empty($profile['cpts']) ? "\n\nSITE CONTENT TYPES (Routes):\n" . wp_json_encode($profile['cpts']) : "";
 
 		$data = $this->ai->generate_json(
 			"Build an editorial plan from these keyword gaps.\n" . wp_json_encode( $rows )
 			. "\n\nExisting silo structure (link every new piece into it):\n" . wp_json_encode( $silo )
+			. $cpt_context
 			. "\n\nRules:\n"
 			. "- One piece per genuine topic. Merge keywords that would cannibalise each other into a single stronger article.\n"
+			. "- SMART ROUTING: Assign each piece to the correct 'content_type' (Standard 'post' or one of the SITE CONTENT TYPES slugs provided above). "
+			. "For example, if a topic is a specific destination, route it to 'destinations'. If it is an event, route to 'events'. Default to 'post'.\n"
 			. "- Titles are specific and written for a human, not a template. No 'Ultimate Guide' unless it truly is one.\n"
 			. "- The brief tells the writer what to cover, what to avoid, and what the reader should be able to do afterwards.\n"
-			. "- Bottom-funnel and striking-distance topics come first.\n"
 			. "- Every piece names two or three internal link targets from the existing site.\n\n"
-			. 'Return JSON: {"plan":[{"title":"","primary_keyword":"","secondary_keywords":[],"cluster":"","intent":"","content_type":"blog|comparison|guide|landing|faq","target_words":0,"brief":"","internal_links":[],"priority":0}]}',
+			. 'Return JSON: {"plan":[{"title":"","primary_keyword":"","secondary_keywords":[],"cluster":"","intent":"","content_type":"post|slug","target_words":0,"brief":"","internal_links":[],"priority":0}]}',
 			array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 4000, 'temperature' => 0.6 )
 		);
 
@@ -470,7 +471,7 @@ class VMSB_Content {
 		global $wpdb;
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$this->table()} WHERE status IN ('planned','approved') AND (scheduled_for IS NULL OR scheduled_for <= UTC_TIMESTAMP()) ORDER BY priority DESC, scheduled_for ASC LIMIT %d",
+				"SELECT * FROM {$this->table()} WHERE status = 'approved' AND (scheduled_for IS NULL OR scheduled_for <= UTC_TIMESTAMP()) ORDER BY priority DESC, scheduled_for ASC LIMIT %d",
 				(int) $limit
 			)
 		);
@@ -493,12 +494,18 @@ class VMSB_Content {
 		}
 
 		global $wpdb;
-		$item = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id = %d", (int) $plan_id ) );
-		if ( ! $item ) {
-			return new WP_Error( 'vmsb_content', 'Plan row not found.' );
+
+		// Atomic Lock: Claim the row immediately to prevent concurrent duplicate production
+		$locked = $wpdb->query( $wpdb->prepare(
+			"UPDATE {$this->table()} SET status = 'writing', updated_at = %s WHERE id = %d AND status = 'approved'",
+			current_time( 'mysql', true ), (int) $plan_id
+		) );
+
+		if ( ! $locked ) {
+			return new WP_Error( 'vmsb_content', 'Task already claimed or not approved.' );
 		}
 
-		$wpdb->update( $this->table(), array( 'status' => 'writing' ), array( 'id' => $item->id ) );
+		$item = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id = %d", (int) $plan_id ) );
 
 		$secondary     = (array) json_decode( $item->secondary_keywords, true );
 		$links         = (array) json_decode( $item->internal_links, true );
@@ -514,6 +521,27 @@ class VMSB_Content {
 
 		$this->set_agent_task( $item->id, 'Researching topical authority gaps...' );
 
+		// 2026 Strategy: Cannibalization & Semantic Guard
+		if ( class_exists('VMSB_Vector_Store') && (int) VMSB_Settings::get('vector_enabled') ) {
+			$dupe_check = VMSB_Vector_Store::search( $item->title . ' ' . $item->primary_keyword, array( 'limit' => 1, 'threshold' => 0.90 ) );
+			if ( ! empty($dupe_check) ) {
+				$other_id = $dupe_check[0]['object_id'];
+
+				// Deep Intent Comparison: Only block if intent is ALSO identical
+				$other_keyword = (new VMSB_RankMath())->get_focus_keyword($other_id);
+				$other_intent = $wpdb->get_var($wpdb->prepare("SELECT intent FROM {$wpdb->prefix}vmsb_keywords WHERE keyword = %s", $other_keyword));
+
+				if ( $other_intent === $item->intent || $dupe_check[0]['score'] > 0.96 ) {
+					$reason = "Cannibalization Guard: Topic already covered in '" . get_the_title($other_id) . "' (#{$other_id}). Similarity: " . round($dupe_check[0]['score'] * 100, 1) . "%.";
+					$wpdb->update( $this->table(), array( 'status' => 'rejected', 'last_error' => $reason ), array( 'id' => $item->id ) );
+					$this->log->warn( 'content', $reason );
+					return new WP_Error( 'vmsb_cannibal', $reason );
+				} else {
+					$agent_context .= "\nNOTE: A similar post exists ('" . get_the_title($other_id) . "'), but with a different intent ({$other_intent}). Ensure this new post focuses strictly on {$item->intent} intent to avoid cannibalization.";
+				}
+			}
+		}
+
 		// World-Class Optimization: Retrieval Augmented Guidance (RAG)
 		$semantic_clues = array();
 		if ( class_exists('VMSB_Vector_Store') && (int) VMSB_Settings::get('vector_enabled') ) {
@@ -524,6 +552,31 @@ class VMSB_Content {
 		}
 
 		$this->set_agent_task( $item->id, 'Drafting 90+ authority content...' );
+
+		// 2026 Strategy: SERP Blueprinting
+		$serp_agent = new VMSB_SERP();
+		$blueprint  = $serp_agent->get_blueprint( $item->primary_keyword );
+		$blueprint_context = "\nMARKET BLUEPRINT (Beat these benchmarks):\n"
+			. "- Target Word Count: " . max($item->target_words, $blueprint['min_word_count'] ?? 1200) . "\n"
+			. "- Essential Entities: " . implode(', ', (array)($blueprint['required_entities'] ?? [])) . "\n"
+			. "- Tactical Gap to Exploit: " . ($blueprint['tactical_gap'] ?? 'Provide more technical depth') . "\n"
+			. "- Trust Features to Include: " . implode(', ', (array)($blueprint['trust_features'] ?? []));
+
+		// Travel Scenario CPT-Aware Prompting
+		$cpt_requirements = "";
+		if ( strpos( strtolower($item->title), 'destination' ) !== false || $item->content_type === 'destinations' ) {
+			$cpt_requirements = "\nDESTINATION REQUIREMENTS:\n"
+				. "- Detailed 'How to Reach' section (Air, Rail, Road).\n"
+				. "- 'Best Time to Visit' with seasonal details.\n"
+				. "- 'Top 5 Things to Do' list.\n"
+				. "- Local travel tips (Clothing, Currency, Custom).";
+		} elseif ( strpos( strtolower($item->title), 'event' ) !== false || $item->content_type === 'events' ) {
+			$cpt_requirements = "\nEVENT REQUIREMENTS:\n"
+				. "- Clear 'Dates & Timing' section.\n"
+				. "- Detailed 'Venue & Location' info.\n"
+				. "- 'What to Expect' (Key highlights).\n"
+				. "- 'Booking/Registration' guidance.";
+		}
 
 		$prompt = "Write the article.\n\n"
 			// A plan row's own content_language overrides the site-wide
@@ -538,8 +591,10 @@ class VMSB_Content {
 			. "SEARCH INTENT: {$item->intent}\n"
 			. "TARGET LENGTH: about {$item->target_words} words\n"
 			. "BRIEF: {$item->brief}\n"
+			. $cpt_requirements
 			. ( $item->editor_note ? "CRITICAL EDITOR NOTE: {$item->editor_note}\n" : "" )
 			. ( $semantic_clues ? "SEMANTIC CONTEXT (Build upon these existing site themes): " . implode( ', ', $semantic_clues ) . "\n" : "" )
+			. ( $blueprint_context ? "SERP COMPETITIVE CONTEXT: {$blueprint_context}\n" : "" )
 			. ( $agent_context ? "RESEARCH & ARCHITECTURE GUIDANCE: {$agent_context}\n" : "" )
 			. "INTERNAL LINKS TO INCLUDE (use natural anchors): " . wp_json_encode( $link_context ) . "\n\n"
 			. "RANK MATH 90+ SCORE REQUIREMENTS:\n"
@@ -596,6 +651,23 @@ class VMSB_Content {
 
 		$this->set_agent_task( $item->id, 'Applying Senior Editor critique...' );
 
+		// ELITE: Multi-Model Fact/Hallucination Check
+		if ( VMSB_License::at_least('elite') ) {
+			$this->set_agent_task( $item->id, 'Independent Fact-Verification in progress...' );
+			$verify_prompt = "Act as an Independent Fact-Checker. Review this drafted article for hallucinations or internal contradictions.\n"
+				. "ARTICLE: \"{$data['post_title']}\"\n"
+				. "CONTENT SNIPPET: " . wp_trim_words($data['content_html'], 500) . "\n\n"
+				. "TASK: Does this article invent facts not supported by common knowledge or the business profile?\n"
+				. "Return ONLY 'PASS' or 'FAIL: [Reason]'.";
+
+			$verification = $this->ai->generate( $verify_prompt, array( 'complexity' => 'standard', 'persona' => 'auditor', 'provider' => 'gemini' ) ); // Use different provider
+			if ( ! empty($verification['ok']) && 0 === stripos(trim($verification['text']), 'FAIL') ) {
+				$reason = "Independent Verification Failed: " . trim($verification['text']);
+				$wpdb->update( $this->table(), array( 'status' => 'failed', 'last_error' => $reason ), array( 'id' => $item->id ) );
+				return new WP_Error( 'vmsb_verification', $reason );
+			}
+		}
+
 		// THE GATE. Nothing the brain writes reaches a live URL unchecked.
 		$html   = wp_kses_post( $data['content_html'] );
 		$report = class_exists( 'VMSB_Quality_Gate' )
@@ -627,8 +699,15 @@ class VMSB_Content {
 
 		// Scenario: High-Quality CPT Support (Destinations, Events, etc.)
 		$post_type = $item->content_type;
+		// CPT Routing Logic (Travel Scenario Upgrade)
 		if ( 'blog' === $post_type || empty($post_type) ) {
 			$post_type = 'post';
+		}
+
+		if ( strpos( strtolower($item->title), 'destination' ) !== false && post_type_exists('destinations') ) {
+			$post_type = 'destinations';
+		} elseif ( !empty($item->cluster) && post_type_exists($item->cluster) ) {
+			$post_type = $item->cluster;
 		}
 
 		$post_id = wp_insert_post(
@@ -738,6 +817,23 @@ class VMSB_Content {
 			$with_images = $this->insert_inline_images( $html, array_slice( $data['inline_image_prompts'], 0, 2 ), $item, $post_id );
 			if ( $with_images !== $html ) {
 				$html = $with_images;
+				wp_update_post( array( 'ID' => $post_id, 'post_content' => $html ) );
+			}
+		}
+
+		// SGE Mastery: Generate AI-friendly features (Ported from Autopilot)
+		if ( class_exists('VMSB_AEO') ) {
+			$aeo = new VMSB_AEO();
+			$sge = $aeo->generate_sge_features( $post_id );
+			if ( ! empty($sge['summary_html']) || ! empty($sge['table_html']) ) {
+				$sge_block = "\n\n<!-- wp:group {\"className\":\"vmsb-sge-mastery\"} -->\n"
+					. "<div class=\"wp-block-group vmsb-sge-mastery\">"
+					. ( ! empty($sge['summary_html']) ? $sge['summary_html'] : '' )
+					. ( ! empty($sge['table_html']) ? $sge['table_html'] : '' )
+					. "</div>\n<!-- /wp:group -->\n\n";
+
+				// Inject after the Key Takeaways or first paragraph
+				$html = preg_replace( '/(<p[^>]*>.*?<\/p>)/is', '$1' . $sge_block, $html, 1 );
 				wp_update_post( array( 'ID' => $post_id, 'post_content' => $html ) );
 			}
 		}
@@ -1088,17 +1184,24 @@ class VMSB_Content {
 	 * purpose. Passing 'suggested' is what lets VMSB_Growth_Engine::scan()
 	 * queue candidates for review instead of auto-approving them.
 	 */
-	public function plan_specific( $title, $keyword, $brief, $cluster = '', $is_pillar = 0, $status = 'approved' ) {
+	/**
+	 * $content_type defaults to 'blog' (the table's own DEFAULT) so every
+	 * existing caller keeps writing plain posts exactly as before - only a
+	 * caller that actually knows the target post type (a CPT slug validated
+	 * with post_type_exists()) should ever pass one.
+	 */
+	public function plan_specific( $title, $keyword, $brief, $cluster = '', $is_pillar = 0, $status = 'approved', $content_type = '' ) {
 		global $wpdb;
 		$uid = substr( md5( $keyword . '|' . $title ), 0, 24 );
 		$now = current_time( 'mysql', true );
+		$content_type = $content_type ?: 'blog';
 
 		$wpdb->query(
 			$wpdb->prepare(
-				"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, brief, cluster, is_pillar, status, created_at, updated_at, priority)
-				 VALUES (%s,%s,%s,%s,%s,%d,%s,%s,%s,15)
-				 ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at), cluster = VALUES(cluster), brief = VALUES(brief), is_pillar = VALUES(is_pillar)",
-				$uid, $title, $keyword, $brief, $cluster, (int) $is_pillar, $status, $now, $now
+				"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, brief, cluster, is_pillar, status, content_type, created_at, updated_at, priority)
+				 VALUES (%s,%s,%s,%s,%s,%d,%s,%s,%s,%s,15)
+				 ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at), cluster = VALUES(cluster), brief = VALUES(brief), is_pillar = VALUES(is_pillar), content_type = VALUES(content_type)",
+				$uid, $title, $keyword, $brief, $cluster, (int) $is_pillar, $status, $content_type, $now, $now
 			)
 		);
 
@@ -1286,6 +1389,29 @@ class VMSB_Content {
 		);
 	}
 
+	public function approve_all() {
+		global $wpdb;
+		$rows = $wpdb->get_results( "SELECT id FROM {$this->table()} WHERE status = 'planned' ORDER BY priority DESC" );
+		if ( ! $rows ) return 0;
+
+		$velocity = (int) VMSB_Settings::get( 'posts_per_day', 3 );
+		$interval = floor( 86400 / max(1, $velocity) ); // Seconds between posts
+		$now = time();
+		$count = 0;
+
+		foreach ( $rows as $i => $row ) {
+			$staggered_time = gmdate( 'Y-m-d H:i:s', $now + ($i * $interval) );
+			$wpdb->update( $this->table(), array(
+				'status' => 'approved',
+				'scheduled_for' => $staggered_time,
+				'updated_at' => current_time( 'mysql', true )
+			), array( 'id' => $row->id ) );
+			$count++;
+		}
+
+		return $count;
+	}
+
 	/**
 	 * Hyper-Growth Pipeline: Auto-approves high-opportunity tasks
 	 * to ensure the 'Writing' queue never runs dry.
@@ -1336,7 +1462,8 @@ class VMSB_Content {
 
 		switch ( $action ) {
 			case 'bulk-approve':
-				$count = $wpdb->query( "UPDATE {$this->table()} SET status = 'approved', updated_at = '" . current_time( 'mysql', true ) . "' WHERE id IN (" . implode( ',', $ids ) . ") AND status = 'planned'" );
+				$now = current_time( 'mysql', true );
+				$count = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', scheduled_for = %s, updated_at = %s WHERE id IN (" . implode( ',', $ids ) . ") AND status = 'planned'", $now, $now ) );
 				break;
 
 			case 'bulk-delete':
@@ -1345,7 +1472,8 @@ class VMSB_Content {
 
 			case 'bulk-produce':
 				// Mark for immediate production by boosting priority and approving
-				$count = $wpdb->query( "UPDATE {$this->table()} SET status = 'approved', priority = 30 WHERE id IN (" . implode( ',', $ids ) . ") AND status IN ('planned', 'rejected')" );
+				$now = current_time( 'mysql', true );
+				$count = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', priority = 30, scheduled_for = %s WHERE id IN (" . implode( ',', $ids ) . ") AND status IN ('planned', 'rejected')", $now ) );
 				break;
 		}
 
@@ -1355,7 +1483,7 @@ class VMSB_Content {
 	/**
 	 * Direct command-line blogging. (Ported from VMAI SEO)
 	 */
-	public function produce_by_topic( $topic ) {
+	public function produce_by_topic( $topic, $post_type = 'post' ) {
 		global $wpdb;
 		$data = $this->ai->generate_json(
 			"Define a primary keyword and SEO title for this topic: {$topic}",
@@ -1368,10 +1496,10 @@ class VMSB_Content {
 		$uid = substr( md5( $data['primary_keyword'] . '|' . $topic ), 0, 24 );
 		$now = current_time( 'mysql', true );
 		$wpdb->query( $wpdb->prepare(
-			"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, status, priority, created_at, updated_at)
-			 VALUES (%s, %s, %s, 'approved', 10, %s, %s)
+			"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, content_type, status, priority, created_at, updated_at)
+			 VALUES (%s, %s, %s, %s, 'approved', 10, %s, %s)
 			 ON DUPLICATE KEY UPDATE title = VALUES(title), updated_at = VALUES(updated_at)",
-			$uid, $data['seo_title'] ?? $topic, $data['primary_keyword'], $now, $now
+			$uid, $data['seo_title'] ?? $topic, $data['primary_keyword'], $post_type, $now, $now
 		) );
 
 		$id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$this->table()} WHERE row_uid = %s", $uid ) );
