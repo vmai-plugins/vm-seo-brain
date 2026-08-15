@@ -52,7 +52,12 @@ $vmsb_roi_val     = VMSB_Outcome_Ledger::calculate_blitz_value();
 			// Reuse the complex growth trajectory from previous intelligence hub
 			$vmsb_history = $vmsb_growth->series(90);
 			$vmsb_clicks = wp_list_pluck($vmsb_history, 'clicks');
-			$vmsb_max = max($vmsb_clicks) ?: 1;
+			// max() on an empty array is a fatal ValueError in PHP 8, and ?:
+			// cannot catch it - the throw happens before the coalesce. series()
+			// is empty on any site whose metrics table has no rows in range
+			// (fresh install, or Google never connected), which would have
+			// white-screened this page rather than drawing a flat chart.
+			$vmsb_max = max($vmsb_clicks ?: array(0)) ?: 1;
 			$vmsb_width = 1000; $vmsb_height = 250;
 			$vmsb_points = [];
 			if (count($vmsb_history) > 1) {

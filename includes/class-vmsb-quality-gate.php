@@ -67,7 +67,8 @@ class VMSB_Quality_Gate {
 		$checks['structure'] = array( 'weight' => 15, 'score' => $structure['score'], 'detail' => $structure['detail'] );
 
 		// 4. Readability (Flesch-ish).
-		$checks['readability'] = array( 'weight' => 10, 'score' => self::readability( $text ), 'detail' => 'Reading ease.' );
+		$read = self::readability( $text );
+		$checks['readability'] = array( 'weight' => 10, 'score' => $read['score'], 'detail' => $read['detail'] );
 
 		// 5. Keyword actually present.
 		$kw = mb_strtolower( $context['keyword'] );
@@ -188,12 +189,47 @@ class VMSB_Quality_Gate {
 		return array( 'score' => min( 100, $score ), 'detail' => $notes ? implode( ', ', $notes ) : 'Well structured.' );
 	}
 
+	/**
+	 * Flesch reading-ease is only defined for English, and both of its inputs
+	 * here were Latin-only: str_word_count() does not see Devanagari at all,
+	 * and the syllable proxy counts English vowel runs.
+	 *
+	 * So a Hindi article counted 0 words, which max(1, ...) turned into "one
+	 * word", and the formula returned a flawless 100. A mixed English/Hindi
+	 * article was worse - it counted only the Latin words against syllables
+	 * drawn from the whole string and scored a near-zero. This check carries
+	 * weight in the publish-or-hold decision, so it was inflating scores for
+	 * one kind of content and suppressing them for the other.
+	 *
+	 * Now counts words Unicode-aware, understands the Indic danda as a
+	 * sentence terminator, and refuses to score text that is not mostly Latin
+	 * rather than inventing a number for it.
+	 */
 	private static function readability( $text ) {
-		$sentences = max( 1, preg_match_all( '/[.!?]+/', $text ) );
-		$words     = max( 1, str_word_count( $text ) );
+		$words_total = preg_match_all( '/[\p{L}\p{N}]+/u', $text );
+		if ( $words_total < 1 ) {
+			return array( 'score' => 0, 'detail' => 'No readable text found.' );
+		}
+
+		$words_latin = preg_match_all( '/[A-Za-z]+/', $text );
+		if ( ( $words_latin / $words_total ) < 0.6 ) {
+			// Neutral, and weighted like every other check - but say plainly
+			// that it was not measured rather than passing off a fabricated
+			// reading-ease number as a real one.
+			return array(
+				'score'  => 60,
+				'detail' => 'Not scored - reading ease is an English-only measure and this text is mostly non-Latin script.',
+			);
+		}
+
+		$sentences = max( 1, preg_match_all( '/[.!?\x{0964}\x{0965}]+/u', $text ) );
 		$syllables = max( 1, preg_match_all( '/[aeiouy]+/i', $text ) );
-		$flesch    = 206.835 - 1.015 * ( $words / $sentences ) - 84.6 * ( $syllables / $words );
-		return (int) max( 0, min( 100, $flesch ) );
+		$flesch    = 206.835 - 1.015 * ( $words_total / $sentences ) - 84.6 * ( $syllables / $words_total );
+
+		return array(
+			'score'  => (int) max( 0, min( 100, $flesch ) ),
+			'detail' => 'Reading ease.',
+		);
 	}
 
 	private static function alignment_check( $text, array $context ) {

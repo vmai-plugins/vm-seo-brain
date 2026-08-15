@@ -139,7 +139,10 @@ $vmsb_active_work = $wpdb->get_results("SELECT task_type, status, score, timelin
 					<?php
 					$vmsb_series = $vmsb_growth_engine->series(30);
 					$vmsb_clicks = wp_list_pluck($vmsb_series, 'clicks');
-					$vmsb_max_clicks = max($vmsb_clicks) ?: 1;
+					// Same PHP 8 max()-on-empty fatal as the Analytics chart: with
+					// no metrics rows yet this threw a ValueError and took down
+					// the whole Dashboard, the first page the plugin opens on.
+					$vmsb_max_clicks = max($vmsb_clicks ?: array(0)) ?: 1;
 					$vmsb_points = array();
 					$vmsb_width = 1000; $vmsb_height = 150;
 					if (count($vmsb_series) > 1) {

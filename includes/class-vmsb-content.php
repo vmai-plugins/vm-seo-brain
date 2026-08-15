@@ -519,8 +519,12 @@ class VMSB_Content {
 
 		$item = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id = %d", (int) $plan_id ) );
 
-		$secondary     = (array) json_decode( $item->secondary_keywords, true );
-		$links         = (array) json_decode( $item->internal_links, true );
+		// Both columns are nullable and are NULL on every plan row that was
+		// not created by the sheet importer, so this fired a deprecation on
+		// each production run under PHP 8.1+ and will be a TypeError once
+		// that deprecation is promoted.
+		$secondary     = (array) json_decode( (string) $item->secondary_keywords, true );
+		$links         = (array) json_decode( (string) $item->internal_links, true );
 		$agent_context = isset( $args['agent_context'] ) ? $args['agent_context'] : '';
 
 		$link_context = array();

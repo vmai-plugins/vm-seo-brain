@@ -201,7 +201,11 @@
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/cpt_route.php)",
       "Bash(awk '/Scenario: High-Quality CPT Support/,/^\t\t}$/' includes/class-vmsb-content.php)",
       "Read(//c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/**)",
-      "Bash(grep -n '\\\\$today_key\\\\|\\\\$published_today\\\\|\\\\$cap\\\\b\\\\|\\\\$can_publish' includes/class-vmsb-content.php)"
+      "Bash(grep -n '\\\\$today_key\\\\|\\\\$published_today\\\\|\\\\$cap\\\\b\\\\|\\\\$can_publish' includes/class-vmsb-content.php)",
+      "Bash(grep -rn \"max\\(\\\\s*\\\\$[a-z_]*\\\\s*\\)\\\\|min\\(\\\\s*\\\\$[a-z_]*\\\\s*\\)\" --include=\"*.php\" includes/ admin/)",
+      "Bash(grep -rn '$_POST\\\\['\\\\''vmsb'\\\\''\\\\]\\\\|_POST\\\\[' admin/class-vmsb-admin.php includes/class-vmsb-settings.php)",
+      "Bash(LOG=\"/c/Users/tripc/Local Sites/test/logs/php/error.log\" *)",
+      "Bash(grep -rnE \"json_decode\\\\\\(\\\\s*\\\\\\\\\\\\$[a-z_]+->[a-z_]+\" --include=\"*.php\" includes/ admin/)"
     ]
   }
 }
