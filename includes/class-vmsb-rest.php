@@ -1088,15 +1088,18 @@ class VMSB_REST {
 		if ( ! $row ) {
 			return new WP_Error( 'vmsb_rest', 'Task not found.', array( 'status' => 404 ) );
 		}
-		if ( 'failed' !== $row->status ) {
-			return new WP_Error( 'vmsb_rest', "Only failed tasks can be retried; this one is '{$row->status}'.", array( 'status' => 409 ) );
+		// 'retrying' means the task is sitting out a backoff of up to four
+		// hours. Clicking Retry is an explicit "run it now", so clear the
+		// backoff rather than refusing and making the user wait it out.
+		if ( ! in_array( $row->status, array( 'failed', 'retrying' ), true ) ) {
+			return new WP_Error( 'vmsb_rest', "Only failed or retrying tasks can be retried; this one is '{$row->status}'.", array( 'status' => 409 ) );
 		}
 
 		// Reset attempts too, otherwise the runner immediately re-fails it
 		// for having already exhausted max_attempts.
 		$wpdb->update(
 			"{$wpdb->prefix}vmsb_tasks",
-			array( 'status' => 'queued', 'attempts' => 0, 'last_error' => null ),
+			array( 'status' => 'queued', 'attempts' => 0, 'last_error' => null, 'retry_after' => null ),
 			array( 'id' => $id )
 		);
 		VMSB_Task_Runner::log_event( $id, 'Re-queued by hand', 'Retried from the Production Hub after a failure.' );

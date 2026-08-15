@@ -42,7 +42,8 @@ class VMSB_Task_Runner {
 			'attempts'     => 0,
 			'max_attempts' => (int) $max_attempts,
 			'timeline'     => wp_json_encode( $timeline ),
-			'queued_at'    => current_time( 'mysql' ),
+			// UTC, like every other timestamp this table is compared against.
+			'queued_at'    => current_time( 'mysql', true ),
 		) );
 
 		return (int) $wpdb->insert_id;
@@ -73,6 +74,25 @@ class VMSB_Task_Runner {
 	public static function process( $limit = 3 ) {
 		global $wpdb;
 		$table = self::table();
+
+		// A task is claimed by flipping it to 'running' before it executes. If
+		// the request then dies mid-task - PHP timeout, fatal, or the gateway
+		// hanging up on a long AI call - nothing ever set that row back, and
+		// nothing here looked for it. The row stayed 'running' forever: never
+		// picked up again (only queued/retrying are eligible), counted as a
+		// busy agent by fleet_status() indefinitely, and worst of all treated
+		// as an active duplicate by queue(), so the Strategist could never
+		// queue that task type again. A single timeout permanently disabled
+		// one agent. Reclaim anything that has been 'running' far longer than
+		// a request could possibly last.
+		self::reclaim_stalled();
+
+		// Let a task finish even if the browser or gateway gives up waiting.
+		// Without this the connection dropping can take PHP down mid-task and
+		// strand the row exactly as described above.
+		if ( function_exists( 'ignore_user_abort' ) ) {
+			ignore_user_abort( true );
+		}
 
 		// ELITE BLITZ: If velocity is high, significantly increase processing capacity
 		$velocity = (int) VMSB_Settings::get( 'posts_per_day', 3 );
@@ -106,13 +126,46 @@ class VMSB_Task_Runner {
 		$results = array();
 		$start_time = time();
 
+		// Budget for the whole batch. This can only stop the runner starting
+		// ANOTHER task - it cannot interrupt one already executing - and a
+		// single AI-heavy task is slow on its own: a Pipeline Hydrator run
+		// measured 37 seconds here, so the old default of three per request
+		// was ~110s and five was ~185s.
+		//
+		// The binding limit is NOT max_execution_time (1200s on this stack),
+		// it is whatever proxy is holding the HTTP connection open - which is
+		// what returned 524 after about two minutes. So cap hard when a
+		// browser is waiting, and only spend a long budget under cron/CLI
+		// where nothing is going to hang up. Whatever does not fit stays
+		// queued and runs on the next pass.
+		$unattended = ( defined( 'WP_CLI' ) && WP_CLI ) || wp_doing_cron() || 'cli' === PHP_SAPI;
+		$max_exec   = (int) ini_get( 'max_execution_time' );
+		if ( $unattended ) {
+			$budget = $max_exec > 0 ? max( 60, (int) ( $max_exec * 0.6 ) ) : 300;
+		} else {
+			// Comfortably under the common 60s proxy read timeout, and far
+			// under Cloudflare's 100s, so the request always returns.
+			$budget = $max_exec > 0 ? min( 45, max( 15, (int) ( $max_exec * 0.6 ) ) ) : 45;
+		}
+
+		// Longest task seen so far in this batch, used as the estimate for how
+		// long the next one might take.
+		$longest = 0;
+
 		foreach ( $rows as $row ) {
-			// SAFETY: Timeout protection (batch cap 25s)
-			if ( time() - $start_time > 25 ) {
+			$elapsed = time() - $start_time;
+
+			// Require room for another task of the worst length seen so far,
+			// not merely for the budget to be unspent. Checking only "elapsed
+			// > budget" let a 37s task start at 44s and run the request to
+			// 81s - past the very proxy timeout this is meant to stay under.
+			if ( $elapsed + $longest > $budget || $elapsed > $budget ) {
 				$wpdb->update( $table, array( 'status' => 'queued' ), array( 'id' => $row->id ) );
-				self::log_event( $row->id, 'Batch timeout', 'Task returned to queue for next pass.' );
+				self::log_event( $row->id, 'Batch budget reached', "Returned to the queue after {$elapsed}s of a {$budget}s budget; will run on the next pass." );
 				continue;
 			}
+
+			$task_started = time();
 
 			self::log_event( $row->id, 'Execution started', 'Agent claimed task.' );
 
@@ -130,7 +183,11 @@ class VMSB_Task_Runner {
 						'status'   => 'done',
 						'attempts' => $attempts,
 						'result'   => wp_json_encode( $res ),
-						'ran_at'   => current_time( 'mysql' ),
+						// Was site-local here while the claim above wrote UTC into
+						// the same column - 5.5 hours apart on an IST site, which
+						// made every ran_at window query wrong in one direction
+						// or the other depending on which write landed last.
+						'ran_at'   => current_time( 'mysql', true ),
 					), array( 'id' => $row->id ) );
 					$log->info( 'task_runner', "Task Success: {$row->task_type} (#{$row->id})." );
 					self::log_event( $row->id, 'Task completed', 'Operation successful.' );
@@ -141,6 +198,7 @@ class VMSB_Task_Runner {
 				self::log_event( $row->id, 'Execution exception', $e->getMessage() );
 			}
 
+			$longest = max( $longest, time() - $task_started );
 			$ran++;
 		}
 
@@ -150,6 +208,51 @@ class VMSB_Task_Runner {
 	/**
 	 * Handle task failure with Exponential Backoff logic.
 	 */
+	/**
+	 * Return tasks that have been 'running' longer than any single request
+	 * could legitimately take. Uses the row's own attempt count, so a task
+	 * that repeatedly strands the request eventually lands in 'failed'
+	 * instead of cycling forever.
+	 */
+	private static function reclaim_stalled( $stale_minutes = 30 ) {
+		global $wpdb;
+		$table = self::table();
+
+		$stalled = $wpdb->get_results( $wpdb->prepare(
+			"SELECT id, attempts, max_attempts FROM {$table}
+			 WHERE status = 'running' AND ran_at IS NOT NULL
+			   AND ran_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d MINUTE)",
+			(int) $stale_minutes
+		) );
+		if ( ! $stalled ) {
+			return 0;
+		}
+
+		foreach ( $stalled as $row ) {
+			$attempts = (int) $row->attempts + 1;
+			$max      = (int) $row->max_attempts ?: 3;
+			$give_up  = $attempts >= $max;
+
+			$wpdb->update(
+				$table,
+				array(
+					'status'     => $give_up ? 'failed' : 'queued',
+					'attempts'   => $attempts,
+					'last_error' => 'Stalled while running - the request died before the task reported back.',
+				),
+				array( 'id' => (int) $row->id, 'status' => 'running' )
+			);
+			self::log_event(
+				(int) $row->id,
+				$give_up ? 'Abandoned after stalling' : 'Reclaimed after stalling',
+				"No result recorded within {$stale_minutes} minutes; attempt {$attempts} of {$max}."
+			);
+		}
+
+		( new VMSB_Logger() )->warn( 'task_runner', 'Reclaimed ' . count( $stalled ) . ' stalled task(s).' );
+		return count( $stalled );
+	}
+
 	private static function handle_failure( $row, $error_msg ) {
 		global $wpdb;
 		$attempts = (int) $row->attempts + 1;
@@ -230,7 +333,9 @@ class VMSB_Task_Runner {
 	public static function prune( $days = 14 ) {
 		global $wpdb;
 		return $wpdb->query( $wpdb->prepare(
-			"DELETE FROM " . self::table() . " WHERE status != 'queued' AND queued_at < DATE_SUB(NOW(), INTERVAL %d DAY)", (int) $days
+			// UTC_TIMESTAMP(), not NOW(): queued_at is stored in UTC, while
+			// NOW() follows the MySQL server clock.
+			"DELETE FROM " . self::table() . " WHERE status != 'queued' AND queued_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY)", (int) $days
 		) );
 	}
 }

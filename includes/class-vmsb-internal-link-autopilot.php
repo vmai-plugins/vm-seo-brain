@@ -135,8 +135,29 @@ class VMSB_Internal_Link_Autopilot {
 			LIMIT " . (int) $limit
 		);
 
+		// AILG_Scanner has no fix_orphan() - it never has. Every run of this
+		// agent died on "Call to undefined method AILG_Scanner::fix_orphan()",
+		// which is why Link Autopilot sat in the failed queue. scan_post() is
+		// the method that exists, and it is what this function's own docblock
+		// describes ("trigger a scan via Link Genius") - it is already the
+		// call VMSB_Content uses after publishing.
+		if ( ! method_exists( 'AILG_Scanner', 'scan_post' ) ) {
+			return;
+		}
+
 		foreach ( $orphans as $oid ) {
-			AILG_Scanner::fix_orphan( (int) $oid );
+			// scan_post() is another plugin's code running over arbitrary post
+			// content, and it does throw - one post here raised "Unclosed '{'"
+			// from its own parser. Uncaught, that aborted the rescue sweep and
+			// failed the entire Link Autopilot task over a single bad post.
+			try {
+				AILG_Scanner::scan_post( (int) $oid );
+			} catch ( \Throwable $e ) {
+				$this->log->warn( 'link_autopilot', "Link Genius could not scan post #{$oid}: " . $e->getMessage() );
+				continue;
+			}
+			// Only mark handled once the scan actually ran, so a post that
+			// threw is retried on a later pass instead of being skipped.
 			update_post_meta( $oid, '_vmsb_rescue_done', time() );
 		}
 	}

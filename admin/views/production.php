@@ -108,7 +108,7 @@ $vmsb_approvals = $vmsb_content_engine->pending_reviews( 50 );
 								</td>
 								<td class="vmsb-row-actions">
 									<button class="vmsb-mini-btn" data-vmsb-task-view="<?php echo (int)$task->id; ?>">View</button>
-									<?php if ( 'failed' === $task->status ) : ?>
+									<?php if ( in_array( $task->status, array( 'failed', 'retrying' ), true ) ) : ?>
 										<button class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="task-retry" data-id="<?php echo (int)$task->id; ?>">Retry</button>
 									<?php endif; ?>
 									<button class="vmsb-mini-btn" data-vmsb="task-cancel" data-id="<?php echo (int)$task->id; ?>">Cancel</button>

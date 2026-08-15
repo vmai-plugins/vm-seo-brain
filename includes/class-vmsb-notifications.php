@@ -36,7 +36,8 @@ class VMSB_Notifications {
 
 		// 3. Task Failures
 		global $wpdb;
-		$failed_tasks = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_tasks WHERE status = 'failed' AND ran_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)");
+		// ran_at is stored in UTC; NOW() follows the MySQL server clock.
+		$failed_tasks = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_tasks WHERE status = 'failed' AND ran_at > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 24 HOUR)");
 		if ( $failed_tasks > 0 ) {
 			$notes[] = array(
 				'level'   => 'warning',
