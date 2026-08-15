@@ -103,6 +103,12 @@ class VMSB_Commander {
 	private function learn() {
 		$market = new VMSB_Market();
 		$res    = $market->assess();
+		// assess() returns WP_Error when the AI call fails. Array-indexing an
+		// object is a fatal, and ?? does not save it - so /learn crashed the
+		// whole chat request on any provider hiccup instead of reporting it.
+		if ( is_wp_error( $res ) ) {
+			return "Market assessment failed: " . $res->get_error_message();
+		}
 		return "Learning complete. Market saturation is at " . ( $res['saturation'] ?? 'unknown' ) . ". Insights updated in the business DNA.";
 	}
 

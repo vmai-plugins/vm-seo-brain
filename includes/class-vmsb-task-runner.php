@@ -206,6 +206,11 @@ class VMSB_Task_Runner {
 			case 'video_pipeline':   return ( new VMSB_Video_Agent() )->sweep( 2 );
 			case 'freshness_boost':  return ( new VMSB_Freshness() )->run( 2 );
 			case 'opportunity_scan': return ( new VMSB_Opportunity_Engine() )->discover_all();
+			// growth_scan is in the Strategist's catalogue, has its own
+			// auto_growth_mode toggle, label, explanation and scheduling
+			// rule - but never had a case here, so every run it queued
+			// failed with "Unknown task type: growth_scan".
+			case 'growth_scan':      return ( new VMSB_Growth_Engine() )->scan( 15 );
 
 			default:
 				return new WP_Error( 'vmsb_task', "Unknown task type: {$task_type}" );

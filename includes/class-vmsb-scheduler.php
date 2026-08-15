@@ -120,6 +120,32 @@ class VMSB_Scheduler {
 		if ( class_exists( 'VMSB_Task_Runner' ) ) {
 			VMSB_Task_Runner::prune( 14 );
 		}
+
+		self::prune_drip_counters( 14 );
+	}
+
+	/**
+	 * Drop the per-day publish counters (vmsb_pub_YYYYMMDD). One is created
+	 * every day the plugin publishes and nothing ever removed them, so they
+	 * accumulated forever - roughly 365 rows a year, historically autoloaded
+	 * on every single request. Only the current day is ever read.
+	 */
+	private static function prune_drip_counters( $keep_days = 14 ) {
+		global $wpdb;
+
+		$cutoff = gmdate( 'Ymd', time() - ( (int) $keep_days * DAY_IN_SECONDS ) );
+		$names  = $wpdb->get_col(
+			"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE 'vmsb\\_pub\\_%'"
+		);
+
+		foreach ( $names as $name ) {
+			$stamp = substr( $name, strlen( 'vmsb_pub_' ) );
+			// Only touch keys that really are a date stamp, so an unrelated
+			// option sharing the prefix is never deleted.
+			if ( preg_match( '/^\d{8}$/', $stamp ) && $stamp < $cutoff ) {
+				delete_option( $name );
+			}
+		}
 	}
 
 	public function run_weekly() {

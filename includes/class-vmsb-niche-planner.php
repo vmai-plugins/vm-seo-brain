@@ -50,7 +50,7 @@ class VMSB_Niche_Planner {
 
 			return array(
 				'planned' => $total_created,
-				'pushed'  => $pushed,
+				'pushed'  => is_wp_error( $pushed ) ? 0 : (int) $pushed,
 				'fresh_clusters' => array( $cluster )
 			);
 		}
@@ -85,14 +85,23 @@ class VMSB_Niche_Planner {
 			$total_created += $this->plan_for_new_cluster( $cluster, $pieces_per_category );
 		}
 
-		// 4. Sync to Google Sheets
+		// 4. Sync to Google Sheets. This returns a WP_Error whenever Google
+		// is not connected or no sheet is configured, which is a perfectly
+		// normal state - but it used to be interpolated straight into the
+		// log line below, throwing "Object of class WP_Error could not be
+		// converted to string" and failing the whole Pipeline Hydrator task
+		// after the planning work had already succeeded.
 		$pushed = $content->push_to_sheet();
-
-		$this->log->info( 'niche_planner', "Expansion complete. Created {$total_created} pieces, pushed {$pushed} to sheet." );
+		if ( is_wp_error( $pushed ) ) {
+			$this->log->info( 'niche_planner', "Expansion complete. Created {$total_created} pieces; sheet sync skipped ({$pushed->get_error_message()})." );
+			$pushed = 0;
+		} else {
+			$this->log->info( 'niche_planner', "Expansion complete. Created {$total_created} pieces, pushed {$pushed} to sheet." );
+		}
 
 		return array(
 			'planned' => $total_created,
-			'pushed'  => $pushed,
+			'pushed'  => (int) $pushed,
 			'fresh_clusters' => wp_list_pluck( $fresh_clusters, 'name' )
 		);
 	}

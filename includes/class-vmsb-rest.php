@@ -114,6 +114,7 @@ class VMSB_REST {
 			'rollback-recent'     => 'rollback_recent',
 			'task-detail'         => 'task_detail',
 			'task-cancel'         => 'task_cancel',
+			'task-retry'          => 'task_retry',
 			'global-search'       => 'global_search',
 			'evaluate-pivot'      => 'evaluate_pivot',
 			'graph-data'          => 'graph_data',
@@ -1072,5 +1073,34 @@ class VMSB_REST {
 
 		$wpdb->delete( "{$wpdb->prefix}vmsb_tasks", array( 'id' => $id ) );
 		return rest_ensure_response( array( 'success' => true, 'cancelled' => $id ) );
+	}
+
+	/**
+	 * Put a failed task back in the queue. Without this a failure was a dead
+	 * end - the only action offered was Cancel, so the single way to retry
+	 * anything was to delete it and wait for the Strategist to happen to
+	 * re-queue the same work.
+	 */
+	public function task_retry( $request ) {
+		global $wpdb;
+		$id  = (int) $request->get_param( 'id' );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, status FROM {$wpdb->prefix}vmsb_tasks WHERE id = %d", $id ) );
+		if ( ! $row ) {
+			return new WP_Error( 'vmsb_rest', 'Task not found.', array( 'status' => 404 ) );
+		}
+		if ( 'failed' !== $row->status ) {
+			return new WP_Error( 'vmsb_rest', "Only failed tasks can be retried; this one is '{$row->status}'.", array( 'status' => 409 ) );
+		}
+
+		// Reset attempts too, otherwise the runner immediately re-fails it
+		// for having already exhausted max_attempts.
+		$wpdb->update(
+			"{$wpdb->prefix}vmsb_tasks",
+			array( 'status' => 'queued', 'attempts' => 0, 'last_error' => null ),
+			array( 'id' => $id )
+		);
+		VMSB_Task_Runner::log_event( $id, 'Re-queued by hand', 'Retried from the Production Hub after a failure.' );
+
+		return rest_ensure_response( array( 'success' => true, 'requeued' => $id ) );
 	}
 }
