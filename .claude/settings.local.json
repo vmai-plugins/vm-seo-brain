@@ -187,7 +187,12 @@
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l '/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/admin/class-vmsb-admin.php')",
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" *)",
       "Bash(tail -30 \"/c/Users/tripc/Local Sites/test/logs/php/error.log\")",
-      "Bash(grep -n '\\\\$this->ai\\\\|\\\\$this->log' includes/class-vmsb-rest.php)"
+      "Bash(grep -n '\\\\$this->ai\\\\|\\\\$this->log' includes/class-vmsb-rest.php)",
+      "Bash(ls \"/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/\" | head -20 *)",
+      "Bash(SCRATCH=\"/c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad\" *)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -d 'extension_dir=C:\\\\Users\\\\tripc\\\\AppData\\\\Roaming\\\\Local\\\\lightning-services\\\\php-8.2.29+0\\\\bin\\\\win64\\\\ext' -d extension=mysqli /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/probe_set.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public\" *)",
+      "Bash(awk '/<!-- APPROVALS -->/,/^ <\\\\/div>$/' admin/views/production.php)"
     ]
   }
 }

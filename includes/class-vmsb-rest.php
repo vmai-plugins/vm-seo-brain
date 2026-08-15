@@ -1057,7 +1057,20 @@ class VMSB_REST {
 	public function task_cancel( $request ) {
 		global $wpdb;
 		$id = (int) $request->get_param( 'id' );
+
+		// This used to delete whatever row it was handed and report success
+		// either way - including completed history, and including ids that
+		// never existed. Cancelling only means anything for work that has
+		// not finished.
+		$status = $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$wpdb->prefix}vmsb_tasks WHERE id = %d", $id ) );
+		if ( null === $status ) {
+			return new WP_Error( 'vmsb_rest', 'Task not found.', array( 'status' => 404 ) );
+		}
+		if ( 'done' === $status ) {
+			return new WP_Error( 'vmsb_rest', 'That task already completed - there is nothing to cancel.', array( 'status' => 409 ) );
+		}
+
 		$wpdb->delete( "{$wpdb->prefix}vmsb_tasks", array( 'id' => $id ) );
-		return rest_ensure_response( array( 'success' => true ) );
+		return rest_ensure_response( array( 'success' => true, 'cancelled' => $id ) );
 	}
 }
