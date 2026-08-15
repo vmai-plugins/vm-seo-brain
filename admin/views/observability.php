@@ -23,6 +23,7 @@ $vmsb_actions = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vmsb_actions O
 			<button class="vmsb-btn vmsb-btn-ghost" onclick="if(confirm('Undo last 5 actions?')) VMSB.api('rollback-recent', {count:5}).then(()=>location.reload())">Rollback Last 5</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 
 	<div class="vmsb-table-wrap" style="margin-top:30px;">
 		<table class="vmsb-table vmsb-table-full">

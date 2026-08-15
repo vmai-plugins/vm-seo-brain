@@ -55,24 +55,35 @@ class VMSB_Growth_Engine {
 				if ( ! $keyword || $this->keyword_already_queued( $keyword ) ) {
 					continue;
 				}
+				$content_type = isset( $g['content_type'] ) ? $g['content_type'] : '';
+				$content_type = ( $content_type && 'post' !== $content_type && post_type_exists( $content_type ) ) ? $content_type : '';
 				$content->plan_specific(
 					isset( $g['title'] ) ? $g['title'] : $keyword,
 					$keyword,
 					'[Gap Radar - ' . ( isset( $g['type'] ) ? $g['type'] : 'Market' ) . '] ' . ( isset( $g['reasoning'] ) ? $g['reasoning'] : '' ),
 					'Gap Discovery',
 					0,
-					'suggested'
+					'suggested',
+					$content_type
 				);
 				$found++;
 			}
 		}
 
-		// 2. Silo pillar/support holes - same AI-built map the Silos page
+		// 2. Custom post type gaps (a travel site's "destinations"/"events"
+		// types, or any other registered CPT) - given a guaranteed slice of
+		// the budget before Silo's uncapped push below, since Silo alone can
+		// exceed $limit on its own and would otherwise crowd this out
+		// entirely. Every other source here only ever proposes plain blog
+		// posts; this is the one that actually knows the site's CPTs exist.
+		$found += $this->cpt_gaps( $content, min( 5, max( 0, $limit - $found ) ) );
+
+		// 3. Silo pillar/support holes - same AI-built map the Silos page
 		// uses, queued for review instead of pushed straight into production.
 		$silo_res = ( new VMSB_Silo() )->push_gaps_to_plan( true );
 		$found   += (int) ( isset( $silo_res['pushed'] ) ? $silo_res['pushed'] : 0 );
 
-		// 3. Clusters too thin to read as an authority - catch the weakest
+		// 4. Clusters too thin to read as an authority - catch the weakest
 		// ones up with their single best unclaimed keyword, no AI call needed.
 		$found += $this->weak_cluster_gaps( $content, max( 0, $limit - $found ) );
 
@@ -80,6 +91,77 @@ class VMSB_Growth_Engine {
 		$this->log->info( 'growth', "Growth scan complete: {$found} new suggestion(s) queued for review." );
 
 		return array( 'found' => $found );
+	}
+
+	/**
+	 * Ask specifically for entries in the site's registered custom post
+	 * types (a travel site's "destinations"/"events", or whatever else is
+	 * registered) - the generic keyword-gap sources above have no notion
+	 * these types exist, so a "destinations" CPT would otherwise only ever
+	 * get filled by luck (a keyword gap happening to be phrased like a
+	 * place name). Requires Business DNA to have been calibrated at least
+	 * once, since that's what populates the CPT catalog this reads.
+	 */
+	private function cpt_gaps( VMSB_Content $content, $max ) {
+		if ( $max <= 0 ) {
+			return 0;
+		}
+
+		$cpts = ( new VMSB_Brain() )->profile()['cpts'];
+		if ( empty( $cpts ) ) {
+			return 0;
+		}
+
+		global $wpdb;
+		$existing = $wpdb->get_col( "SELECT title FROM {$this->table()} ORDER BY id DESC LIMIT 200" );
+
+		$ai    = new VMSB_AI_Router();
+		$brain = new VMSB_Brain();
+		$prompt = "Act as a Content Strategist for this business. It has these custom content types beyond standard blog posts:\n"
+			. wp_json_encode( $cpts ) . "\n\n"
+			. ( $existing ? "ALREADY IN THE PIPELINE (do not repeat these):\n- " . implode( "\n- ", array_slice( $existing, 0, 200 ) ) . "\n\n" : '' )
+			. "TASK: For each content type above, propose up to 3 specific, individually-named entries not already covered - "
+			. "e.g. for a 'destinations' type, name real specific places relevant to this business; for an 'events' type, name real "
+			. "specific events. Ground every suggestion in the business's actual profile and location - no generic filler.\n\n"
+			. 'Return JSON: {"items":[{"title":"","keyword":"","content_type":"","brief":""}]}';
+
+		$data  = $ai->generate_json( $prompt, array(
+			'system'     => $brain->context_prompt(),
+			'complexity' => 'premium',
+			'persona'    => 'strategist',
+			'action'     => 'niche_expansion',
+		) );
+		$items = isset( $data['items'] ) ? (array) $data['items'] : array();
+
+		$done = 0;
+		foreach ( $items as $item ) {
+			if ( $done >= $max ) {
+				break;
+			}
+			$keyword = isset( $item['keyword'] ) ? $item['keyword'] : '';
+			$title   = isset( $item['title'] ) ? $item['title'] : $keyword;
+			if ( ! $keyword || ! $title || $this->keyword_already_queued( $keyword ) ) {
+				continue;
+			}
+
+			// Same untrusted-slug guard as Cluster Architect: only ever pass
+			// through a content_type that's a real, currently-registered post
+			// type, never whatever the AI happened to write.
+			$content_type = isset( $item['content_type'] ) ? $item['content_type'] : '';
+			$content_type = ( $content_type && 'post' !== $content_type && post_type_exists( $content_type ) ) ? $content_type : '';
+
+			$content->plan_specific(
+				$title,
+				$keyword,
+				'[' . ( $content_type ? ucfirst( $content_type ) : 'Content' ) . ' Radar] ' . ( isset( $item['brief'] ) ? $item['brief'] : '' ),
+				$content_type ? ucfirst( $content_type ) : 'Content Radar',
+				0,
+				'suggested',
+				$content_type
+			);
+			$done++;
+		}
+		return $done;
 	}
 
 	private function weak_cluster_gaps( VMSB_Content $content, $max ) {

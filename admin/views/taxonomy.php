@@ -23,6 +23,7 @@ $issues = $fixer->open_issues( 100, '', '', 'missing_term_description,empty_arch
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="taxonomy-propose">Propose AI Structure</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 
 	<div class="vmsb-grid" style="grid-template-columns: 1fr 1fr; margin-bottom:30px;">
 		<div class="vmsb-card">

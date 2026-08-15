@@ -17,6 +17,7 @@ $vmsb_is_nested = defined('VMSB_NESTED') && VMSB_NESTED;
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="graph-sync">Sync Knowledge Graph</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 <?php endif; ?>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">

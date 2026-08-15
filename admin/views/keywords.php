@@ -26,6 +26,7 @@ $planned_count = $k->count('planned');
 			</p>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 <?php endif; ?>
 
 	<?php

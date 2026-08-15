@@ -42,6 +42,7 @@ $vmsb_status_tone = array(
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="agents-run-strategist">Run Strategist Now</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 <?php endif; ?>
 
 	<div class="vmsb-grid" style="grid-template-columns: repeat(4, 1fr); margin-top: 30px; gap: 20px;">

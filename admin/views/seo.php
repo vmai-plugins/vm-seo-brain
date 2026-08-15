@@ -20,6 +20,7 @@ defined( 'ABSPATH' ) || exit;
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="scan">Technical Audit</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">
 		<button class="vmsb-tab is-active" data-tab="keywords">🔍 Keywords</button>

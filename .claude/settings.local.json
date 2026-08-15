@@ -161,7 +161,25 @@
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"public function plan_specific\" -A 25 includes/class-vmsb-content.php)",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-cluster-architect.php)",
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function get_chain\" -A 40 includes/class-vmsb-ai-router.php)",
-      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-actions.php)"
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-actions.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"notice\\\\|\\\\.vmsb-head\" admin/assets/js/admin.js | head -30)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rn \"wp-header-end\" admin/views/ ; echo \"---h1 count---\"; grep -rln \"<h1>\" admin/views/*.php | wc -l; grep -rln \"<h1>\" admin/views/*.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"<h1>\" admin/views/*.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rln \"cluster-architect\\\\|Seed Topic\\\\|opportunity-scan\" admin/views/*.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"cluster-architect\\\\|opportunity-scan\\\\|Architect Silo\\\\|Discovery Scan\" admin/views/pipeline.php admin/views/growth.php admin/views/dashboard.php)",
+      "Bash(grep -n 'add_submenu_page\\\\|$pages = array\\\\|'\\\\''vmsb-' admin/class-vmsb-admin.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"cluster-architect\\\\|Seed\\\\|destinations\\\\|content_type\\\\|Architect\" admin/views/production.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l admin/views/pipeline.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"case '/\" includes/class-vmsb-commander.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function research\\\\|function produce_by_topic\" includes/class-vmsb-keywords.php includes/class-vmsb-content.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function expand_with_ai\" -A 15 includes/class-vmsb-keywords.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -rln \"Programmatic SEO\\\\|Title Template\\\\|Build Set\\\\|programmatic-build\" admin/views/*.php)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"Programmatic SEO\\\\|Title Template\\\\|Base Keyword\\\\|Build Set\" -B2 -A 10 admin/views/competitive.php | head -60)",
+      "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain\" && grep -n \"function has_feature\\\\|function plan\\\\b\\\\|programmatic_seo\" includes/class-vmsb-license.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-commander.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-growth-engine.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-gap-finder.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l admin/views/growth.php)"
     ]
   }
 }

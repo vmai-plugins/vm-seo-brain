@@ -25,8 +25,6 @@ $vmsb_active_work = $wpdb->get_results("SELECT task_type, status, score, timelin
 
 ?>
 
-<div class="wrap vmsb vmsb-dashboard-x">
-
 	<!-- 1. WEBSITE GROWTH (TOP BAR) -->
 	<header class="vmsb-control-header">
 		<div class="vmsb-flex-space">
@@ -71,6 +69,7 @@ $vmsb_active_work = $wpdb->get_results("SELECT task_type, status, score, timelin
 			</div>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 
 	<div class="vmsb-main-layout" style="display:grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-top: 30px;">
 
@@ -221,7 +220,6 @@ $vmsb_active_work = $wpdb->get_results("SELECT task_type, status, score, timelin
 	</div>
 
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 
 <style>
 .vmsb-dashboard-x h1 { font-size: 32px; font-family: var(--serif); letter-spacing: -0.5px; }

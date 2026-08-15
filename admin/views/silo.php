@@ -22,6 +22,7 @@ $orphans = $silo->orphans( 60 );
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="god-fix" data-body='{"scope":["internal_links"]}'>Fix linking</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 <?php endif; ?>
 
 	<?php if ( ! $map ) : ?>

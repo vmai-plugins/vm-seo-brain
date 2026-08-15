@@ -36,14 +36,21 @@ class VMSB_Gap_Finder {
 
 		// 3. AI Reasoning: Identify "Golden Gaps"
 		$brain = new VMSB_Brain();
+		$cpts  = $brain->profile()['cpts'];
+		$cpt_context = ! empty( $cpts )
+			? "\n\nSITE CONTENT TYPES (Routes): " . wp_json_encode( $cpts )
+			. "\nSMART ROUTING: set 'content_type' to 'post' for a standard blog gap, or one of the slugs above when the gap "
+			. "is specifically that kind of entity (a place for a 'destinations' type, a happening for an 'events' type)."
+			: '';
 		$prompt = "Act as a Market Dominance Strategist. Find the top {$limit} content gaps for this business.\n\n"
 			. "DATA SIGNALS:\n"
 			. "- Under-served Keywords (GSC): " . implode( ", ", $gsc_context ) . "\n"
-			. "- Top Rivals: " . implode( ", ", $comp_context ) . "\n\n"
+			. "- Top Rivals: " . implode( ", ", $comp_context ) . "\n"
+			. $cpt_context . "\n\n"
 			. "TASK:\n"
 			. "Select/Identify the absolute best opportunities that will drive the most REVENUE and AUTHORITY.\n"
 			. "For each, provide a Title, Primary Keyword, and the 'Gap Type' (Market/Topical/Intent).\n\n"
-			. 'Return JSON: {"gaps":[{"title":"","keyword":"","type":"","reasoning":""}]}';
+			. 'Return JSON: {"gaps":[{"title":"","keyword":"","type":"","reasoning":"","content_type":"post"}]}';
 
 		$data = $this->ai->generate_json( $prompt, array(
 			'system' => $brain->context_prompt(),
@@ -66,12 +73,17 @@ class VMSB_Gap_Finder {
 		$content = new VMSB_Content();
 		$brief = "GAP ANALYSIS: This was identified as a '{$gap['type']}' gap. " . ($gap['reasoning'] ?? '');
 
+		$content_type = isset( $gap['content_type'] ) ? $gap['content_type'] : '';
+		$content_type = ( $content_type && 'post' !== $content_type && post_type_exists( $content_type ) ) ? $content_type : '';
+
 		return $content->plan_specific(
 			$gap['title'],
 			$gap['keyword'],
 			$brief,
 			'Gap Discovery',
-			0
+			0,
+			'approved',
+			$content_type
 		);
 	}
 }

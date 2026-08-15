@@ -22,6 +22,7 @@ $coverage      = $total_targets > 0 ? round( $stats['total'] / $total_targets * 
 			<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="rebuild-index" data-confirm="Clear the whole index and re-embed every page? Do this after changing the embedding model.">Rebuild</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 <?php endif; ?>
 
 	<div class="vmsb-cards">

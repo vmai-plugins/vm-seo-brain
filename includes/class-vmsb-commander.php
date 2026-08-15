@@ -128,7 +128,11 @@ class VMSB_Commander {
 		if ( $post_type === 'destinations' && ! post_type_exists('destinations') ) $post_type = 'post';
 		if ( $post_type === 'events' && ! post_type_exists('events') ) $post_type = 'post';
 
-		$id = $content->produce_by_topic( $topic );
+		// $post_type was validated above but never actually reached
+		// produce_by_topic() - every /blog, /destination, and /event command
+		// silently fell back to its default 'post' regardless of which one
+		// was typed, contradicting the confirmation message below.
+		$id = $content->produce_by_topic( $topic, $post_type );
 		if ( is_wp_error( $id ) ) {
 			return "Failed to queue post: " . $id->get_error_message();
 		}

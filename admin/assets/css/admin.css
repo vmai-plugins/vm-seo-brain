@@ -468,9 +468,15 @@
 }
 
 /* ---------------------------------------------------------------- Control Tower (v1.6) */
+.vmsb-theme-wrapper {
+	padding: 0 20px 40px !important;
+	margin-top: 10px !important;
+}
+
 .vmsb-header-utility {
-	margin: 10px 20px 0 0;
-	padding: 0 10px;
+	margin: 0 0 25px 0;
+	padding: 15px 0;
+	border-bottom: 1px solid var(--line);
 }
 
 .vmsb-global-search {

@@ -26,6 +26,7 @@ $vmsb_hijacks        = $vmsb_thief->recent_hijacks( 10 );
 			<p class="vmsb-sub">Competitor gaps, backlink pipeline, answer-engine readiness, and topical authority — everything that isn't purely about fixing your own pages.</p>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 <?php endif; ?>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">

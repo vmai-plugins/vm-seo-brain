@@ -14,6 +14,7 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 			<h1>Settings</h1>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 
 	<div class="vmsb-settings-status">
 		<div class="vmsb-card vmsb-status-card" style="border-left-color: <?php echo $profile['type'] ? 'var(--good)' : 'var(--crit)'; ?>;">

@@ -109,6 +109,7 @@ foreach ( $exclude_types as $et ) {
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="god-fix" data-confirm="God Fix will change live pages automatically. Revert any change later from the logs. Continue?">God Fix</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 <?php endif; ?>
 
 	<?php if ( $pending ) : ?>

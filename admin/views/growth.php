@@ -13,8 +13,15 @@ $vmsb_ops          = $vmsb_brain_engine->recall('intelligence', 'active_opportun
 $vmsb_battle_plan  = get_option('vmsb_battle_plan', array());
 $vmsb_pivot        = $vmsb_brain_engine->recall('intelligence', 'current_strategy_pivot');
 
+// Opportunities (above) only ever proposes fixes to posts that already
+// exist - it has no path to suggest new topics. VMSB_Growth_Engine is the
+// one that scans for content that hasn't been written yet (including a
+// site's registered CPTs, like a travel site's destinations/events) and
+// queues it here for a human yes/no instead of writing it unattended.
+$vmsb_growth_engine = new VMSB_Growth_Engine();
+$vmsb_suggestions   = $vmsb_growth_engine->pending( 50 );
+
 ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Strategic Discovery</p>
@@ -25,9 +32,11 @@ $vmsb_pivot        = $vmsb_brain_engine->recall('intelligence', 'current_strateg
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="opportunity-scan">Discovery Scan</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">
 		<button class="vmsb-tab is-active" data-tab="opportunities">🎯 Opportunities (<?php echo count($vmsb_ops); ?>)</button>
+		<button class="vmsb-tab" data-tab="suggestions">💡 Suggestions (<?php echo count($vmsb_suggestions); ?>)</button>
 		<button class="vmsb-tab" data-tab="strategy">🧠 Strategic Pivot</button>
 		<button class="vmsb-tab" data-tab="roadmap">🗺️ Roadmap</button>
 	</div>
@@ -73,6 +82,43 @@ $vmsb_pivot        = $vmsb_brain_engine->recall('intelligence', 'current_strateg
 					</tbody>
 				</table>
 			</div>
+		</article>
+	</div>
+
+	<!-- SUGGESTIONS -->
+	<div class="vmsb-panel" data-panel="suggestions">
+		<article class="vmsb-card vmsb-card-wide">
+			<div class="vmsb-flex-space" style="margin-bottom:20px;">
+				<div>
+					<h2 style="font-family:var(--serif);">Content Suggestions</h2>
+					<p class="vmsb-note">New destinations, events, and blog topics the Brain found - nothing here gets written until you approve it.</p>
+				</div>
+				<button class="vmsb-btn vmsb-btn-gold vmsb-btn-sm" data-vmsb="growth-scan">Scan Now</button>
+			</div>
+
+			<?php if ( empty( $vmsb_suggestions ) ) : ?>
+				<p class="vmsb-note">No pending suggestions. Click "Scan Now" - if Business DNA has discovered custom post types like "destinations" or "events", they'll be scanned specifically, not just generic blog topics.</p>
+			<?php else : ?>
+				<div class="vmsb-table-wrap">
+					<table class="vmsb-table vmsb-table-full">
+						<thead><tr><th>Topic</th><th>Keyword</th><th>Type</th><th>Why</th><th>Actions</th></tr></thead>
+						<tbody>
+							<?php foreach ( $vmsb_suggestions as $vmsb_sug ) : ?>
+								<tr>
+									<td><strong><?php echo esc_html( $vmsb_sug->title ); ?></strong></td>
+									<td><code><?php echo esc_html( $vmsb_sug->primary_keyword ); ?></code></td>
+									<td><span class="vmsb-tag vmsb-tag-purple"><?php echo esc_html( $vmsb_sug->cluster ?: 'Blog' ); ?></span></td>
+									<td><p class="vmsb-note" style="max-width:280px;"><?php echo esc_html( $vmsb_sug->brief ); ?></p></td>
+									<td class="vmsb-row-actions">
+										<button class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="growth-suggestion-approve" data-id="<?php echo (int) $vmsb_sug->id; ?>">Approve</button>
+										<button class="vmsb-mini-btn" data-vmsb="growth-suggestion-reject" data-id="<?php echo (int) $vmsb_sug->id; ?>">Reject</button>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+			<?php endif; ?>
 		</article>
 	</div>
 
@@ -163,4 +209,3 @@ $vmsb_pivot        = $vmsb_brain_engine->recall('intelligence', 'current_strateg
 	</div>
 
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>

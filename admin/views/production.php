@@ -16,7 +16,6 @@ $vmsb_queue = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}vmsb_tasks ORDER 
 $vmsb_pending_posts = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}vmsb_plan WHERE status IN ('planned', 'approved', 'writing') ORDER BY priority DESC");
 
 ?>
-<div class="wrap vmsb">
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Editorial & Background Work</p>
@@ -28,6 +27,7 @@ $vmsb_pending_posts = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}vmsb_plan
 			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="approve-all" data-confirm="Approve all planned posts?">Approve All Posts</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">
 		<button class="vmsb-tab is-active" data-tab="queue">⚙️ Work Queue (<?php echo (int)$vmsb_fleet['queued']; ?>)</button>
@@ -115,7 +115,6 @@ $vmsb_pending_posts = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}vmsb_plan
 	</div>
 
 	<div id="vmsb-output" class="vmsb-output" hidden></div>
-</div>
 
 <style>
 .status-running { background: rgba(201, 162, 39, 0.03); }

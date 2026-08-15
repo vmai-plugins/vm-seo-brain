@@ -361,6 +361,7 @@ class VMSB_Admin {
 		$pages = array(
 			'vmsb-growth'      => 'Growth',
 			'vmsb-production'  => 'Production',
+			'vmsb-pipeline'    => 'Pipeline',
 			'vmsb-seo'         => 'SEO Lab',
 			'vmsb-intelligence' => 'Intelligence',
 			'vmsb-analytics'   => 'Analytics',
@@ -397,34 +398,35 @@ class VMSB_Admin {
 	}
 
 	public function render_dashboard() {
-		echo '<div class="vmsb-header-utility" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">';
-		self::breadcrumbs();
-		echo '<div style="display:flex; align-items:center; gap:20px;">';
-		echo '<div class="vmsb-global-search"><span>🔍</span><input type="text" placeholder="Global Brain Search..."></div>';
-		echo '<div class="vmsb-notification-hub" id="vmsb-notifications-trigger">🔔<span class="vmsb-count" hidden></span></div>';
-		echo '</div>';
-		echo '</div>';
+		echo '<div class="wrap vmsb vmsb-theme-wrapper">';
+		$this->render_header_utility();
 		$this->view( 'dashboard' );
+		echo '</div>';
 	}
 
 	public function render_page() {
-		echo '<div class="vmsb-header-utility" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">';
+		echo '<div class="wrap vmsb vmsb-theme-wrapper">';
+		$this->render_header_utility();
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : 'vmsb';
+		$view = str_replace( 'vmsb-', '', $page );
+		$this->view( $view );
+		echo '</div>';
+	}
+
+	private function render_header_utility() {
+		echo '<div class="vmsb-header-utility" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding: 10px 0; border-bottom: 1px solid var(--vmsb-border);"> ';
 		self::breadcrumbs();
 		echo '<div style="display:flex; align-items:center; gap:20px;">';
 		echo '<div class="vmsb-global-search"><span>🔍</span><input type="text" placeholder="Global Brain Search..."></div>';
 		echo '<div class="vmsb-notification-hub" id="vmsb-notifications-trigger">🔔<span class="vmsb-count" hidden></span></div>';
 		echo '</div>';
 		echo '</div>';
-		echo '</div>';
-		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : 'vmsb';
-		$view = str_replace( 'vmsb-', '', $page );
-		$this->view( $view );
 	}
 
 	private function view( $name ) {
 		$file = VMSB_DIR . 'admin/views/' . sanitize_file_name( $name ) . '.php';
 		if ( ! is_readable( $file ) ) {
-			echo '<div class="wrap"><p>That screen is missing.</p></div>';
+			echo '<p>That screen is missing.</p>';
 			return;
 		}
 		$core = vmsb();

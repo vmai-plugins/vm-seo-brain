@@ -34,6 +34,7 @@ $site_url = urlencode( home_url() );
 			<a href="<?php echo esc_url( admin_url('admin.php?page=vmsb-settings') ); ?>" class="vmsb-btn vmsb-btn-gold">Adjust Limits</a>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">
 		<button class="vmsb-tab is-active" data-tab="subscription">💳 Subscription Plans</button>

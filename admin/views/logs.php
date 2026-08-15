@@ -15,6 +15,7 @@ $logs   = $logger->recent( 150 );
 			<button class="vmsb-btn vmsb-btn-ghost" onclick="window.location.reload()">Refresh</button>
 		</div>
 	</header>
+	<span class="wp-header-end"></span>
 
 	<div class="vmsb-table-wrap">
 		<table class="vmsb-table vmsb-table-full">
