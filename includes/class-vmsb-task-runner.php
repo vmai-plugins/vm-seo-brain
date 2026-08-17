@@ -284,7 +284,12 @@ class VMSB_Task_Runner {
 		switch ( $task_type ) {
 			case 'aeo_sweep':        return ( new VMSB_AEO() )->sweep( 3 );
 			case 'entity_sweep':     return ( new VMSB_Entity() )->sweep( 3 );
-			case 'schema_sweep':     return ( new VMSB_Schema() )->sweep( 5 );
+			case 'schema_sweep':
+				// FAQ/Article backfill, then entity types (place, event,
+				// how-to) for anything the first pass cannot describe.
+				$faq    = ( new VMSB_Schema() )->sweep( 5 );
+				$entity = ( new VMSB_Schema_Entity() )->sweep( 10 );
+				return array( 'schema' => $faq, 'entity' => $entity );
 			case 'roi_scan':         return ( new VMSB_ROI() )->find_leaks( 15 );
 			case 'roi_sweep':        return ( new VMSB_ROI() )->sweep( 3 );
 			case 'ctr_conclude':     return ( new VMSB_CTR() )->conclude_due();

@@ -114,6 +114,7 @@ class VMSB_REST {
 			'rollback-recent'     => 'rollback_recent',
 			'rankmath-analyze'    => 'rankmath_analyze',
 			'rankmath-optimize'   => 'rankmath_optimize',
+			'schema-entity'       => 'schema_entity',
 			'task-detail'         => 'task_detail',
 			'task-cancel'         => 'task_cancel',
 			'task-retry'          => 'task_retry',
@@ -879,6 +880,21 @@ class VMSB_REST {
 			return new WP_Error( 'vmsb_rest', 'A post id is required.', array( 'status' => 400 ) );
 		}
 		$res = ( new VMSB_RankMath_Optimizer() )->optimize( $id, (string) $request->get_param( 'keyword' ) );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return rest_ensure_response( $res );
+	}
+
+	/**
+	 * Write entity schema (place, event, how-to) for a post.
+	 */
+	public function schema_entity( $request ) {
+		$id = (int) $request->get_param( 'id' );
+		if ( ! $id ) {
+			return new WP_Error( 'vmsb_rest', 'A post id is required.', array( 'status' => 400 ) );
+		}
+		$res = ( new VMSB_Schema_Entity() )->generate( $id, (string) $request->get_param( 'type' ) );
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
