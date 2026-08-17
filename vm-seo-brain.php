@@ -53,7 +53,7 @@ spl_autoload_register(
  */
 final class VMSB_Install {
 
-	const DB_VERSION = '1.12.0'; // 1.12.0: metrics.conversions - GA4 already returned it, nothing stored it
+	const DB_VERSION = '1.12.1'; // 1.12.1: plan indexes for keyword dedupe and status+priority listings
 
 	public static function activate() {
 		self::tables();
@@ -73,7 +73,42 @@ final class VMSB_Install {
 	public static function maybe_upgrade() {
 		if ( get_option( 'vmsb_db_version' ) !== self::DB_VERSION ) {
 			self::tables();
+			self::ensure_indexes();
 			update_option( 'vmsb_db_version', self::DB_VERSION );
+		}
+	}
+
+	/**
+	 * Add indexes that dbDelta will not.
+	 *
+	 * dbDelta reliably adds columns to an existing table but is unreliable
+	 * about adding keys to one - bumping DB_VERSION with two new KEY lines in
+	 * the plan schema left the table with its original four indexes and no
+	 * error anywhere. Rather than depend on that, state the intent directly:
+	 * check what exists and issue the ALTER only when it is missing, so this
+	 * is safe to run on every upgrade and a no-op once applied.
+	 */
+	private static function ensure_indexes() {
+		global $wpdb;
+
+		$wanted = array(
+			$wpdb->prefix . 'vmsb_plan' => array(
+				'primary_keyword' => '(primary_keyword)',
+				'status_priority' => '(status, priority)',
+			),
+		);
+
+		foreach ( $wanted as $table => $indexes ) {
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+				continue;
+			}
+			$existing = $wpdb->get_col( "SHOW INDEX FROM `{$table}`", 2 ); // Key_name column
+			foreach ( $indexes as $name => $columns ) {
+				if ( in_array( $name, (array) $existing, true ) ) {
+					continue;
+				}
+				$wpdb->query( "ALTER TABLE `{$table}` ADD KEY `{$name}` {$columns}" );
+			}
 		}
 	}
 
@@ -158,8 +193,15 @@ final class VMSB_Install {
 			PRIMARY KEY (id),
 			UNIQUE KEY row_uid (row_uid),
 			KEY status (status),
-			KEY priority (priority)
+			KEY priority (priority),
+			KEY primary_keyword (primary_keyword),
+			KEY status_priority (status, priority)
 		) {$charset};";
+		// primary_keyword: the dedupe lookup run for every discovery
+		// candidate, previously a full table scan.
+		// status_priority: every queue and pipeline listing filters on status
+		// and orders by priority - two single-column keys cannot serve that,
+		// so those queries scanned and then filesorted.
 
 		// Audit issues found + fix ledger (every autonomous change is reversible).
 		$sql[] = "CREATE TABLE {$p}issues (

@@ -28,12 +28,18 @@ class VMSB_Growth_Engine {
 
 	private function keyword_already_queued( $keyword ) {
 		global $wpdb;
-		$keyword = trim( mb_strtolower( $keyword ) );
+		$keyword = trim( $keyword );
 		if ( ! $keyword ) {
 			return true;
 		}
+		// No LOWER() on the column. The plan table collates as
+		// utf8mb4_unicode_520_ci, so a plain comparison is already
+		// case-insensitive - wrapping the column in a function only made it
+		// unindexable, forcing a full scan of every plan row. This runs once
+		// per candidate on every scan, so it was the most repeated query in
+		// the discovery path.
 		return (bool) $wpdb->get_var(
-			$wpdb->prepare( "SELECT id FROM {$this->table()} WHERE LOWER(primary_keyword) = %s LIMIT 1", $keyword )
+			$wpdb->prepare( "SELECT id FROM {$this->table()} WHERE primary_keyword = %s LIMIT 1", $keyword )
 		);
 	}
 

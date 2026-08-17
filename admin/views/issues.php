@@ -70,7 +70,11 @@ $issues = $fixer->open_issues( 300, $current_severity, $current_post_type, $curr
 // extra queries on a full issues page.
 $issue_post_ids = array();
 $issue_term_ids = array();
-foreach ( $issues as $issue ) {
+// $fixed drives the Recently Fixed table further down, which makes the same
+// per-row get_post()/get_the_title()/get_edit_post_link() calls as the main
+// list. It was left out of this warm-up, so those rows still hit the database
+// one at a time.
+foreach ( array_merge( (array) $issues, (array) $fixed ) as $issue ) {
 	if ( ! $issue->object_id ) continue;
 	if ( 'post' === $issue->object_type ) {
 		$issue_post_ids[] = (int) $issue->object_id;

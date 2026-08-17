@@ -9,6 +9,18 @@ $vmsb_current_plan    = VMSB_License::plan();
 // Production Data
 global $wpdb;
 $vmsb_rows = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vmsb_plan ORDER BY FIELD(status,'failed','writing','approved','planned','drafted','published','rejected'), priority DESC LIMIT 200" );
+
+// The table below reads _vmsb_quality for each row that has a post, and asks
+// for an edit link too. Left alone that is two lookups per row over up to 200
+// rows, each a separate query the first time an ID is seen. Prime both caches
+// in one pass so the loop is served from memory.
+$vmsb_row_post_ids = array_values( array_filter( array_map(
+	static function ( $r ) { return isset( $r->post_id ) ? (int) $r->post_id : 0; },
+	$vmsb_rows
+) ) );
+if ( $vmsb_row_post_ids ) {
+	_prime_post_caches( $vmsb_row_post_ids, false, true ); // posts + meta, skip term cache
+}
 $vmsb_stats = $vmsb_content_engine->stats();
 $vmsb_pub_today = (int) get_option( 'vmsb_pub_' . gmdate('Ymd'), 0 );
 $vmsb_daily_cap = (int) VMSB_Settings::get( 'posts_per_day', 3 );

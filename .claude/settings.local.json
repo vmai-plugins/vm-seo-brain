@@ -216,7 +216,14 @@
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -d 'extension_dir=C:\\\\Users\\\\tripc\\\\AppData\\\\Roaming\\\\Local\\\\lightning-services\\\\php-8.2.29+0\\\\bin\\\\win64\\\\ext' -d extension=mysqli /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/equiv.php)",
       "Bash(grep -v \"^\\\\s*[0-9]*:\\\\s*//\")",
       "Bash(awk -F: '$2<210')",
-      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -d 'extension_dir=C:\\\\Users\\\\tripc\\\\AppData\\\\Roaming\\\\Local\\\\lightning-services\\\\php-8.2.29+0\\\\bin\\\\win64\\\\ext' -d extension=mysqli -r ' *)"
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -d 'extension_dir=C:\\\\Users\\\\tripc\\\\AppData\\\\Roaming\\\\Local\\\\lightning-services\\\\php-8.2.29+0\\\\bin\\\\win64\\\\ext' -d extension=mysqli -r ' *)",
+      "Bash(grep -n -A 30 'CREATE TABLE {$p}plan' vm-seo-brain.php)",
+      "Bash(grep -n 'KEY\\\\|PRIMARY\\\\|\\) {$charset}')",
+      "Bash(echo \"--- re-measure ---\")",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -d 'extension_dir=C:\\\\Users\\\\tripc\\\\AppData\\\\Roaming\\\\Local\\\\lightning-services\\\\php-8.2.29+0\\\\bin\\\\win64\\\\ext' -d extension=mysqli /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/perf.php)",
+      "Bash(echo \"--- re-measure after indexes ---\")",
+      "Bash(grep -n '\\\\$fixed\\\\s*=' admin/views/issues.php)",
+      "Bash(sed -n '/public function analyze_velocity/,/^\t}/p' includes/class-vmsb-trends.php)"
     ]
   }
 }
