@@ -74,15 +74,40 @@ class VMSB_Performance {
 		global $wpdb;
 		$table = $this->table();
 
+		// The aggregates are computed in a derived table and the filtering and
+		// ordering happen outside it, against plain columns.
+		//
+		// The previous version selected MIN(...)/MAX(...) AS position_before /
+		// position_now and then referenced those aliases in HAVING and inside
+		// ORDER BY ABS(position_before - position_now). MySQL 8 tolerates
+		// that, but MariaDB - which a large share of WordPress hosts run - and
+		// MySQL 5.x reject it with error 1247, "Reference 'position_before'
+		// not supported (reference to group function)", because the alias
+		// stands for a group function and is being used inside another
+		// expression. The whole monthly summary died on those servers.
+		//
+		// The per-keyword first/last dates also move from a correlated
+		// subquery evaluated per row into a single grouped join.
 		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT keyword,
-				MIN(CASE WHEN snapshot_date = (SELECT MIN(snapshot_date) FROM {$table} t2 WHERE t2.keyword = t1.keyword AND t2.snapshot_date >= DATE_SUB(CURDATE(), INTERVAL %d DAY)) THEN position END) AS position_before,
-				MAX(CASE WHEN snapshot_date = (SELECT MAX(snapshot_date) FROM {$table} t2 WHERE t2.keyword = t1.keyword) THEN position END) AS position_now
-			 FROM {$table} t1
-			 WHERE snapshot_date >= DATE_SUB(CURDATE(), INTERVAL %d DAY)
-			 GROUP BY keyword
-			 HAVING position_before IS NOT NULL AND position_now IS NOT NULL
-			 ORDER BY ABS(position_before - position_now) DESC
+			"SELECT g.keyword, g.position_before, g.position_now
+			 FROM (
+				SELECT t.keyword,
+					MIN(CASE WHEN t.snapshot_date = b.first_date THEN t.position END) AS position_before,
+					MAX(CASE WHEN t.snapshot_date = b.last_date  THEN t.position END) AS position_now
+				FROM {$table} t
+				INNER JOIN (
+					SELECT keyword,
+						MIN(snapshot_date) AS first_date,
+						MAX(snapshot_date) AS last_date
+					FROM {$table}
+					WHERE snapshot_date >= DATE_SUB(CURDATE(), INTERVAL %d DAY)
+					GROUP BY keyword
+				) b ON b.keyword = t.keyword
+				WHERE t.snapshot_date >= DATE_SUB(CURDATE(), INTERVAL %d DAY)
+				GROUP BY t.keyword
+			 ) g
+			 WHERE g.position_before IS NOT NULL AND g.position_now IS NOT NULL
+			 ORDER BY ABS(g.position_before - g.position_now) DESC
 			 LIMIT %d",
 			$days, $days, (int) $limit
 		) );

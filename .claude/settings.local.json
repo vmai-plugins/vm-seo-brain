@@ -210,7 +210,11 @@
       "Read(//c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/vm-seo-brain/includes/**)",
       "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -l includes/class-vmsb-task-runner.php)",
       "Bash(cat)",
-      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/budget.php)"
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/budget.php)",
+      "Bash(find \"/c/Users/tripc/Local Sites/test/conf\" -iname \"*.cnf\" -o -iname \"my.*\" 2>/dev/null | head *)",
+      "Bash(sed -i 's/TEMPORARY TABLE IF EXISTS rh/TABLE IF EXISTS zz_vmsb_rh_probe/; s/CREATE TEMPORARY TABLE rh /CREATE TABLE zz_vmsb_rh_probe /; s/\\\\brh\\\\b/zz_vmsb_rh_probe/g' /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/equiv.php)",
+      "Bash(/c/Users/tripc/AppData/Roaming/Local/lightning-services/php-8.2.29+0/bin/win64/php.exe -d 'extension_dir=C:\\\\Users\\\\tripc\\\\AppData\\\\Roaming\\\\Local\\\\lightning-services\\\\php-8.2.29+0\\\\bin\\\\win64\\\\ext' -d extension=mysqli /c/Users/tripc/AppData/Local/Temp/claude/C--Users-tripc-Local-Sites-test-app-public-wp-content-plugins-vm-seo-brain/a0683871-dfaa-485d-a82a-9145a73d8a1e/scratchpad/equiv.php)",
+      "Bash(grep -v \"^\\\\s*[0-9]*:\\\\s*//\")"
     ]
   }
 }
