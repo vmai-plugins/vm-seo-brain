@@ -227,7 +227,8 @@
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/seo-by-rank-math\" *)",
       "Read(//c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/seo-by-rank-math/**)",
       "Bash(sed -n '/DEFAULT_TESTS/,/];/p' includes/abilities/content-analysis/class-content-analysis-data.php)",
-      "Bash(echo \"=== where custom schema meta reaches the graph ===\")"
+      "Bash(echo \"=== where custom schema meta reaches the graph ===\")",
+      "Bash(sed -n '/function get_persona_temperature/,/^\t}/p' includes/class-vmsb-ai-router.php)"
     ]
   }
 }

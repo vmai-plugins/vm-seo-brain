@@ -726,6 +726,13 @@ class VMSB_AI_Router {
 			'wordsmith'  => 'Act as an Elite SEO Content Writer. Your goal is to write deep-authority articles that users love and Google rewards.',
 			'auditor'    => 'Act as a Strict SEO Auditor. You identify technical errors, missing entities, and structural weaknesses with precision.',
 			'thief'      => 'Act as a Competitive Intelligence Analyst. You analyze competitors to find their weaknesses and steal their traffic.',
+			// 'creative' was requested in four places - CTA copy, CTR title
+			// variants, video scripts - and 'writer' in one, but neither was
+			// ever defined here. Both silently fell through to the strategist
+			// below, so short persuasive copy was being written in the voice
+			// of a strategy director, and at the strategist's low temperature.
+			'creative'   => 'Act as a Senior Direct-Response Copywriter. You write short, vivid, specific copy that earns a click or an action. No corporate filler, no hedging.',
+			'writer'     => 'Act as an Elite SEO Content Writer. Your goal is to write deep-authority articles that users love and Google rewards.',
 		);
 		return isset( $personas[ $persona ] ) ? $personas[ $persona ] : $personas['strategist'];
 	}
@@ -736,6 +743,8 @@ class VMSB_AI_Router {
 			'wordsmith'  => 0.8, // More creative for writing
 			'auditor'    => 0.1, // High precision for audits
 			'thief'      => 0.6,
+			'creative'   => 0.9, // Headlines, CTAs and scripts need range
+			'writer'     => 0.8,
 		);
 		return isset( $map[ $persona ] ) ? $map[ $persona ] : $default;
 	}

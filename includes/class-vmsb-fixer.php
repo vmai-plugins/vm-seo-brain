@@ -1152,6 +1152,62 @@ class VMSB_Fixer {
 			'images_missing_alt'      => 'Search engines cannot "see" your images without descriptive alt text.',
 			'thin_content'            => 'This article is too short to be considered helpful by Google.',
 			'zombie_content'          => 'This page has near-zero impressions and clicks despite being old. It is hurting your overall site quality.',
+
+			// The scanners record 38 distinct rules; only the ten above had a
+			// sentence. Every other one fell through to the generic fallback,
+			// so the Issues list and the Content Healer table described a
+			// decayed page, a broken link and an insecure site identically.
+
+			// Indexing and crawl
+			'accidental_noindex'      => 'This page tells Google not to index it. Unless that is deliberate, it cannot rank at all.',
+			'search_engines_discouraged' => 'WordPress is set to discourage search engines site-wide. Nothing on this site can rank until that is turned off.',
+			'robots_blocks_site'      => 'robots.txt is blocking crawlers from the site.',
+			'robots_no_sitemap'       => 'robots.txt does not point to your sitemap, so crawlers have to discover pages the slow way.',
+			'sitemap_unreachable'     => 'Your sitemap cannot be fetched, so new pages take far longer to be found.',
+			'no_https'                => 'The site is served over HTTP. Browsers flag it as not secure and Google treats HTTPS as a ranking signal.',
+			'rankmath_missing'        => 'Rank Math is not active, so titles, descriptions and schema are not being managed.',
+
+			// Content decay and quality
+			'content_decay'           => 'Traffic to this page has fallen materially over the last month.',
+			'rapid_decay'             => 'This page lost more than half its traffic in the last week - something changed recently.',
+			'stale_content'           => 'This page has not been updated in a long time and is losing ground to fresher results.',
+			'semantic_stale'          => 'The topic has moved on since this was written; it no longer covers what searchers now expect.',
+			'poor_readability'        => 'The writing is dense enough that readers are likely to bounce before finishing.',
+			'missing_featured_image'  => 'No featured image, which weakens the listing everywhere this page is shown or shared.',
+
+			// Click-through and SERP presentation
+			'low_ctr_snippet'         => 'This page is seen often but rarely clicked. The title and description are not earning the click.',
+			'low_ctr_anomaly'         => 'Click-through is far below what pages at this position normally get.',
+			'striking_distance'       => 'This page sits just outside the top ten. Small improvements here move it onto page one.',
+			'weak_permalinks'         => 'The URL does not describe the page, which costs both clicks and clarity for Google.',
+
+			// Structure, links and silos
+			'orphan_from_pillar'      => 'This supporting page is not linked from its pillar, so it receives none of that authority.',
+			'missing_pillar'          => 'This topic cluster has no pillar page to anchor it.',
+			'not_marked_as_pillar'    => 'This page acts as a pillar but is not marked as one, so the silo structure is not being recognised.',
+			'false_pillar'            => 'This page is marked as a pillar but has too little supporting content to behave like one.',
+			'missing_silo_category'   => 'This page is not filed under a silo, so it sits outside the site\'s topic structure.',
+			'broken_links_found'      => 'This page contains links that no longer resolve.',
+			'keyword_cannibalization' => 'Several pages target the same keyword, so they compete with each other instead of ranking.',
+			'duel_gap'                => 'A competitor covers this ground better; a head-to-head comparison found specific gaps.',
+
+			// Taxonomy
+			'empty_archive'           => 'This archive has no posts, so it is a dead end for anyone who lands on it.',
+			'thin_tag'                => 'This tag has too few posts to justify its own indexable page.',
+			'zombie_tag'              => 'This tag gets no traffic and adds crawlable pages without adding value.',
+			'duplicate_term'          => 'Two terms cover the same topic and split authority between them.',
+			'missing_term_description' => 'This archive has no description, so Google has nothing to summarise it with.',
+			'missing_term_seo_title'  => 'This archive has no SEO title and falls back to a bare term name.',
+
+			// Recorded through the 'rule' => ... array form rather than
+			// record(), which is why these were missed on the first pass.
+			'missing_schema'          => 'No structured data on this page, so Google cannot show a rich result for it.',
+			'h1_in_body'              => 'There is an H1 inside the body competing with the page title. A page should have exactly one.',
+			'missing_focus_keyword'   => 'No focus keyword is set, so Rank Math cannot score this page and nothing is being optimised toward.',
+			'description_too_long'    => 'The meta description will be truncated in results, cutting off the part that earns the click.',
+			'competitor_gap'          => 'A competitor ranks for this topic and you have nothing covering it.',
+			'dead_outbound_link'      => 'This page links out to a URL that no longer resolves, which frustrates readers and wastes authority.',
+			'roi_leak'                => 'This page attracts traffic but gives it nowhere to go - no call to action to convert it.',
 		);
 		return $explanations[ $rule ] ?? 'Technical SEO mismatch found by the auditor.';
 	}
