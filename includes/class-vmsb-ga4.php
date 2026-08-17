@@ -26,7 +26,15 @@ class VMSB_GA4 {
 	public function get_top_landing_pages( $limit = 10, $days = 30 ) {
 		if ( ! $this->is_connected() ) return array();
 
-		$token = $this->google->get_access_token();
+		// VMSB_Google exposes access_token(), not get_access_token(). All
+		// three methods in this class called the name that does not exist, so
+		// every one of them was a fatal on first use - which is what took down
+		// opportunity-scan. It also returns a WP_Error when Google is not
+		// connected or the refresh fails, so the result has to be checked
+		// before it is concatenated into an Authorization header.
+		$token = $this->google->access_token();
+		if ( is_wp_error( $token ) ) return array();
+
 		$endpoint = "https://analyticsdata.googleapis.com/v1beta/properties/{$this->property_id}:runReport";
 
 		$response = wp_remote_post( $endpoint, array(
@@ -67,7 +75,7 @@ class VMSB_GA4 {
 	public function get_all_landing_page_metrics( $days = 30 ) {
 		if ( ! $this->is_connected() ) return array();
 
-		$token = $this->google->get_access_token();
+		$token = $this->google->access_token();
 		if ( is_wp_error($token) ) return array();
 
 		$endpoint = "https://analyticsdata.googleapis.com/v1beta/properties/{$this->property_id}:runReport";
@@ -112,7 +120,9 @@ class VMSB_GA4 {
 	public function audit_integrity() {
 		if ( ! $this->is_connected() ) return array( 'ok' => false, 'message' => 'GA4 not connected.' );
 
-		$token = $this->google->get_access_token();
+		$token = $this->google->access_token();
+		if ( is_wp_error( $token ) ) return array( 'ok' => false, 'message' => $token->get_error_message() );
+
 		$endpoint = "https://analyticsdata.googleapis.com/v1beta/properties/{$this->property_id}:runReport";
 
 		$response = wp_remote_post( $endpoint, array(
