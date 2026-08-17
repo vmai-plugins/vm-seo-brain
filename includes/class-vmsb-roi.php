@@ -194,14 +194,20 @@ class VMSB_ROI {
 		global $wpdb;
 		$growth = ( new VMSB_Growth() )->status();
 
-		// Get real conversion data from the metrics table if available (Upgraded)
-		$real_conversions = (int) $wpdb->get_var(
-			"SELECT SUM(conversions) FROM {$wpdb->prefix}vmsb_metrics WHERE source = 'ga4' AND snapshot_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)"
-		);
-		$real_sessions = (int) $wpdb->get_var(
-			"SELECT SUM(sessions) FROM {$wpdb->prefix}vmsb_metrics WHERE source = 'ga4' AND snapshot_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)"
-		);
-		$actual_rate = ( $real_sessions > 0 ) ? round( ($real_conversions / $real_sessions) * 100, 2) : null;
+		// There is no conversion data to read. This used to run
+		// SUM(conversions) against the metrics table, but that column has
+		// never existed in the schema and the GA4 collector only ever writes
+		// sessions and users - so the query failed with "Unknown column
+		// 'conversions'" on every single run. wpdb returns null for a failed
+		// query, (int) turned that into 0, and because sessions were real the
+		// division produced a confident "0.00%" that was then handed to the
+		// AI as the measured 30-day conversion rate. A fabricated zero is
+		// worse than no number, since it reads as a real measurement of a
+		// site that converts nobody.
+		//
+		// Until conversions are actually collected, report honestly: null
+		// makes the prompt below say "No historical data yet".
+		$actual_rate = null;
 
 		$pages_with_cta = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_vmsb_cta_inserted'" );
 		$total_posts    = (int) wp_count_posts( 'post' )->publish;
