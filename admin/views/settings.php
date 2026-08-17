@@ -269,7 +269,32 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<label class="vmsb-check"><input type="checkbox" name="<?php echo esc_attr( $field( 'auto_publish' ) ); ?>" value="1" <?php checked( $s['auto_publish'], 1 ); ?>> Auto-Publish new high-score articles directly</label>
 							<label>Publishing Velocity (Posts/Day)<input type="number" name="<?php echo esc_attr( $field( 'posts_per_day' ) ); ?>" value="<?php echo esc_attr( $s['posts_per_day'] ); ?>" min="0" max="24"></label>
 							<label>Growth Target (Traffic)<input type="number" name="<?php echo esc_attr( $field( 'growth_target' ) ); ?>" value="<?php echo esc_attr( $s['growth_target'] ); ?>"></label>
+							<label>Max AI Calls / Day<input type="number" name="<?php echo esc_attr( $field( 'max_ai_calls_day' ) ); ?>" value="<?php echo esc_attr( $s['max_ai_calls_day'] ); ?>" min="0"></label>
+							<label>Max Auto-Fixes / Day<input type="number" name="<?php echo esc_attr( $field( 'max_god_fixes_day' ) ); ?>" value="<?php echo esc_attr( $s['max_god_fixes_day'] ); ?>" min="0"></label>
+							<label>Treat Content As Stale After (Days)<input type="number" name="<?php echo esc_attr( $field( 'staleness_threshold_days' ) ); ?>" value="<?php echo esc_attr( $s['staleness_threshold_days'] ); ?>" min="0"></label>
 							<label class="vmsb-check"><input type="checkbox" name="<?php echo esc_attr( $field( 'auto_growth_mode' ) ); ?>" value="1" <?php checked( $s['auto_growth_mode'], 1 ); ?>> Auto Growth Mode: scan for new topic suggestions on a daily cadence (still requires your approval before anything gets written)</label>
+						</div>
+
+						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
+							<h3 style="margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold);">Quality Gate</h3>
+							<p class="vmsb-note" style="margin-bottom: 20px;">Every drafted article is scored before it can publish. Below the minimum score it is held for review instead. These thresholds decide what ships.</p>
+							<div class="vmsb-form-grid">
+								<label class="vmsb-check"><input type="checkbox" name="<?php echo esc_attr( $field( 'quality_gate' ) ); ?>" value="1" <?php checked( $s['quality_gate'], 1 ); ?>> Score drafts before publishing</label>
+								<label class="vmsb-check"><input type="checkbox" name="<?php echo esc_attr( $field( 'quality_dup_block' ) ); ?>" value="1" <?php checked( $s['quality_dup_block'], 1 ); ?>> Block drafts that duplicate existing content</label>
+								<label>Minimum Overall Score (0-100)<input type="number" name="<?php echo esc_attr( $field( 'quality_min_score' ) ); ?>" value="<?php echo esc_attr( $s['quality_min_score'] ); ?>" min="0" max="100"></label>
+								<label>Minimum Word Count<input type="number" name="<?php echo esc_attr( $field( 'quality_min_words' ) ); ?>" value="<?php echo esc_attr( $s['quality_min_words'] ); ?>" min="0"></label>
+								<label>Minimum Brand Alignment (0-100)<input type="number" name="<?php echo esc_attr( $field( 'quality_min_alignment' ) ); ?>" value="<?php echo esc_attr( $s['quality_min_alignment'] ); ?>" min="0" max="100"></label>
+								<label>Minimum Originality (0-100)<input type="number" name="<?php echo esc_attr( $field( 'quality_min_originality' ) ); ?>" value="<?php echo esc_attr( $s['quality_min_originality'] ); ?>" min="0" max="100"></label>
+							</div>
+						</div>
+
+						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
+							<h3 style="margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold);">Conversion Focus</h3>
+							<p class="vmsb-note" style="margin-bottom: 20px;">Used by the ROI engine when it writes and places calls to action.</p>
+							<div class="vmsb-form-grid">
+								<label>What counts as a conversion?<input type="text" name="<?php echo esc_attr( $field( 'conversion_goal' ) ); ?>" value="<?php echo esc_attr( $s['conversion_goal'] ); ?>" placeholder="e.g. a booking enquiry"></label>
+								<label>CTA Style<input type="text" name="<?php echo esc_attr( $field( 'cta_style' ) ); ?>" value="<?php echo esc_attr( $s['cta_style'] ); ?>"></label>
+							</div>
 						</div>
 
 						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
@@ -308,6 +333,28 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 									<input type="checkbox" name="<?php echo esc_attr( $field( 'feature_taxonomy' ) ); ?>" value="1" <?php checked( $s['feature_taxonomy'], 1 ); ?>>
 									Taxonomy Lab (Archives)
 								</label>
+								<?php
+								// These agents were all gated on a setting the code read
+								// but no screen ever offered, so they could only be
+								// changed in the database.
+								$vmsb_agent_toggles = array(
+									'learning_enabled'     => 'Learning Loop (measure outcomes)',
+									'vector_enabled'       => 'Semantic Index (embeddings)',
+									'competitor_enabled'   => 'Competitor Tracking',
+									'news_enabled'         => 'News Scout (trending topics)',
+									'programmatic_enabled' => 'Programmatic SEO',
+									'backlink_enabled'     => 'Backlink Outreach',
+								);
+								foreach ( $vmsb_agent_toggles as $vmsb_key => $vmsb_label ) :
+								?>
+									<label style="display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); cursor: pointer;">
+										<input type="checkbox" name="<?php echo esc_attr( $field( $vmsb_key ) ); ?>" value="1" <?php checked( $s[ $vmsb_key ], 1 ); ?>>
+										<?php echo esc_html( $vmsb_label ); ?>
+									</label>
+								<?php endforeach; ?>
+							</div>
+							<div class="vmsb-form-grid" style="margin-top:20px;">
+								<label>Programmatic Pages / Day<input type="number" name="<?php echo esc_attr( $field( 'programmatic_daily_cap' ) ); ?>" value="<?php echo esc_attr( $s['programmatic_daily_cap'] ); ?>" min="0"></label>
 							</div>
 						</div>
 

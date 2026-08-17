@@ -38,6 +38,11 @@ class VMSB_Growth {
 			if ( ! is_wp_error( $sessions ) ) {
 				foreach ( $sessions as $ymd => $vals ) {
 					$date = gmdate( 'Y-m-d', strtotime( $ymd ) );
+					// ga4_sessions_by_day() has always returned conversions
+					// alongside sessions and users - it was simply dropped
+					// here, because the metrics table had no column for it.
+					// That is why the ROI forecast had no conversion data to
+					// read and fell back to inventing a rate.
 					$wpdb->replace(
 						$this->table(),
 						array(
@@ -45,6 +50,7 @@ class VMSB_Growth {
 							'source'        => 'ga4',
 							'sessions'      => $vals['sessions'],
 							'users'         => $vals['users'],
+							'conversions'   => isset( $vals['conversions'] ) ? (int) $vals['conversions'] : 0,
 						)
 					);
 				}

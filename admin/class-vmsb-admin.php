@@ -483,6 +483,7 @@ class VMSB_Admin {
 			'comfy_url', 'image_style', 'google_client_id', 'gsc_property', 'ga4_property_id',
 			'sheet_id', 'sheet_tab', 'bulk_topics_tab', 'theme_mode', 'aipuffer_image_provider', 'aipuffer_image_model',
 			'google_imagen_model', 'banana_model', 'webhook_url',
+			'conversion_goal', 'cta_style',
 		);
 		foreach ( $text_keys as $key ) {
 			if ( isset( $fields[ $key ] ) ) {
@@ -497,14 +498,31 @@ class VMSB_Admin {
 			}
 		}
 
-		$int_keys = array( 'image_width', 'image_height', 'posts_per_day', 'max_ai_calls_day', 'growth_target', 'growth_window', 'max_god_fixes_day', 'staleness_threshold_days' );
+		$int_keys = array(
+			'image_width', 'image_height', 'posts_per_day', 'max_ai_calls_day', 'growth_target',
+			'growth_window', 'max_god_fixes_day', 'staleness_threshold_days',
+			// Quality gate thresholds and the programmatic cap. The code has
+			// always read these; until now no form offered them, so they were
+			// only changeable directly in the database.
+			'quality_min_score', 'quality_min_words', 'quality_min_alignment',
+			'quality_min_originality', 'programmatic_daily_cap',
+		);
 		foreach ( $int_keys as $key ) {
 			if ( isset( $fields[ $key ] ) ) {
 				$clean[ $key ] = max( 0, (int) $fields[ $key ] );
 			}
 		}
 
-		foreach ( array( 'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl', 'thief_auto_plan', 'webhook_enabled', 'auto_growth_mode', 'feature_aeo', 'feature_entity', 'feature_silo', 'feature_images', 'feature_taxonomy', 'feature_production', 'feature_maintenance', 'feature_schema' ) as $key ) {
+		foreach ( array(
+			'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl', 'thief_auto_plan',
+			'webhook_enabled', 'auto_growth_mode', 'feature_aeo', 'feature_entity', 'feature_silo',
+			'feature_images', 'feature_taxonomy', 'feature_production', 'feature_maintenance', 'feature_schema',
+			// Quality gate switches and the per-agent toggles, all previously
+			// readable by the code but unreachable from any screen.
+			'quality_gate', 'quality_dup_block',
+			'learning_enabled', 'vector_enabled', 'competitor_enabled',
+			'news_enabled', 'programmatic_enabled', 'backlink_enabled',
+		) as $key ) {
 			$clean[ $key ] = empty( $fields[ $key ] ) ? 0 : 1;
 		}
 

@@ -296,17 +296,41 @@ class VMSB_Google {
 	}
 
 	public function ga4_sessions_by_day( $days = 60 ) {
-		$res = $this->ga4_report( array( 'sessions', 'totalUsers', 'conversions' ), array( 'date' ), $days, 400 );
+		// Google renamed this metric: 'conversions' became 'keyEvents' in the
+		// GA4 Data API, and VMSB_GA4 already asks for 'keyEvents' while this
+		// call still asked for the old name. Worse, the metric travelled in
+		// the same request as sessions and totalUsers - so on a property that
+		// rejects the name, the whole report errored and the daily snapshot
+		// recorded no traffic at all, not merely no conversions.
+		//
+		// Ask by the current name, fall back to the legacy one, and if the
+		// property will not give either, still return sessions and users
+		// rather than losing the day entirely.
+		$attempts = array(
+			array( 'sessions', 'totalUsers', 'keyEvents' ),
+			array( 'sessions', 'totalUsers', 'conversions' ),
+			array( 'sessions', 'totalUsers' ),
+		);
+
+		$res = null;
+		foreach ( $attempts as $metrics ) {
+			$res = $this->ga4_report( $metrics, array( 'date' ), $days, 400 );
+			if ( ! is_wp_error( $res ) ) {
+				break;
+			}
+		}
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
+
 		$out = array();
 		foreach ( ( isset( $res['rows'] ) ? $res['rows'] : array() ) as $row ) {
 			$date         = $row['dimensionValues'][0]['value'];
 			$out[ $date ] = array(
-				'sessions'    => (int) $row['metricValues'][0]['value'],
-				'users'       => (int) $row['metricValues'][1]['value'],
-				'conversions' => (int) ($row['metricValues'][2]['value'] ?? 0),
+				'sessions'    => (int) ( $row['metricValues'][0]['value'] ?? 0 ),
+				'users'       => (int) ( $row['metricValues'][1]['value'] ?? 0 ),
+				// Absent on the sessions-only fallback, hence the null check.
+				'conversions' => isset( $row['metricValues'][2]['value'] ) ? (int) $row['metricValues'][2]['value'] : 0,
 			);
 		}
 		ksort( $out );

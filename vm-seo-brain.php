@@ -53,7 +53,7 @@ spl_autoload_register(
  */
 final class VMSB_Install {
 
-	const DB_VERSION = '1.11.1'; // 1.11.1: Fixed dbDelta syntax for tasks table
+	const DB_VERSION = '1.12.0'; // 1.12.0: metrics.conversions - GA4 already returned it, nothing stored it
 
 	public static function activate() {
 		self::tables();
@@ -191,6 +191,7 @@ final class VMSB_Install {
 			source VARCHAR(24) NOT NULL,
 			sessions INT NOT NULL DEFAULT 0,
 			users INT NOT NULL DEFAULT 0,
+			conversions INT NOT NULL DEFAULT 0,
 			clicks INT NOT NULL DEFAULT 0,
 			impressions INT NOT NULL DEFAULT 0,
 			indexed_pages INT NOT NULL DEFAULT 0,
