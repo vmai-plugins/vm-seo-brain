@@ -113,6 +113,7 @@ class VMSB_REST {
 			'action-rollback'     => 'action_rollback',
 			'rollback-recent'     => 'rollback_recent',
 			'rankmath-analyze'    => 'rankmath_analyze',
+			'rankmath-optimize'   => 'rankmath_optimize',
 			'task-detail'         => 'task_detail',
 			'task-cancel'         => 'task_cancel',
 			'task-retry'          => 'task_retry',
@@ -866,6 +867,21 @@ class VMSB_REST {
 		$stored = get_post_meta( $id, 'rank_math_seo_score', true );
 		$res['rank_math_stored_score'] = '' === $stored ? null : (int) $stored;
 		$res['post_title']             = get_the_title( $id );
+		return rest_ensure_response( $res );
+	}
+
+	/**
+	 * Close the on-page gaps on a post and report the real before/after.
+	 */
+	public function rankmath_optimize( $request ) {
+		$id = (int) $request->get_param( 'id' );
+		if ( ! $id ) {
+			return new WP_Error( 'vmsb_rest', 'A post id is required.', array( 'status' => 400 ) );
+		}
+		$res = ( new VMSB_RankMath_Optimizer() )->optimize( $id, (string) $request->get_param( 'keyword' ) );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
 		return rest_ensure_response( $res );
 	}
 
