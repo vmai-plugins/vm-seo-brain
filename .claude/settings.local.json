@@ -226,7 +226,8 @@
       "Bash(sed -n '/public function analyze_velocity/,/^\t}/p' includes/class-vmsb-trends.php)",
       "Bash(cd \"/c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/seo-by-rank-math\" *)",
       "Read(//c/Users/tripc/Local Sites/test/app/public/wp-content/plugins/seo-by-rank-math/**)",
-      "Bash(sed -n '/DEFAULT_TESTS/,/];/p' includes/abilities/content-analysis/class-content-analysis-data.php)"
+      "Bash(sed -n '/DEFAULT_TESTS/,/];/p' includes/abilities/content-analysis/class-content-analysis-data.php)",
+      "Bash(echo \"=== where custom schema meta reaches the graph ===\")"
     ]
   }
 }

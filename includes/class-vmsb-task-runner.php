@@ -320,6 +320,50 @@ class VMSB_Task_Runner {
 			// failed with "Unknown task type: growth_scan".
 			case 'growth_scan':      return ( new VMSB_Growth_Engine() )->scan( 15 );
 
+			// The five below sat in the Strategist's catalogue - each with a
+			// score, a toggle, a label and a description - but had no case
+			// here, so every cycle that queued one produced a task that could
+			// only fail with "Unknown task type". Same defect growth_scan had.
+			//
+			// Two of them also stamp an option the Strategist reads to decide
+			// when to run again. Nothing wrote those options, so the throttles
+			// never engaged and the agents were eligible on every pass.
+
+			case 'trend_scout':
+				// trend_scout and news_scout are one agent under two names: the
+				// catalogue calls it trend_scout and gates it on news_enabled,
+				// while the only implementation was registered as news_scout
+				// and never appeared in the catalogue at all - so neither name
+				// could actually run a scheduled scan. Both now reach it.
+			case 'news_scout':
+				$res = ( new VMSB_News() )->scout( 5 );
+				update_option( 'vmsb_last_trend_scout', time(), false );
+				return $res;
+
+			case 'battle_roadmap':
+				return ( new VMSB_Roadmap() )->generate_plan(
+					(int) VMSB_Settings::get( 'growth_target', 50000 ),
+					(int) VMSB_Settings::get( 'growth_window', 50 )
+				);
+
+			case 'silo_integrity':
+				// Suggestions, not approved rows. push_gaps_to_plan() defaults
+				// to writing 'approved', which would let an autonomous agent
+				// queue work straight past the review gate this site runs on.
+				$res = ( new VMSB_Silo() )->push_gaps_to_plan( true );
+				update_option( 'vmsb_last_silo_integrity', time(), false );
+				return $res;
+
+			case 'niche_expansion':
+				$res = ( new VMSB_Niche_Planner() )->plan_expansion( 20 );
+				update_option( 'vmsb_last_niche_expansion', time(), false );
+				return $res;
+
+			case 'competitor_blitz':
+				$res = ( new VMSB_Thief() )->blitz( 3 );
+				update_option( 'vmsb_last_competitor_blitz', time(), false );
+				return $res;
+
 			default:
 				return new WP_Error( 'vmsb_task', "Unknown task type: {$task_type}" );
 		}
