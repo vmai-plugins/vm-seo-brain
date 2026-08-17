@@ -134,7 +134,7 @@ class VMSB_REST {
 				'/' . $path,
 				array(
 					'methods'             => 'POST',
-					'callback'            => array( $this, $callback ),
+					'callback'            => $this->guard( $path, $callback ),
 					'permission_callback' => array( $this, 'permission' ),
 				)
 			);
@@ -149,6 +149,43 @@ class VMSB_REST {
 				'permission_callback' => array( $this, 'permission' ),
 			)
 		);
+	}
+
+	/**
+	 * Wrap a route handler so a crash inside an engine is reported, not hidden.
+	 *
+	 * None of these 100-plus routes caught anything. An uncaught Error in any
+	 * engine therefore escaped to WordPress, which answered with its own
+	 * "There has been a critical error on this website" HTML - and the admin
+	 * JS dropped that page straight into the output panel. Nothing was written
+	 * to the plugin's log, so afterwards there was no record of what failed:
+	 * an opportunity-scan died this way and left no trace anywhere, in the
+	 * plugin log or PHP's, beyond the absence of the line the engine writes on
+	 * entry.
+	 *
+	 * Now the failure comes back as JSON with the class, message, file and
+	 * line, and is written to the log before it is returned. This does not
+	 * stop anything crashing - it makes the next crash diagnosable instead of
+	 * a white page.
+	 */
+	private function guard( $path, $callback ) {
+		return function ( $request ) use ( $path, $callback ) {
+			try {
+				return $this->{$callback}( $request );
+			} catch ( \Throwable $e ) {
+				$where = basename( $e->getFile() ) . ':' . $e->getLine();
+				( new VMSB_Logger() )->error(
+					'rest',
+					sprintf( 'Route %s crashed: %s in %s', $path, $e->getMessage(), $where ),
+					array( 'exception' => get_class( $e ), 'trace' => $e->getTraceAsString() )
+				);
+				return new WP_Error(
+					'vmsb_exception',
+					sprintf( '%s: %s (%s)', get_class( $e ), $e->getMessage(), $where ),
+					array( 'status' => 500 )
+				);
+			}
+		};
 	}
 
 	/* ---------------------------------------------------------------- handlers */
