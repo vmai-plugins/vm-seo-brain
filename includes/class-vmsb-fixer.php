@@ -666,8 +666,9 @@ class VMSB_Fixer {
 		// Update Rank Math Meta
 		$this->rankmath->apply( $post_id, array(
 			'title'       => $data['seo_title'] ?? '',
-			'description' => $data['meta_description'] ?? '',
-			'seo_score'   => $data['seo_score'] ?? 88
+			// seo_score removed: it defaulted to a hardcoded 88 in Rank Math's
+			// own meta key, which made every repaired post look measured.
+			'description' => $data['meta_description'] ?? ''
 		) );
 
 		return $before;

@@ -818,7 +818,8 @@ class VMSB_Content {
 				'description'   => isset( $data['meta_description'] ) ? sanitize_text_field( $data['meta_description'] ) : '',
 				'focus_keyword' => $item->primary_keyword,
 				'pillar'        => $item->is_pillar ? 'on' : 'off',
-				'seo_score'     => isset( $data['seo_score'] ) ? (int) $data['seo_score'] : 82,
+				// No seo_score. It was the model's own claim about its output,
+				// or a hardcoded 82, written straight into Rank Math's meta.
 			)
 		);
 
@@ -891,6 +892,29 @@ class VMSB_Content {
 			array( 'status' => 'publish' === $status ? 'published' : 'drafted', 'post_id' => $post_id, 'last_error' => null, 'updated_at' => current_time( 'mysql', true ) ),
 			array( 'id' => $item->id )
 		);
+
+		// Record what Rank Math's on-page tests actually say about this post,
+		// under our own key. Replaces the invented rank_math_seo_score that
+		// used to be written here, and gives the Issues screen something real
+		// to act on.
+		if ( class_exists( 'VMSB_RankMath_Score' ) ) {
+			$rm_audit = VMSB_RankMath_Score::analyze( $post_id, $item->primary_keyword );
+			if ( ! is_wp_error( $rm_audit ) ) {
+				update_post_meta( $post_id, '_vmsb_rankmath_audit', array(
+					'pass_pct'   => $rm_audit['pass_pct'],
+					'passed'     => $rm_audit['passed'],
+					'total'      => $rm_audit['total'],
+					'failures'   => $rm_audit['failures'],
+					'checked_at' => current_time( 'mysql', true ),
+				) );
+				if ( $rm_audit['failures'] ) {
+					$this->log->info( 'content', sprintf(
+						'Post #%d passes %d/%d Rank Math tests. Failing: %s',
+						$post_id, $rm_audit['passed'], $rm_audit['total'], implode( ', ', $rm_audit['failures'] )
+					) );
+				}
+			}
+		}
 
 		( new VMSB_Keywords() )->mark( $item->primary_keyword, 'published', $post_id );
 

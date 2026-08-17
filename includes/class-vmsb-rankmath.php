@@ -82,11 +82,25 @@ class VMSB_RankMath {
 			update_post_meta( $post_id, $meta_key, $value );
 		}
 
-		// Force Rank Math to recalculate the score if possible,
-		// though usually it happens on post save or via their JS.
-		// We'll update the score meta if we are doing a deep optimization.
+		// rank_math_seo_score is deliberately NOT written here.
+		//
+		// It used to be, from a caller that passed either a number the writing
+		// model claimed for its own output or, failing that, a hardcoded 82
+		// (88 from the fixer). Rank Math scores posts in editor JavaScript and
+		// nothing server-side can produce that number, so those values were
+		// invented - and because they land in Rank Math's own meta key they
+		// then appear in its Posts column and its site average as though Rank
+		// Math had measured them. Five posts on this site carried an identical
+		// 92 while genuinely having no internal links, no external links and
+		// no table of contents.
+		//
+		// VMSB now records what it can actually verify, under its own key, via
+		// VMSB_RankMath_Score. Rank Math's field is left to Rank Math.
 		if ( isset( $fields['seo_score'] ) ) {
-			update_post_meta( $post_id, 'rank_math_seo_score', (int) $fields['seo_score'] );
+			( new VMSB_Logger() )->warn(
+				'rankmath',
+				"Ignored a supplied seo_score for post #{$post_id}; Rank Math's score is measured by its own editor, not set by us."
+			);
 		}
 
 		return $before;

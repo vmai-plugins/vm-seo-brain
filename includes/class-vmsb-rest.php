@@ -112,6 +112,7 @@ class VMSB_REST {
 			'opportunity-scan'    => 'opportunity_scan',
 			'action-rollback'     => 'action_rollback',
 			'rollback-recent'     => 'rollback_recent',
+			'rankmath-analyze'    => 'rankmath_analyze',
 			'task-detail'         => 'task_detail',
 			'task-cancel'         => 'task_cancel',
 			'task-retry'          => 'task_retry',
@@ -846,6 +847,26 @@ class VMSB_REST {
 		$res = VMSB_Actions::rollback( $id );
 		if ( is_wp_error($res) ) return $res;
 		return rest_ensure_response( array( 'success' => true ) );
+	}
+
+	/**
+	 * Run Rank Math's on-page tests against a post. Also returns the score
+	 * Rank Math itself last stored, so the two can be compared - that number
+	 * only exists for posts whose editor has actually been opened.
+	 */
+	public function rankmath_analyze( $request ) {
+		$id = (int) $request->get_param( 'id' );
+		if ( ! $id ) {
+			return new WP_Error( 'vmsb_rest', 'A post id is required.', array( 'status' => 400 ) );
+		}
+		$res = VMSB_RankMath_Score::analyze( $id, (string) $request->get_param( 'keyword' ) );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		$stored = get_post_meta( $id, 'rank_math_seo_score', true );
+		$res['rank_math_stored_score'] = '' === $stored ? null : (int) $stored;
+		$res['post_title']             = get_the_title( $id );
+		return rest_ensure_response( $res );
 	}
 
 	/**
