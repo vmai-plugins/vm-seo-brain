@@ -88,10 +88,73 @@ $vmsb_roi_val     = VMSB_Outcome_Ledger::calculate_blitz_value();
 
 	<!-- GA4 -->
 	<div class="vmsb-panel" data-panel="ga4">
-		<article class="vmsb-card">
-			<h2 style="font-family:var(--serif);">Conversion ROI</h2>
-			<p class="vmsb-note">Direct mapping of search queries to revenue coming in v1.6.5.</p>
-		</article>
+		<?php
+		$vmsb_ga4 = new VMSB_GA4();
+		if ( ! $vmsb_ga4->is_connected() ) :
+		?>
+			<article class="vmsb-card">
+				<h2 style="font-family:var(--serif);">Conversion ROI</h2>
+				<p class="vmsb-note">Connect Google Analytics 4 to see which pages actually drive revenue, not just traffic. Add your GA4 Property ID and authorize Google access in <a href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-settings' ) ); ?>">Settings</a>.</p>
+			</article>
+		<?php else :
+			$vmsb_ga4_metrics = $vmsb_ga4->get_all_landing_page_metrics( 30 );
+			uasort( $vmsb_ga4_metrics, fn( $a, $b ) => $b['revenue'] <=> $a['revenue'] );
+			$vmsb_ga4_total_revenue    = array_sum( wp_list_pluck( $vmsb_ga4_metrics, 'revenue' ) );
+			$vmsb_ga4_total_conversions = array_sum( wp_list_pluck( $vmsb_ga4_metrics, 'conversions' ) );
+		?>
+			<div class="vmsb-grid" style="grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px;">
+				<div class="vmsb-card">
+					<span class="vmsb-note">Revenue (Last 30 Days)</span>
+					<div class="vmsb-figure"><span class="vmsb-number" style="color:var(--good);">$<?php echo number_format( $vmsb_ga4_total_revenue, 2 ); ?></span></div>
+				</div>
+				<div class="vmsb-card">
+					<span class="vmsb-note">Conversions</span>
+					<div class="vmsb-figure"><span class="vmsb-number"><?php echo number_format( $vmsb_ga4_total_conversions ); ?></span></div>
+				</div>
+				<div class="vmsb-card">
+					<span class="vmsb-note">Landing Pages Tracked</span>
+					<div class="vmsb-figure"><span class="vmsb-number"><?php echo number_format( count( $vmsb_ga4_metrics ) ); ?></span></div>
+				</div>
+			</div>
+
+			<article class="vmsb-card vmsb-card-wide">
+				<h2 style="margin-bottom:20px; font-family:var(--serif);">Revenue by Landing Page</h2>
+				<?php if ( empty( $vmsb_ga4_metrics ) ) : ?>
+					<div class="vmsb-empty"><p class="vmsb-note">No GA4 data returned for the last 30 days.</p></div>
+				<?php else : ?>
+					<div class="vmsb-table-wrap">
+						<table class="vmsb-table vmsb-table-full">
+							<thead>
+								<tr>
+									<th>Page</th>
+									<th>Sessions</th>
+									<th>Conversions</th>
+									<th>Engagement Rate</th>
+									<th>Revenue</th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( array_slice( $vmsb_ga4_metrics, 0, 30, true ) as $vmsb_path => $vmsb_m ) :
+									$vmsb_post_id = url_to_postid( home_url( $vmsb_path ) );
+									$vmsb_label   = $vmsb_post_id ? get_the_title( $vmsb_post_id ) : $vmsb_path;
+								?>
+									<tr>
+										<td>
+											<strong><?php echo esc_html( $vmsb_label ); ?></strong>
+											<div class="vmsb-note" style="font-size:11px;"><?php echo esc_html( $vmsb_path ); ?></div>
+										</td>
+										<td><?php echo (int) $vmsb_m['sessions']; ?></td>
+										<td><?php echo (int) $vmsb_m['conversions']; ?></td>
+										<td><?php echo esc_html( number_format( $vmsb_m['engagement'] * 100, 1 ) ); ?>%</td>
+										<td><strong style="color:var(--good);">$<?php echo number_format( $vmsb_m['revenue'], 2 ); ?></strong></td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					</div>
+				<?php endif; ?>
+			</article>
+		<?php endif; ?>
 	</div>
 
 	<!-- TECHNICAL -->

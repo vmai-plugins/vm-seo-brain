@@ -266,7 +266,13 @@ $vmsb_hijacks        = $vmsb_thief->recent_hijacks( 10 );
 				<div class="vmsb-card">
 					<h3>Global Expansion</h3>
 					<p class="vmsb-note">Target new locations using your best-performing content as a blueprint.</p>
-					<button class="vmsb-btn vmsb-btn-ghost vmsb-btn-block" data-vmsb="traffic-forecast">Refresh Opportunity Map</button>
+					<div id="vmsb-global-expand-form" class="vmsb-stack-form" style="max-width:100%;">
+						<label>Post ID <small>(the source content to localize - find it in the URL when editing a post)</small></label>
+						<input type="number" name="post_id" placeholder="e.g. 42">
+						<label>Locations <small>(one per line)</small></label>
+						<textarea name="locations" data-list rows="4" placeholder="Austin&#10;Denver&#10;Miami"></textarea>
+						<button class="vmsb-btn vmsb-btn-ghost vmsb-btn-block" data-vmsb="global-expand" data-vmsb-form="vmsb-global-expand-form">Expand to New Locations</button>
+					</div>
 				</div>
 			</div>
 		</section>

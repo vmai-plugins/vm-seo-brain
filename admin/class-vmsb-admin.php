@@ -388,16 +388,28 @@ class VMSB_Admin {
 		);
 
 		// The Brain UX Overhaul: Job-oriented navigation buckets.
+		//
+		// Taxonomy Lab, Observability, and Logs are fully built, working
+		// screens (real classes, real tables, real REST-wired buttons) that
+		// fell out of this array when it replaced the old flat menu and were
+		// never folded into another page as a tab the way keywords/silo/
+		// competitive/issues/memory were - an oversight, not an intentional
+		// removal. Concretely: the "God Fix" confirm dialog on the Issues
+		// page tells the user to "revert any change later from the logs",
+		// but with no menu item there was no way to reach that page at all.
 		$pages = array(
-			'vmsb-growth'      => 'Growth',
-			'vmsb-production'  => 'Production',
-			'vmsb-pipeline'    => 'Pipeline',
-			'vmsb-agents'      => 'Agent Fleet',
-			'vmsb-seo'         => 'SEO Lab',
-			'vmsb-intelligence' => 'Intelligence',
-			'vmsb-analytics'   => 'Analytics',
-			'vmsb-learning'    => 'Learning',
-			'vmsb-settings'    => 'Settings',
+			'vmsb-growth'        => 'Growth',
+			'vmsb-production'    => 'Production',
+			'vmsb-pipeline'      => 'Pipeline',
+			'vmsb-agents'        => 'Agent Fleet',
+			'vmsb-seo'           => 'SEO Lab',
+			'vmsb-taxonomy'      => 'Taxonomy Lab',
+			'vmsb-intelligence'  => 'Intelligence',
+			'vmsb-analytics'     => 'Analytics',
+			'vmsb-learning'      => 'Learning',
+			'vmsb-observability' => 'Observability',
+			'vmsb-logs'          => 'Logs',
+			'vmsb-settings'      => 'Settings',
 		);
 
 		foreach ( $pages as $slug => $label ) {
