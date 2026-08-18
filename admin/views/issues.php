@@ -313,7 +313,10 @@ foreach ( $exclude_types as $et ) {
 	<?php else : ?>
 		<div class="vmsb-table-wrap">
 			<div class="vmsb-bulk-actions" style="margin-bottom:15px; display:flex; gap:10px; align-items:center;">
-				<select id="vmsb-issue-bulk-select" style="width:180px !important;">
+				<?php // Width comes from .vmsb-inline-filters select, which already
+				// drops to 100% under 782px. An inline !important here outranked
+				// that rule and pinned the control to 180px on a phone. ?>
+				<select id="vmsb-issue-bulk-select">
 					<option value="">Bulk Actions</option>
 					<option value="fix">God Fix Selected</option>
 					<option value="dismiss">Dismiss Selected</option>

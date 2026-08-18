@@ -3,62 +3,86 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Service container + wiring. One place to see everything the plugin does.
+ *
+ * The map below used to be built with `new` on every entry, at plugins_loaded,
+ * on every request. The constructors cascade - VMSB_Content builds six more
+ * engines, VMSB_Brain and VMSB_Keywords each build a router and a logger, the
+ * router builds another logger - so an anonymous visitor hitting a cached blog
+ * post was autoloading roughly fifty class files and constructing well over a
+ * hundred objects before WordPress had decided what page it was on. All of it
+ * to support one wp_head callback that prints stored JSON-LD.
+ *
+ * Now the map holds class names and get() instantiates on first use, so a
+ * front-end request pays for exactly what it touches: nothing.
  */
 final class VMSB_Core {
 
-	/** @var array<string,object> */
+	/**
+	 * @var array<string,string> service key => class name
+	 */
+	private static $map = array(
+		'settings'      => 'VMSB_Settings',
+		'log'           => 'VMSB_Logger',
+		'ai'            => 'VMSB_AI_Router',
+		'images'        => 'VMSB_Image_Engine',
+		'google'        => 'VMSB_Google',
+		'rankmath'      => 'VMSB_RankMath',
+		'brain'         => 'VMSB_Brain',
+		'keywords'      => 'VMSB_Keywords',
+		'silo'          => 'VMSB_Silo',
+		'links'         => 'VMSB_Internal_Link_Autopilot',
+		'taxonomy'      => 'VMSB_Taxonomy',
+		'fixer'         => 'VMSB_Fixer',
+		'content'       => 'VMSB_Content',
+		'growth'        => 'VMSB_Growth',
+		'competitor'    => 'VMSB_Competitor',
+		'backlinks'     => 'VMSB_Backlinks',
+		'aeo'           => 'VMSB_AEO',
+		'entity'        => 'VMSB_Entity',
+		'programmatic'  => 'VMSB_Programmatic',
+		'roi'           => 'VMSB_ROI',
+		'ctr'           => 'VMSB_CTR',
+		'news'          => 'VMSB_News',
+		'forecaster'    => 'VMSB_Forecaster',
+		'schema'        => 'VMSB_Schema',
+		'global'        => 'VMSB_Global_Expander',
+		'external'      => 'VMSB_External_Data',
+		'integrations'  => 'VMSB_Integrations',
+		'health'        => 'VMSB_Health',
+		'performance'   => 'VMSB_Performance',
+		'market'        => 'VMSB_Market',
+		'strategist'    => 'VMSB_Strategist',
+		'niche'         => 'VMSB_Niche_Planner',
+		'heatmap'       => 'VMSB_Heatmap',
+		'reporting'     => 'VMSB_Reporting',
+		'tasks'         => 'VMSB_Task_Runner',
+		'indexing'      => 'VMSB_Indexing',
+		'commander'     => 'VMSB_Commander',
+		'thief'         => 'VMSB_Thief',
+		'agents'        => 'VMSB_Agents',
+		'graph'         => 'VMSB_Graph',
+		'aipuffer'      => 'VMSB_AIPuffer',
+		'webhooks'      => 'VMSB_Webhooks',
+		'growth_engine' => 'VMSB_Growth_Engine',
+	);
+
+	/** @var array<string,object> Resolved instances. */
 	private $services = array();
 
 	public function __construct() {
 		VMSB_Install::maybe_upgrade();
 
-		$this->services = array(
-			'settings'    => new VMSB_Settings(),
-			'log'         => new VMSB_Logger(),
-			'ai'          => new VMSB_AI_Router(),
-			'images'      => new VMSB_Image_Engine(),
-			'google'      => new VMSB_Google(),
-			'rankmath'    => new VMSB_RankMath(),
-			'brain'       => new VMSB_Brain(),
-			'keywords'    => new VMSB_Keywords(),
-			'silo'        => new VMSB_Silo(),
-			'taxonomy'    => new VMSB_Taxonomy(),
-			'fixer'       => new VMSB_Fixer(),
-			'content'     => new VMSB_Content(),
-			'growth'      => new VMSB_Growth(),
-			'competitor'  => new VMSB_Competitor(),
-			'backlinks'   => new VMSB_Backlinks(),
-			'aeo'         => new VMSB_AEO(),
-			'entity'      => new VMSB_Entity(),
-			'programmatic'=> new VMSB_Programmatic(),
-			'roi'         => new VMSB_ROI(),
-			'ctr'         => new VMSB_CTR(),
-			'news'        => new VMSB_News(),
-			'forecaster'  => new VMSB_Forecaster(),
-			'schema'      => new VMSB_Schema(),
-			'global'      => new VMSB_Global_Expander(),
-			'external'    => new VMSB_External_Data(),
-			'integrations'=> new VMSB_Integrations(),
-			'health'      => new VMSB_Health(),
-			'performance' => new VMSB_Performance(),
-			'market'      => new VMSB_Market(),
-			'strategist'  => new VMSB_Strategist(),
-			'niche'       => new VMSB_Niche_Planner(),
-			'heatmap'     => new VMSB_Heatmap(),
-			'reporting'   => new VMSB_Reporting(),
-			'tasks'       => new VMSB_Task_Runner(),
-			'indexing'    => new VMSB_Indexing(),
-			'commander'   => new VMSB_Commander(),
-			'thief'       => new VMSB_Thief(),
-			'agents'      => new VMSB_Agents(),
-			'graph'       => new VMSB_Graph(),
-			'aipuffer'    => new VMSB_AIPuffer(),
-			'webhooks'    => new VMSB_Webhooks(),
-			'growth_engine' => new VMSB_Growth_Engine(),
-		);
-
+		// Hooks only. Anything that registers a WordPress hook in its
+		// constructor has to be built eagerly - a listener that is not
+		// attached before the action fires never runs - so these four stay,
+		// and everything else in the map waits until something asks for it.
 		new VMSB_Scheduler();
 		new VMSB_REST();
+		VMSB_Link_Index::boot();
+
+		foreach ( array( 'indexing', 'webhooks', 'backlinks' ) as $eager ) {
+			$this->get( $eager );
+		}
 
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			new VMSB_CLI();
@@ -77,13 +101,34 @@ final class VMSB_Core {
 	}
 
 	/**
-	 * @return mixed
+	 * @return object|null
 	 */
 	public function get( $key ) {
-		return isset( $this->services[ $key ] ) ? $this->services[ $key ] : null;
+		if ( isset( $this->services[ $key ] ) ) {
+			return $this->services[ $key ];
+		}
+		if ( ! isset( self::$map[ $key ] ) ) {
+			return null;
+		}
+
+		$class = self::$map[ $key ];
+		if ( ! class_exists( $class ) ) {
+			return null;
+		}
+
+		$this->services[ $key ] = new $class();
+		return $this->services[ $key ];
 	}
 
 	public function __get( $key ) {
 		return $this->get( $key );
+	}
+
+	/**
+	 * Views use isset( $core->silo ) in a few places; without this the magic
+	 * getter is never consulted and the check is always false.
+	 */
+	public function __isset( $key ) {
+		return isset( self::$map[ $key ] );
 	}
 }

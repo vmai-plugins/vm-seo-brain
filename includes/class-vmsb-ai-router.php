@@ -94,8 +94,9 @@ class VMSB_AI_Router {
 			VMSB_AIPuffer::push_to_memory( "Prompt History", $prompt, array( 'persona' => $args['persona'] ) );
 		}
 
-		// Token Efficiency: Strip excessive whitespace and Normalize
-		$prompt = trim( preg_replace( '/\s+/', ' ', $prompt ) );
+		// Token Efficiency: Normalize spaces but preserve structure-defining newlines.
+		$prompt = trim( preg_replace( '/[ \t]+/', ' ', $prompt ) );
+		$prompt = preg_replace( '/\n{3,}/', "\n\n", $prompt );
 
 		$cache_key = 'vmsb_ai_' . md5( $prompt . wp_json_encode( $args ) );
 		if ( $args['cache_ttl'] > 0 ) {
@@ -188,9 +189,20 @@ class VMSB_AI_Router {
 
 				$provider_attempts++;
 				if ( $provider_attempts < $max_provider_attempts ) {
-					$sleep_sec = pow(2, $provider_attempts); // 2s, 4s backoff
-					$this->log->warn('ai', "Provider {$provider} failed. Retrying in {$sleep_sec}s... (" . ($result['error'] ?? 'timeout') . ")");
-					sleep($sleep_sec);
+					// Only wait when nothing is holding the connection open.
+					// With the default four-provider chain a bad afternoon
+					// upstream cost eight seconds of pure sleep on top of four
+					// HTTP timeouts, inside a REST call an admin was watching -
+					// and behind the same proxy read timeout the task runner's
+					// budget is carefully written to stay under. Unattended,
+					// the wait is worth it; attended, the circuit breaker is
+					// the right tool for a provider that is genuinely down.
+					$unattended = ( defined( 'WP_CLI' ) && WP_CLI ) || wp_doing_cron() || 'cli' === PHP_SAPI;
+					$sleep_sec  = pow( 2, $provider_attempts ); // 2s, 4s backoff
+					$this->log->warn( 'ai', "Provider {$provider} failed. Retrying" . ( $unattended ? " in {$sleep_sec}s" : ' immediately' ) . '... (' . ( $result['error'] ?? 'timeout' ) . ')' );
+					if ( $unattended ) {
+						sleep( $sleep_sec );
+					}
 				}
 			}
 
@@ -398,7 +410,7 @@ class VMSB_AI_Router {
 		}
 
 		// Try different namespaces for AI Puffer / AI Power / AI Engine
-		$namespaces = array( 'aipkit/v1', 'mwai/v1', 'wpaicg/v1' );
+		$namespaces = array( 'aipkit/v1', 'mwai/v1', 'wpaicg/v1', 'aipuffer/v1' );
 		$last_error = 'Unknown error';
 
 		$context = array(
@@ -426,21 +438,32 @@ class VMSB_AI_Router {
 					'newChat' => true,
 					'context' => $context
 				) );
+			} elseif ( $ns === 'aipuffer/v1' ) {
+				$rel_suffix = '/chat/message';
+				$url = rtrim( $ns_url, '/' ) . $rel_suffix;
+				$request_body = array_merge( $body, array(
+					'message' => $prompt,
+					'context' => $context,
+					'aipkit_api_key' => $key
+				) );
 			} elseif ( $ns === 'aipkit/v1' || $ns === 'wpaicg/v1' ) {
 				if ( $bot_id ) {
 					// Hardening: AI Power often expects /chat/message or /chat/{id}/message
 					$rel_suffix = "/chat/{$bot_id}/message";
 					$url = rtrim( $ns_url, '/' ) . $rel_suffix;
-					// AI Power's chat-bot endpoint only accepts 'user'/'assistant'
-					// roles in its messages schema (a bot's system instructions live
-					// on the bot itself, configured in its own settings) - sending
-					// our usual 'system' role entry fails REST schema validation
-					// with a 400 on every single call.
+
+					// If the endpoint doesn't support 'system' roles, we must
+					// prepend the context to the user prompt to maintain 'sentience'.
+					$full_prompt = $prompt;
+					if ( ! empty($args['system']) ) {
+						$full_prompt = "CONTEXT:\n" . $args['system'] . "\n\nTASK:\n" . $prompt;
+					}
+
 					$request_body = array_merge( $body, array(
-						'messages' => array( array( 'role' => 'user', 'content' => $prompt ) ),
+						'messages' => array( array( 'role' => 'user', 'content' => $full_prompt ) ),
 						'context' => $context,
 						'aipkit_api_key' => $key,
-						'message' => $prompt // Ensure single message string is sent
+						'message' => $full_prompt
 					) );
 				} else {
 					$rel_suffix = '/generate';

@@ -146,8 +146,31 @@ class VMSB_Commander {
 	}
 
 	private function ai_chat( $input, $history = array() ) {
+		// $wpdb is used below for the top-issues context. Without this the
+		// whole method fatals on a null - and ai_chat() is the default branch
+		// of the command switch, so that was every chat message which is not a
+		// slash command.
+		global $wpdb;
+
 		$ai    = new VMSB_AI_Router();
 		$brain = new VMSB_Brain();
+
+		// Strategic Intelligence Feed
+		$fixer = new VMSB_Fixer();
+		$issues = $fixer->counts();
+		$outcomes = VMSB_Outcome_Ledger::counts();
+		$status = (new VMSB_Growth())->status();
+
+		// Top 3 Open Issues for context
+		$top_issues = $wpdb->get_results("SELECT rule, detail FROM {$wpdb->prefix}vmsb_issues WHERE status = 'open' ORDER BY impact DESC LIMIT 3");
+		$issues_list = "";
+		foreach($top_issues as $issue) $issues_list .= "- " . str_replace('_', ' ', $issue->rule) . ": " . $issue->detail . "\n";
+
+		$intelligence_context = "\nCURRENT SITE INTELLIGENCE:\n"
+			. "- SEO Issues: {$issues['total']} open ({$issues['critical']} critical).\n"
+			. "- Performance: Day {$status['day']} of {$status['window']}. Pace is " . ($status['on_track'] ? 'ON TRACK' : 'BEHIND') . ".\n"
+			. "- Recent Outcomes: {$outcomes['wins']} wins, {$outcomes['losses']} losses. Net clicks: " . ($outcomes['net_clicks'] >= 0 ? '+' : '') . $outcomes['net_clicks'] . ".\n"
+			. "- Top Open Issues:\n" . ($issues_list ?: "None.\n");
 
 		// Inject history into the prompt
 		$history_context = "";
@@ -159,11 +182,14 @@ class VMSB_Commander {
 		}
 
 		$system = $brain->context_prompt()
+			. $intelligence_context
 			. "\nYou are the Sentient SEO Commander."
 			. $history_context
-			. "\nBe brief, expert, and actionable. You can suggest commands like /scan, /blog, /destination, or /report.";
+			. "\nBe brief, expert, and actionable. You are highly intelligent and proactive. "
+			. "If the user asks for advice, use the 'CURRENT SITE INTELLIGENCE' above to give data-backed answers. "
+			. "You can suggest specific commands if relevant: /scan, /report, /status, /blog [topic], /destination [name], /event [name], /fix [id].";
 
-		$res = $ai->generate( $input, array( 'system' => $system ) );
+		$res = $ai->generate( $input, array( 'system' => $system, 'complexity' => 'premium', 'persona' => 'strategist' ) );
 		return $res['ok'] ? $res['text'] : "Error: " . $res['error'];
 	}
 }

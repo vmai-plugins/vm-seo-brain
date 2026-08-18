@@ -10,11 +10,38 @@ class VMSB_Settings {
 
 	private static $cache = null;
 
-	private static $secret_keys = array(
-		'aipuffer_key', 'openai_key', 'gemini_key', 'openrouter_key',
-		'pexels_key', 'comfy_key', 'google_client_secret', 'google_refresh_token',
+	/**
+	 * Every credential this plugin stores. One list, deliberately public, so
+	 * the save handler, the encryption in update(), the decryption in all()
+	 * and the redaction in masked() cannot drift apart.
+	 *
+	 * They had drifted: the admin form treated ten fields as secrets and this
+	 * list named nine different ones, so huggingface_key and
+	 * cloudflare_api_token were written to the options table in cleartext AND
+	 * skipped by masked() - which meant the settings screen rendered the live
+	 * key into the value attribute of the input. type="password" hides that
+	 * from the screen, not from view-source.
+	 */
+	public static $secret_keys = array(
+		'aipuffer_key',
+		'aiengine_key',
+		'openai_key',
+		'gemini_key',
+		'openrouter_key',
+		'pexels_key',
+		'comfy_key',
+		'google_client_secret',
+		'google_refresh_token',
 		'banana_key',
+		'huggingface_key',
+		'cloudflare_api_token',
+		'semrush_key',
+		'ahrefs_token',
+		'keyword_planner_dev_token',
 	);
+
+	/** The bullet run masked() substitutes for a stored credential. */
+	const MASK = "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}";
 
 	public static function defaults() {
 		return array(
@@ -277,14 +304,62 @@ class VMSB_Settings {
 		return $out;
 	}
 
-	/** Redacted copy for rendering forms. */
+	/** Redacted copy for rendering forms. Never hand a raw secret to a view. */
 	public static function masked() {
 		$all = self::all();
 		foreach ( self::$secret_keys as $k ) {
 			if ( ! empty( $all[ $k ] ) ) {
-				$all[ $k ] = str_repeat( "\u{2022}", 12 );
+				$all[ $k ] = self::MASK;
 			}
 		}
 		return $all;
+	}
+
+	/**
+	 * Is this submitted value the mask the form was rendered with, rather than
+	 * a key the operator actually typed? Saving the mask would overwrite the
+	 * real credential with a row of bullets.
+	 */
+	public static function is_masked( $value ) {
+		return is_string( $value ) && false !== strpos( $value, "\u{2022}" );
+	}
+
+	/**
+	 * Encrypt any credential that is still sitting in the options table in
+	 * cleartext, left there by the mismatch documented on $secret_keys.
+	 *
+	 * Safe to run repeatedly: encrypt() stamps its output with a 'v1:' prefix
+	 * and decrypt() returns anything without that prefix untouched, so an
+	 * already-encrypted value is skipped rather than double-wrapped.
+	 *
+	 * @return int Number of credentials migrated.
+	 */
+	public static function encrypt_legacy_secrets() {
+		$stored = get_option( self::OPTION, array() );
+		if ( ! is_array( $stored ) || ! $stored ) {
+			return 0;
+		}
+
+		$migrated = 0;
+		foreach ( self::$secret_keys as $key ) {
+			if ( empty( $stored[ $key ] ) || ! is_string( $stored[ $key ] ) ) {
+				continue;
+			}
+			if ( 0 === strpos( $stored[ $key ], 'v1:' ) ) {
+				continue; // Already encrypted.
+			}
+			$stored[ $key ] = self::encrypt( $stored[ $key ] );
+			$migrated++;
+		}
+
+		if ( $migrated ) {
+			update_option( self::OPTION, $stored, 'yes' );
+			self::$cache = null;
+			if ( class_exists( 'VMSB_Logger' ) ) {
+				( new VMSB_Logger() )->info( 'settings', "Encrypted {$migrated} credential(s) that were stored in plain text." );
+			}
+		}
+
+		return $migrated;
 	}
 }

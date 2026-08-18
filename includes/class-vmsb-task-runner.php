@@ -282,6 +282,119 @@ class VMSB_Task_Runner {
 	private static function dispatch( $task_type, array $payload, $task_id ) {
 		// All handlers should eventually use the task_id for logging/rollback association
 		switch ( $task_type ) {
+			/* -------------------------------------------------- scheduled work
+			 * The daily and weekly crons used to run all of this inline, in one
+			 * request, with no time check. They queue it now, so each of these
+			 * needs a case here or it fails with "Unknown task type".
+			 */
+			case 'link_index':
+				if ( ! class_exists( 'VMSB_Link_Index' ) ) {
+					return new WP_Error( 'vmsb_task', 'Link index unavailable.' );
+				}
+
+				$size    = max( 10, (int) ( $payload['limit'] ?? 60 ) );
+				$pass    = (int) ( $payload['pass'] ?? 1 );
+				$started = time();
+				$total   = 0;
+				$res     = array( 'remaining' => 0 );
+
+				// Keep reading while there is both work left and time to do it
+				// in. The runner's own budget only decides whether to *start* a
+				// task, so a task that could run for an hour has to bound
+				// itself. 20 seconds leaves room inside every budget the
+				// runner sets, attended or not.
+				do {
+					$res     = VMSB_Link_Index::scan_batch( $size );
+					$total  += (int) $res['scanned'];
+				} while ( ! empty( $res['remaining'] ) && ( time() - $started ) < 20 && $res['scanned'] > 0 );
+
+				// Hand the remainder to a fresh task. The pass counter matters:
+				// queue() de-duplicates on task_type plus payload, and this row
+				// is still 'running' with this exact payload, so an identical
+				// re-queue would match itself and quietly do nothing - the
+				// index would then stall until the next daily cron.
+				if ( ! empty( $res['remaining'] ) ) {
+					self::queue(
+						'link_index',
+						array( 'limit' => $size, 'pass' => $pass + 1 ),
+						94,
+						"Indexing internal links ({$res['remaining']} posts remaining)."
+					);
+				}
+
+				return array( 'scanned' => $total, 'remaining' => (int) $res['remaining'], 'pass' => $pass );
+
+			case 'vector_index':
+				if ( ! class_exists( 'VMSB_Vector_Store' ) || ! (int) VMSB_Settings::get( 'vector_enabled' ) ) {
+					return array( 'skipped' => 'Vector store disabled.' );
+				}
+				return VMSB_Vector_Store::index_batch( (int) ( $payload['limit'] ?? 40 ) );
+
+			case 'measure_outcomes':
+				if ( ! class_exists( 'VMSB_Outcome_Ledger' ) ) {
+					return new WP_Error( 'vmsb_task', 'Outcome ledger unavailable.' );
+				}
+				return VMSB_Outcome_Ledger::measure_due();
+
+			case 'issue_scan':
+				return array( 'found' => ( new VMSB_Fixer() )->scan( (int) ( $payload['limit'] ?? 100 ) ) );
+
+			case 'traffic_forecast':
+				return ( new VMSB_Forecaster() )->forecast();
+
+			case 'sheet_push':
+				$res = ( new VMSB_Content() )->push_to_sheet();
+				return is_wp_error( $res ) ? $res : array( 'pushed' => $res );
+
+			case 'keyword_research':
+				return array( 'found' => ( new VMSB_Keywords() )->research( (int) ( $payload['count'] ?? 40 ) ) );
+
+			case 'silo_rebuild':
+				$map = ( new VMSB_Silo() )->generate_map( true );
+				return array( 'silos' => count( $map['silos'] ?? array() ) );
+
+			case 'content_plan':
+				return array( 'planned' => ( new VMSB_Content() )->plan( (int) ( $payload['count'] ?? 20 ) ) );
+
+			case 'competitor_scan':
+				return ( new VMSB_Competitor() )->scan( (int) ( $payload['limit'] ?? 10 ) );
+
+			case 'brain_decide':
+				$keywords = new VMSB_Keywords();
+				return ( new VMSB_Brain() )->decide(
+					array(
+						'issues'   => ( new VMSB_Fixer() )->counts(),
+						'growth'   => ( new VMSB_Growth() )->status(),
+						'keywords' => array( 'total' => $keywords->count(), 'new' => $keywords->count( 'new' ) ),
+						'content'  => ( new VMSB_Content() )->stats(),
+					)
+				);
+
+			case 'social_pack':
+				$post_id = (int) ( $payload['post_id'] ?? 0 );
+				if ( ! $post_id ) {
+					return new WP_Error( 'vmsb_task', 'No post id supplied.' );
+				}
+				return ( new VMSB_Social_Recycler() )->generate_social_pack( $post_id );
+
+			case 'link_post':
+				// Post-publish linking, moved out of produce(). Doing it there
+				// meant two extra model round trips and two content writes at
+				// the end of the slowest function in the plugin.
+				$post_id = (int) ( $payload['post_id'] ?? 0 );
+				if ( ! $post_id || ! get_post( $post_id ) ) {
+					return new WP_Error( 'vmsb_task', 'The post to link no longer exists.' );
+				}
+				$silo    = new VMSB_Silo();
+				$written = 0;
+				foreach ( $silo->semantic_targets( $post_id, (int) ( $payload['links'] ?? 2 ) ) as $target ) {
+					$res = VMSB_Link_Inserter::insert( $post_id, (int) $target['ID'], array( 'reason' => 'Post-publish semantic mesh', 'task_id' => $task_id ) );
+					if ( ! is_wp_error( $res ) ) {
+						$written++;
+					}
+				}
+				return array( 'linked' => $written );
+
 			case 'aeo_sweep':        return ( new VMSB_AEO() )->sweep( 3 );
 			case 'entity_sweep':     return ( new VMSB_Entity() )->sweep( 3 );
 			case 'schema_sweep':

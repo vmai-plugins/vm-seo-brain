@@ -613,6 +613,10 @@ class VMSB_Content {
 			. ( $blueprint_context ? "SERP COMPETITIVE CONTEXT: {$blueprint_context}\n" : "" )
 			. ( $agent_context ? "RESEARCH & ARCHITECTURE GUIDANCE: {$agent_context}\n" : "" )
 			. "INTERNAL LINKS TO INCLUDE (use natural anchors): " . wp_json_encode( $link_context ) . "\n\n"
+			. "ELITE CONTENT STANDARDS (Information Gain):\n"
+			. "- Provide data points or perspectives missing from standard Google search results.\n"
+			. "- Focus on 'How-to' depth and actionable expert advice.\n"
+			. "- Avoid generic introductions. Hook the reader immediately.\n\n"
 			. "RANK MATH 90+ SCORE REQUIREMENTS:\n"
 			. "- Focus Keyword must be in the FIRST paragraph (first 50 words).\n"
 			. "- Focus Keyword must be in at least one H2 and one H3 subheading.\n"
@@ -875,17 +879,48 @@ class VMSB_Content {
 			}
 		}
 
-		// Wire it into the silo.
+		// Wire it into the silo. Only the links the plan explicitly asked for
+		// happen here - those targets are already decided, so placing them is
+		// one write with no model call in between.
 		$silo = new VMSB_Silo();
 		foreach ( $link_context as $target ) {
 			$target_id = url_to_postid( $target['url'] );
 			if ( $target_id ) {
-				$silo->insert_internal_link( $target_id, $post_id );
+				$silo->insert_internal_link( $target_id, $post_id, '', array( 'reason' => 'Planned internal link on publish' ) );
 			}
+		}
+
+		// Index the new post's own links immediately, so the graph is correct
+		// before anything queued below reasons about it.
+		if ( class_exists( 'VMSB_Link_Index' ) ) {
+			VMSB_Link_Index::scan_post( $post_id );
 		}
 
 		// Apply Persona (E-E-A-T)
 		VMSB_Persona::apply_to_post( $post_id );
+
+		// The semantic mesh and the social pack are each a model round trip
+		// plus a content write, at the end of a function that has already run
+		// a draft, a critique pass, a fact check and image generation - a
+		// hydrator run was measured at 37 seconds before they were added here.
+		// They are not needed for the post to exist, so they go to the queue.
+		if ( VMSB_License::at_least( 'elite' ) ) {
+			VMSB_Task_Runner::queue(
+				'link_post',
+				array( 'post_id' => $post_id, 'links' => 2 ),
+				75,
+				'Semantic linking for newly published post #' . $post_id
+			);
+		}
+
+		if ( VMSB_License::at_least( 'pro' ) && class_exists( 'VMSB_Social_Recycler' ) ) {
+			VMSB_Task_Runner::queue(
+				'social_pack',
+				array( 'post_id' => $post_id ),
+				30,
+				'Social distribution pack for post #' . $post_id
+			);
+		}
 
 		$wpdb->update(
 			$this->table(),
@@ -1567,7 +1602,7 @@ class VMSB_Content {
 		$wpdb->query( $wpdb->prepare(
 			"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, content_type, status, priority, created_at, updated_at)
 			 VALUES (%s, %s, %s, %s, 'approved', 10, %s, %s)
-			 ON DUPLICATE KEY UPDATE title = VALUES(title), updated_at = VALUES(updated_at)",
+			 ON DUPLICATE KEY UPDATE title = VALUES(title), status = VALUES(status), updated_at = VALUES(updated_at)",
 			$uid, $data['seo_title'] ?? $topic, $data['primary_keyword'], $post_type, $now, $now
 		) );
 

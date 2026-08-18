@@ -169,23 +169,79 @@ class VMSB_Fixer {
 	/**
 	 * Full site audit. Technical, on-page, taxonomy, silo, and index coverage.
 	 */
-	public function scan( $post_limit = 200 ) {
-		$found = 0;
+	/**
+	 * Full site scan.
+	 *
+	 * A scan is five separate passes and only one of them - scan_posts() - ever
+	 * had a time limit. The other four walk the site with no bound at all: the
+	 * taxonomy audit visits every term in every taxonomy, the silo diagnosis
+	 * spends a premium AI call and then works through each pillar, and the
+	 * index-coverage pass calls url_to_postid() for up to 500 Search Console
+	 * rows, which is a query apiece. On a small site that is invisible. On a
+	 * site with a couple of thousand posts and the tag archive that usually
+	 * comes with them, the request runs for minutes and the gateway gives up
+	 * first - a 524 with nothing recorded, because the passes that did finish
+	 * never got to write their results.
+	 *
+	 * So the budget belongs to the scan as a whole, not to one pass inside it.
+	 * Every phase now shares one deadline, stops cleanly when it is reached,
+	 * and what did complete is saved. The next run resumes where this one
+	 * stopped: scan_posts() already orders by least-recently-audited, so
+	 * repeated partial scans still walk the whole site.
+	 */
+	public function scan( $post_limit = 200, $budget = null ) {
+		$started = time();
+
+		if ( null === $budget ) {
+			// Same reasoning as the task runner: the binding limit is whatever
+			// proxy holds the connection, not max_execution_time. Under cron or
+			// WP-CLI nothing is waiting, so allow a real pass.
+			$unattended = ( defined( 'WP_CLI' ) && WP_CLI ) || wp_doing_cron() || 'cli' === PHP_SAPI;
+			$max_exec   = (int) ini_get( 'max_execution_time' );
+			$budget     = $unattended
+				? ( $max_exec > 0 ? max( 60, (int) ( $max_exec * 0.6 ) ) : 300 )
+				: 45;
+		}
+		$deadline = $started + (int) $budget;
+
+		$found   = 0;
+		$skipped = array();
 
 		$found += $this->scan_technical();
-		$found += $this->scan_posts( $post_limit );
 
-		$taxonomy = new VMSB_Taxonomy();
-		$found   += $taxonomy->audit();
+		$found += $this->scan_posts( $post_limit, $deadline );
 
-		$silo   = new VMSB_Silo();
-		$found += $silo->diagnose();
+		if ( time() < $deadline ) {
+			$found += ( new VMSB_Taxonomy() )->audit( array( 'category', 'post_tag' ), $deadline );
+		} else {
+			$skipped[] = 'taxonomy';
+		}
 
-		$found += $this->scan_index_coverage();
+		if ( time() < $deadline ) {
+			$found += ( new VMSB_Silo() )->diagnose( $deadline );
+		} else {
+			$skipped[] = 'silos';
+		}
+
+		if ( time() < $deadline ) {
+			$found += $this->scan_index_coverage( $deadline );
+		} else {
+			$skipped[] = 'index coverage';
+		}
 
 		update_option( 'vmsb_last_scan', time(), false );
 		delete_transient( 'vmsb_status_summary' ); // Invalidate status cache
-		$this->log->info( 'fixer', "Site scan complete. {$found} open issues." );
+
+		$elapsed = time() - $started;
+		if ( $skipped ) {
+			$this->log->warn( 'fixer', sprintf(
+				'Scan stopped at its %ds budget after %ds with %d issues recorded. Not reached this pass: %s. The next scan resumes from the least recently audited content.',
+				$budget, $elapsed, $found, implode( ', ', $skipped )
+			) );
+		} else {
+			$this->log->info( 'fixer', "Site scan complete in {$elapsed}s. {$found} open issues." );
+		}
+
 		return $found;
 	}
 
@@ -256,7 +312,7 @@ class VMSB_Fixer {
 		return $n;
 	}
 
-	private function scan_posts( $limit ) {
+	private function scan_posts( $limit, $deadline = 0 ) {
 		$types = get_post_types( array( 'public' => true ), 'names' );
 
 		// 1. Strict Exclusion: Never audit known template or technical types
@@ -294,12 +350,13 @@ class VMSB_Fixer {
 		$gsc_ready  = $google->is_connected();
 
 		foreach ( (array) $posts as $post ) {
-			// Anti-timeout safety, same guard god_fix() already uses: this loop
-			// makes one live GSC API call per post below, so a full scan(200)
-			// with Search Console connected can run past a typical shared-host
-			// execution limit with nothing to show for it.
-			if ( time() - $start_time > 25 ) {
-				$this->log->warn( 'fixer', "Scan pass reached time limit after auditing {$n} issues." );
+			// This loop makes one live GSC call per post, so it is the most
+			// likely place to run long. It now stops against the scan's shared
+			// deadline rather than a private 25s window, so the passes that
+			// follow it still get a chance to run within the same request.
+			$out_of_time = $deadline ? ( time() >= $deadline ) : ( time() - $start_time > 25 );
+			if ( $out_of_time ) {
+				$this->log->warn( 'fixer', "Post audit stopped at the scan budget after recording {$n} issues." );
 				break;
 			}
 
@@ -423,7 +480,7 @@ class VMSB_Fixer {
 		return $n;
 	}
 
-	private function scan_index_coverage() {
+	private function scan_index_coverage( $deadline = 0 ) {
 		$google = new VMSB_Google();
 		if ( ! $google->is_connected() ) {
 			return 0;
@@ -436,6 +493,14 @@ class VMSB_Fixer {
 
 		$n = 0;
 		foreach ( $rows as $row ) {
+			// url_to_postid() below parses the URL and queries for it, once per
+			// row, up to 500 times. That is the single most expensive loop in
+			// the scan on a large site, and it had no limit of any kind.
+			if ( $deadline && time() >= $deadline ) {
+				$this->log->warn( 'fixer', "Index coverage stopped at the scan budget after {$n} issues." );
+				break;
+			}
+
 			$page = isset( $row['keys'][0] ) ? $row['keys'][0] : '';
 			$post_id = url_to_postid( $page );
 			if ( ! $post_id ) {

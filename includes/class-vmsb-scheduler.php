@@ -60,17 +60,24 @@ class VMSB_Scheduler {
 			$content->produce( $item->id );
 		}
 
-		// Drain a few of the strategist's queued intelligence tasks - a small,
-		// steady trickle rather than a burst inside the daily request.
-		if ( class_exists( 'VMSB_Task_Runner' ) ) {
-			VMSB_Task_Runner::process( 2 );
-		}
+		// Drain the queue - a small, steady trickle rather than a burst inside
+		// the daily request. Raised from 2 now that the daily and weekly
+		// passes queue their work here instead of running it themselves; the
+		// runner's own budget is what actually bounds this, not the number.
+		VMSB_Task_Runner::process( 4 );
 	}
 
+	/**
+	 * Daily pass. Cheap, bounded data collection happens here; anything that
+	 * calls a model or walks the whole site is queued for the runner, for the
+	 * same reason as run_weekly() above.
+	 */
 	public function run_daily() {
 		$log = new VMSB_Logger();
 		update_option( 'vmsb_last_daily_run', time(), false );
 
+		// One API call each, and everything downstream reads what they write,
+		// so these stay inline.
 		( new VMSB_Growth() )->snapshot();
 		( new VMSB_Keywords() )->pull_search_console();
 		( new VMSB_Performance() )->snapshot( 100 );
@@ -79,49 +86,33 @@ class VMSB_Scheduler {
 		// of showing up as "nothing happened" three days later.
 		( new VMSB_Health() )->check();
 
-		// Keep the semantic index current before anything reasons off it.
-		if ( (int) VMSB_Settings::get( 'vector_enabled' ) && class_exists( 'VMSB_Vector_Store' ) ) {
-			$idx = VMSB_Vector_Store::index_batch( 40 );
-			$log->info( 'vectors', 'Indexed a batch.', $idx );
-		}
+		// Housekeeping: pure DELETEs.
+		$log->prune( 45 );
+		VMSB_Task_Runner::prune( 14 );
+		self::prune_drip_counters( 14 );
 
-		// Measure what past actions actually did, so confidence weights update.
+		// Everything below used to run right here, in this request.
+		VMSB_Task_Runner::queue( 'vector_index', array( 'limit' => 40 ), 95, 'Keep the semantic index current.' );
+		VMSB_Task_Runner::queue( 'link_index', array( 'limit' => 60 ), 94, 'Keep the internal link graph current.' );
+		VMSB_Task_Runner::queue( 'issue_scan', array( 'limit' => 100 ), 88, 'Daily technical and on-page audit.' );
+		VMSB_Task_Runner::queue( 'traffic_forecast', array(), 40, 'Refresh the traffic forecast.' );
+		VMSB_Task_Runner::queue( 'sheet_push', array(), 35, 'Mirror the content plan to Google Sheets.' );
+
 		if ( (int) VMSB_Settings::get( 'learning_enabled' ) && class_exists( 'VMSB_Outcome_Ledger' ) ) {
-			$measured = VMSB_Outcome_Ledger::measure_due();
-			$log->info( 'learning', 'Measured due outcomes.', $measured );
+			VMSB_Task_Runner::queue( 'measure_outcomes', array(), 86, 'Measure whether past actions moved anything.' );
 		}
-
-		$fixer = new VMSB_Fixer();
-		$fixer->scan( 100 );
 
 		if ( (int) VMSB_Settings::get( 'god_mode' ) ) {
-			$result = $fixer->god_fix( 25 );
-			$log->info( 'scheduler', 'God Mode daily pass.', $result );
+			VMSB_Task_Runner::queue( 'auto_fix_queue', array( 'limit' => 25 ), 82, 'God Mode daily fix pass.' );
 		}
 
-		// The heavier optional intelligence work (AEO, entity, ROI, schema,
-		// CTR conclusion, backlink shield) no longer runs synchronously here
-		// in a fixed order. The strategist scores each against this site's
-		// actual state and the outcome ledger's earned confidence, drops
-		// anything with nothing to do, and queues what's left - the hourly
-		// cron drains a couple at a time, so one daily request never risks a
-		// timeout running everything at once.
-		if ( class_exists( 'VMSB_Strategist' ) && class_exists( 'VMSB_Task_Runner' ) ) {
+		// The strategist scores the optional intelligence agents against this
+		// site's actual state and the outcome ledger's earned confidence,
+		// drops anything with nothing to do, and queues what is left.
+		if ( class_exists( 'VMSB_Strategist' ) ) {
 			$plan = VMSB_Strategist::plan_and_queue( 6 );
 			$log->info( 'strategist', 'Computed and queued today\'s plan.', array( 'tasks' => wp_list_pluck( $plan, 'task' ) ) );
 		}
-
-		// Refresh the traffic forecast from the metrics history that just grew.
-		( new VMSB_Forecaster() )->forecast();
-
-		( new VMSB_Content() )->push_to_sheet();
-		$log->prune( 45 );
-
-		if ( class_exists( 'VMSB_Task_Runner' ) ) {
-			VMSB_Task_Runner::prune( 14 );
-		}
-
-		self::prune_drip_counters( 14 );
 	}
 
 	/**
@@ -148,44 +139,55 @@ class VMSB_Scheduler {
 		}
 	}
 
+	/**
+	 * The weekly pass used to run eight AI-bound operations back to back in
+	 * one request - 40 keywords of research, a forced silo map rebuild, a
+	 * 20-item content plan, a boardroom report, a 10-domain competitor scan, a
+	 * news scout, a possible market assessment and a Brain::decide() - with no
+	 * time check anywhere. On any host with a normal max_execution_time it
+	 * died partway through, having done some of the work and recorded none of
+	 * it.
+	 *
+	 * The task runner right next door already solved this: a real budget, a
+	 * refusal to start work it cannot finish, retries with backoff, and rows
+	 * that survive the request dying. So this queues instead of running, and
+	 * the hourly drain does the work a couple of items at a time.
+	 */
 	public function run_weekly() {
-		$keywords = new VMSB_Keywords();
-		$keywords->research( 40 );
+		$log = new VMSB_Logger();
 
-		( new VMSB_Silo() )->generate_map( true );
-		( new VMSB_Content() )->plan( 20 );
-
-		// Generate the executive narrative
-		( new VMSB_Reporting() )->generate_boardroom_report();
-
-		if ( (int) VMSB_Settings::get( 'competitor_enabled' ) ) {
-			( new VMSB_Competitor() )->scan( 10 );
-		}
-
-		if ( (int) VMSB_Settings::get( 'news_enabled' ) ) {
-			( new VMSB_News() )->scout( 5 );
-		}
-
-		// Market assessment is a monthly-cadence question riding the weekly
-		// cron - gated internally so it doesn't re-run every single week.
-		$last_market = (int) get_option( 'vmsb_last_market_assessment', 0 );
-		if ( ( time() - $last_market ) > 28 * DAY_IN_SECONDS ) {
-			( new VMSB_Market() )->assess();
-			update_option( 'vmsb_last_market_assessment', time(), false );
-		}
-
+		// Cheap and bounded - safe to do inline.
 		if ( class_exists( 'VMSB_Outcome_Ledger' ) ) {
 			VMSB_Outcome_Ledger::prune( 365 );
 		}
 
-		$brain = new VMSB_Brain();
-		$brain->decide(
-			array(
-				'issues'   => ( new VMSB_Fixer() )->counts(),
-				'growth'   => ( new VMSB_Growth() )->status(),
-				'keywords' => array( 'total' => $keywords->count(), 'new' => $keywords->count( 'new' ) ),
-				'content'  => ( new VMSB_Content() )->stats(),
-			)
-		);
+		// One request, and it is the only thing that ever re-checks a licence
+		// after activation. Without it, verification was a one-time boolean.
+		VMSB_License::revalidate();
+
+		$queued = array();
+
+		$queued[] = VMSB_Task_Runner::queue( 'keyword_research', array( 'count' => 40 ), 90, 'Weekly keyword universe refresh.' );
+		$queued[] = VMSB_Task_Runner::queue( 'silo_rebuild', array(), 85, 'Weekly silo architecture rebuild.' );
+		$queued[] = VMSB_Task_Runner::queue( 'content_plan', array( 'count' => 20 ), 80, 'Weekly editorial plan.' );
+		$queued[] = VMSB_Task_Runner::queue( 'link_autopilot', array(), 78, 'Weekly internal linking pass.' );
+		$queued[] = VMSB_Task_Runner::queue( 'weekly_roadmap', array(), 60, 'Weekly boardroom report.' );
+		$queued[] = VMSB_Task_Runner::queue( 'brain_decide', array(), 55, 'Weekly strategic review.' );
+
+		if ( (int) VMSB_Settings::get( 'competitor_enabled' ) ) {
+			$queued[] = VMSB_Task_Runner::queue( 'competitor_scan', array( 'limit' => 10 ), 70, 'Weekly competitor scan.' );
+		}
+
+		if ( (int) VMSB_Settings::get( 'news_enabled' ) ) {
+			$queued[] = VMSB_Task_Runner::queue( 'news_scout', array(), 50, 'Weekly trend scan.' );
+		}
+
+		// A monthly question riding the weekly cron.
+		$last_market = (int) get_option( 'vmsb_last_market_assessment', 0 );
+		if ( ( time() - $last_market ) > 28 * DAY_IN_SECONDS ) {
+			$queued[] = VMSB_Task_Runner::queue( 'market_assess', array(), 45, 'Monthly market assessment.' );
+		}
+
+		$log->info( 'scheduler', 'Weekly plan queued.', array( 'tasks' => count( array_filter( $queued ) ) ) );
 	}
 }

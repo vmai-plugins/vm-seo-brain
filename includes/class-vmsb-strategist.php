@@ -52,6 +52,10 @@ class VMSB_Strategist {
 			'monitor_decay'    => array( 'brain',       1.0, 55 ),
 			'social_recycle'   => array( 'content',     1.0, 60 ),
 			'link_autopilot'   => array( 'silo',        1.0, 50 ),
+			// The link graph feeds the autopilot, the orphan report, the silo
+			// strength score and internal PageRank, so it is scored above the
+			// agents that consume it.
+			'link_index'       => array( 'silo',        0.5, 65 ),
 			'competitor_blitz' => array( 'thief',       2.0, 80 ),
 			'hydrate_pipeline' => array( 'content',     0.5, 40 ),
 			'sheet_sync'       => array( 'content',     0.5, 30 ),
@@ -188,6 +192,7 @@ class VMSB_Strategist {
 			'opportunity_scan' => 'Runs the 21-step discovery cycle to identify growth gaps.',
 			'social_recycle'   => 'Repackages recent posts into a social distribution pack (LinkedIn/X/Facebook/YouTube).',
 			'link_autopilot'   => 'Funnels internal link authority toward rising pages automatically.',
+			'link_index'       => 'Reads every published post and records its links, so orphans, anchor spread and internal authority are measured rather than guessed at.',
 			'competitor_blitz' => 'Aggressively targets keywords where competitors are ranking but vulnerable.',
 			'hydrate_pipeline' => 'Fills in missing keyword/brief detail on thin plan rows before they go to production.',
 			'sheet_sync'       => 'Checks for posts that were published outside the plugin and reconciles the sheet.',
@@ -226,6 +231,7 @@ class VMSB_Strategist {
 			'monitor_decay'    => 'Decay Monitor',
 			'social_recycle'   => 'Social Recycler',
 			'link_autopilot'   => 'Link Autopilot',
+			'link_index'       => 'Link Cartographer',
 			'competitor_blitz' => 'Competitor Blitzer',
 			'hydrate_pipeline' => 'Pipeline Hydrator',
 			'sheet_sync'       => 'Sheet Sync Agent',

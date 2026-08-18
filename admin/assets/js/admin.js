@@ -524,6 +524,17 @@
 		const popupClose = $( '#vmsb-commander-close' );
 		const chatClear = $( '#vmsb-chat-clear' );
 
+		// Process existing history if any (convert stored markdown to HTML)
+		popupHistory.find('.vmsb-msg-ai .vmsb-chat-bubble').each(function() {
+			const raw = $(this).text();
+			if ( raw.includes('#') || raw.includes('*') || raw.includes('`') ) {
+				$(this).html( renderMarkdown(raw) );
+			}
+		});
+
+		// Initialize Scroll
+		popupHistory.scrollTop( popupHistory[0].scrollHeight );
+
 		// The Commander's replies come back as markdown (the AI is prompted
 		// as a strategist and writes ###/**bold**/bullet lists), but the
 		// bubble was inserting the escaped string verbatim - so the user

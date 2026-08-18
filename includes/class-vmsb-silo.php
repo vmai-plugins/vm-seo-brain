@@ -88,12 +88,22 @@ class VMSB_Silo {
 	/**
 	 * Compare the live site against the map and record every deviation as an issue.
 	 */
-	public function diagnose() {
+	/**
+	 * @param int $deadline Unix time to stop by; 0 means no limit, so existing
+	 *                      callers are unchanged. generate_map() below spends a
+	 *                      premium AI call before the loop even starts, so a
+	 *                      scan that is already out of time should not enter
+	 *                      here at all - the caller checks that first.
+	 */
+	public function diagnose( $deadline = 0 ) {
 		$map = $this->generate_map();
 		$fixer = new VMSB_Fixer();
 		$found = 0;
 
 		foreach ( ( isset( $map['silos'] ) ? $map['silos'] : array() ) as $silo ) {
+			if ( $deadline && time() >= $deadline ) {
+				break;
+			}
 			$pillar_id = isset( $silo['pillar']['existing_post_id'] ) ? (int) $silo['pillar']['existing_post_id'] : 0;
 
 			if ( ! $pillar_id ) {
@@ -131,7 +141,7 @@ class VMSB_Silo {
 				$content = get_post_field( 'post_content', $child_id );
 				$pillar_url = get_permalink( $pillar_id );
 
-				if ( $pillar_url && false === strpos( (string) $content, $pillar_url ) ) {
+				if ( $pillar_url && ! VMSB_Link_Inserter::links_to( (string) $content, $pillar_url ) ) {
 					$fixer->record(
 						'post',
 						$child_id,
@@ -179,14 +189,21 @@ class VMSB_Silo {
 	 * Pages with zero inbound internal links.
 	 */
 	public function orphans( $limit = 100 ) {
+		// The link index answers this with a LEFT JOIN. The fallback below is
+		// what this method used to do on its own: read every published post's
+		// body into one string and regex it once per candidate. That is O(n)
+		// content in memory and O(n) regex passes, so it is now only used
+		// before the index has finished its first build.
+		if ( class_exists( 'VMSB_Link_Index' ) && VMSB_Link_Index::is_ready() ) {
+			return VMSB_Link_Index::orphans( $limit );
+		}
+
 		global $wpdb;
 		$posts = get_posts( array( 'post_type' => array( 'post', 'page' ), 'posts_per_page' => (int) $limit, 'post_status' => 'publish' ) );
 		if ( ! $posts ) {
 			return array();
 		}
 
-		// Optimization: Fetch all published post content once to search for links,
-		// instead of performing one separate query per orphan candidate.
 		$all_content = $wpdb->get_col( "SELECT post_content FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ('post', 'page')" );
 		$combined    = implode( ' ', $all_content );
 
@@ -231,8 +248,10 @@ class VMSB_Silo {
 
 		foreach ( VMSB_Vector_Store::related_posts( $post_id, $limit ) as $item ) {
 			// Skip anything already linked - re-linking adds nothing and reads
-			// like a link farm.
-			if ( false !== strpos( (string) $content, $item['url'] ) ) {
+			// like a link farm. Compare href attributes rather than raw
+			// permalinks, so /guide is not considered linked because the post
+			// happens to mention /guide-to-everything.
+			if ( VMSB_Link_Inserter::links_to( (string) $content, $item['url'] ) ) {
 				continue;
 			}
 			$out[] = $item;
@@ -241,59 +260,48 @@ class VMSB_Silo {
 		return $out;
 	}
 
-	public function insert_internal_link( $post_id, $target_id, $anchor_hint = '' ) {
-		$post = get_post( $post_id );
-		if ( ! $post ) {
-			return new WP_Error( 'vmsb_silo', 'Post not found.' );
-		}
+	/**
+	 * Insert a contextual internal link.
+	 *
+	 * The mechanics moved to VMSB_Link_Inserter, which locates the anchor by
+	 * byte offset outside every protected region rather than pattern-matching
+	 * against raw markup, refuses on page-builder posts instead of writing to
+	 * a post_content nobody reads, and records its own reversal. This wrapper
+	 * stays because a dozen callers use it, and it keeps the historic return
+	 * shape (including 'post_content' holding the *previous* content, which
+	 * build_semantic_mesh() below relies on).
+	 *
+	 * @return array|true|WP_Error true when the link was already present.
+	 */
+	public function insert_internal_link( $post_id, $target_id, $anchor_hint = '', array $args = array() ) {
+		$before = get_post_field( 'post_content', $post_id );
 
-		// SAFETY CHECK: Never rewrite system pages or unsafe post types
-		$front_page_id = (int) get_option( 'page_on_front' );
-		$blog_page_id  = (int) get_option( 'page_for_posts' );
-		$safe_types    = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
-
-		if ( $post_id === $front_page_id || $post_id === $blog_page_id ) {
-			return new WP_Error( 'vmsb_silo', 'Safety: Cannot insert links into the Home or Blog page automatically.' );
-		}
-
-		if ( ! in_array( $post->post_type, $safe_types, true ) ) {
-			return new WP_Error( 'vmsb_silo', 'Safety: This post type is not in the safe list for automated linking.' );
-		}
-
-		$target_url   = get_permalink( $target_id );
-		$target_title = get_the_title( $target_id );
-
-		if ( false !== strpos( $post->post_content, $target_url ) ) {
-			return true; // Already linked.
-		}
-
-		$excerpt = mb_substr( wp_strip_all_tags( $post->post_content ), 0, 4000 );
-
-		$data = $this->ai->generate_json(
-			"Here is the body of an article:\n\n{$excerpt}\n\n"
-			. "I need to link naturally to a page titled \"{$target_title}\".\n"
-			. "Find the single best existing sentence to carry that link, and give me the exact anchor phrase inside it. The anchor must be words that already appear in the sentence, 2-6 words long, descriptive, never 'click here' or 'read more'.\n\n"
-			. 'Return JSON: {"sentence":"","anchor":"","confidence":0.0}',
-			array( 'max_tokens' => 400, 'temperature' => 0.2, 'action' => 'link_autopilot' )
+		$res = VMSB_Link_Inserter::insert(
+			$post_id,
+			$target_id,
+			array_merge(
+				array(
+					'anchor' => $anchor_hint,
+					'reason' => 'Silo linking',
+				),
+				$args
+			)
 		);
 
-		if ( empty( $data['sentence'] ) || empty( $data['anchor'] ) ) {
-			return new WP_Error( 'vmsb_silo', 'Could not find a natural anchor.' );
+		if ( is_wp_error( $res ) ) {
+			// "Already linked" was historically a success here, and callers
+			// branch on it, so keep that contract rather than turning a no-op
+			// into a logged failure.
+			return 'vmsb_link_exists' === $res->get_error_code() ? true : $res;
 		}
 
-		$anchor  = $data['anchor'];
-		$content = $post->post_content;
-
-		if ( false === strpos( $content, $anchor ) ) {
-			return new WP_Error( 'vmsb_silo', 'The proposed anchor is not present in the source content.' );
-		}
-
-		$link    = '<a href="' . esc_url( $target_url ) . '">' . esc_html( $anchor ) . '</a>';
-		$updated = preg_replace( '/' . preg_quote( $anchor, '/' ) . '/', $link, $content, 1 );
-
-		wp_update_post( array( 'ID' => $post_id, 'post_content' => $updated ) );
-
-		return array( 'post_id' => $post_id, 'anchor' => $anchor, 'target' => $target_url, 'post_content' => $content );
+		return array(
+			'post_id'      => $res['post_id'],
+			'anchor'       => $res['anchor'],
+			'target'       => $res['url'],
+			'action_id'    => $res['action_id'] ?? 0,
+			'post_content' => $before,
+		);
 	}
 
 	/**
@@ -336,17 +344,18 @@ class VMSB_Silo {
 				$source_id = $id;
 				$target_id = $rel['ID'];
 
-				$res = $this->insert_internal_link( $source_id, $target_id );
-				if ( ! is_wp_error($res) && $res !== true ) {
+				// The inserter records its own reversal, so this no longer
+				// writes a second Actions row for the same edit - two rows for
+				// one change meant rolling back the first restored content the
+				// second had already superseded.
+				$res = $this->insert_internal_link(
+					$source_id,
+					$target_id,
+					'',
+					array( 'reason' => sprintf( 'Semantic Mesh (score %.2f)', (float) $rel['score'] ) )
+				);
+				if ( ! is_wp_error( $res ) && true !== $res ) {
 					$linked_total++;
-					VMSB_Actions::record( array(
-						'object_type' => 'post',
-						'object_id'   => $source_id,
-						'action_type' => 'semantic_link',
-						'before'      => $res['post_content'],
-						'after'       => get_post_field('post_content', $source_id),
-						'reason'      => "Semantic Mesh: Linking to related authority '{$rel['title']}' (Score: {$rel['score']})"
-					) );
 				}
 			}
 			update_post_meta( $id, '_vmsb_last_mesh', time() );
@@ -356,15 +365,15 @@ class VMSB_Silo {
 	}
 
 	private function has_connection( $id1, $id2 ) {
-		$c1 = get_post_field('post_content', $id1);
-		$u2 = get_permalink($id2);
-		if ( strpos($c1, $u2) !== false ) return true;
+		if ( class_exists( 'VMSB_Link_Index' ) && VMSB_Link_Index::is_ready() ) {
+			return VMSB_Link_Index::has_link( $id1, $id2 ) || VMSB_Link_Index::has_link( $id2, $id1 );
+		}
 
-		$c2 = get_post_field('post_content', $id2);
-		$u1 = get_permalink($id1);
-		if ( strpos($c2, $u1) !== false ) return true;
-
-		return false;
+		// Pre-index fallback. strpos() on the bare permalink used to report a
+		// connection whenever one URL was a prefix of another (/guide inside
+		// /guide-to-everything), so compare the href attribute properly.
+		return VMSB_Link_Inserter::links_to( (string) get_post_field( 'post_content', $id1 ), get_permalink( $id2 ) )
+			|| VMSB_Link_Inserter::links_to( (string) get_post_field( 'post_content', $id2 ), get_permalink( $id1 ) );
 	}
 
 	/**
@@ -381,10 +390,27 @@ class VMSB_Silo {
 			$post_count = count( $supporting ) + ( $pillar_id ? 1 : 0 );
 
 			// Calculate metrics for the Radar Chart
-			$strength = $this->calculate_silo_strength( $post_count, $pillar_id ? 1 : 0 );
+			$strength = $this->calculate_silo_strength( $post_count, $pillar_id ? 1 : 0, $pillar_id );
 
 			// World-Class Audit: Intent Mix & Juice Flow
 			$intent_mix = $this->calculate_intent_mix( $supporting );
+
+			// Real linking health for this silo, from the index rather than
+			// from the map's own idea of what should exist. "concentration"
+			// used to be the constant 1.0 whenever a pillar existed, which
+			// told the radar chart nothing at all; it is now the share of
+			// supporting posts that genuinely link up to their pillar.
+			$linked_up = 0;
+			$indexed   = class_exists( 'VMSB_Link_Index' ) && VMSB_Link_Index::is_ready();
+			if ( $pillar_id && $indexed ) {
+				foreach ( $supporting as $child ) {
+					$cid = isset( $child['existing_post_id'] ) ? (int) $child['existing_post_id'] : 0;
+					if ( $cid && VMSB_Link_Index::has_link( $cid, $pillar_id ) ) {
+						$linked_up++;
+					}
+				}
+			}
+			$expected = max( 1, count( array_filter( $supporting, static fn( $c ) => ! empty( $c['existing_post_id'] ) ) ) );
 
 			$out[] = array(
 				'name'       => isset( $silo['name'] ) ? $silo['name'] : '',
@@ -394,7 +420,9 @@ class VMSB_Silo {
 				'children'   => $supporting,
 				'assets'     => $post_count,
 				'strength'   => $strength,
-				'concentration' => ( $pillar_id ? 1.0 : 0.0 ),
+				'concentration' => $indexed ? round( $linked_up / $expected, 2 ) : ( $pillar_id ? 1.0 : 0.0 ),
+				'linked_up'  => $linked_up,
+				'inbound'    => ( $pillar_id && $indexed ) ? VMSB_Link_Index::inbound_count( $pillar_id ) : 0,
 				'intent_mix' => $intent_mix
 			);
 		}
@@ -414,12 +442,35 @@ class VMSB_Silo {
 		return $mix;
 	}
 
-	private function calculate_silo_strength( $posts, $pillars ) {
-		if ( $posts === 0 ) return 0;
-		// Weighting: Pillars (50%), Content Volume (50%)
-		$pillar_score = ( $pillars > 0 ) ? 50 : 0;
-		$volume_score = min( 50, ( $posts / 10 ) * 50 ); // 10 posts = full volume score
-		return round( $pillar_score + $volume_score );
+	/**
+	 * Silo strength.
+	 *
+	 * This used to be "has a pillar" plus "how many posts", which scores a
+	 * silo of ten completely unconnected posts full marks. Volume is the
+	 * weakest of the three signals available, so it now counts for a third,
+	 * and the measured internal authority of the pillar - the thing the whole
+	 * structure exists to build - counts for as much as the pillar's presence.
+	 */
+	private function calculate_silo_strength( $posts, $pillars, $pillar_id = 0 ) {
+		if ( 0 === $posts ) {
+			return 0;
+		}
+
+		$pillar_score = $pillars > 0 ? 35 : 0;
+		$volume_score = min( 30, ( $posts / 10 ) * 30 );
+		$authority    = 0;
+
+		if ( $pillar_id && class_exists( 'VMSB_Link_Index' ) ) {
+			$scores = VMSB_Link_Index::authority();
+			if ( isset( $scores[ $pillar_id ] ) ) {
+				// Already normalised 0-100 against the strongest page on the
+				// site, so a pillar that genuinely collects the site's links
+				// scores near the full 35.
+				$authority = round( ( $scores[ $pillar_id ] / 100 ) * 35 );
+			}
+		}
+
+		return (int) round( $pillar_score + $volume_score + $authority );
 	}
 
 	/**

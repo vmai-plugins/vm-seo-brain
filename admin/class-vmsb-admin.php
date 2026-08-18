@@ -52,13 +52,25 @@ class VMSB_Admin {
 				</div>
 
 				<div class="vmsb-popup-history" id="vmsb-popup-chat-history">
-					<div class="vmsb-chat-msg vmsb-msg-ai">
-						<div class="vmsb-chat-bubble">
-							Greetings. I am your <strong>Strategic Commander</strong>. I have analyzed <strong><?php echo esc_html($profile['name'] ?: 'your business'); ?></strong> and identified several growth levers.
-							<br><br>
-							What should we optimize first?
+					<?php
+					$history = get_transient( 'vmsb_chat_history_' . get_current_user_id() ) ?: array();
+					if ( empty($history) ) : ?>
+						<div class="vmsb-chat-msg vmsb-msg-ai">
+							<div class="vmsb-chat-bubble">
+								Greetings. I am your <strong>Strategic Commander</strong>. I have analyzed <strong><?php echo esc_html($profile['name'] ?: 'your business'); ?></strong> and identified several growth levers.
+								<br><br>
+								What should we optimize first?
+							</div>
 						</div>
-					</div>
+					<?php else :
+						foreach ( $history as $msg ) :
+							$type = ( $msg['role'] === 'user' ) ? 'user' : 'ai';
+							?>
+							<div class="vmsb-chat-msg vmsb-msg-<?php echo $type; ?>">
+								<div class="vmsb-chat-bubble"><?php echo $type === 'ai' ? wp_kses_post($msg['content']) : esc_html($msg['content']); ?></div>
+							</div>
+						<?php endforeach;
+					endif; ?>
 				</div>
 
 				<div class="vmsb-popup-footer">
@@ -491,11 +503,15 @@ class VMSB_Admin {
 			}
 		}
 
-		$secret_keys = array( 'aipuffer_key', 'aiengine_key', 'openai_key', 'gemini_key', 'openrouter_key', 'pexels_key', 'comfy_key', 'google_client_secret', 'huggingface_key', 'cloudflare_api_token' );
-		foreach ( $secret_keys as $key ) {
-			if ( ! empty( $fields[ $key ] ) && false === strpos( $fields[ $key ], "\u{2022}" ) ) {
-				$clean[ $key ] = trim( $fields[ $key ] );
+		// One list, held by VMSB_Settings, which is also what encrypts on save
+		// and redacts on render. This used to be a second hand-maintained copy
+		// and the two had drifted: two keys here were absent there, so they
+		// were stored unencrypted and rendered back into the form in the clear.
+		foreach ( VMSB_Settings::$secret_keys as $key ) {
+			if ( empty( $fields[ $key ] ) || VMSB_Settings::is_masked( $fields[ $key ] ) ) {
+				continue; // Field left untouched - keep whatever is stored.
 			}
+			$clean[ $key ] = trim( $fields[ $key ] );
 		}
 
 		$int_keys = array(

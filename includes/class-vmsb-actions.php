@@ -84,9 +84,15 @@ class VMSB_Actions {
 			case 'improve_post':
 			case 'rescue_post':
 			case 'semantic_link':
+			case 'internal_link':
 			case 'tactical_injection':
 			case 'consolidate_content':
 				$ok = wp_update_post( array( 'ID' => $row->object_id, 'post_content' => $before ) );
+				// The link index is derived from content, so undoing a content
+				// change has to undo the edges that change created.
+				if ( $ok && class_exists( 'VMSB_Link_Index' ) ) {
+					VMSB_Link_Index::scan_post( (int) $row->object_id );
+				}
 				break;
 
 			case 'update_meta':

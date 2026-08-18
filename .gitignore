@@ -1,0 +1,14 @@
+# Build artifacts never belong inside the plugin directory - anything here is
+# served by the web server, and one `git add -A` away from being committed.
+*.zip
+*.tar.gz
+
+# Editor and OS noise
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Dependencies, if they are ever introduced
+/vendor/
+/node_modules/

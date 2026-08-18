@@ -6,6 +6,15 @@ $vmsb_is_nested = defined('VMSB_NESTED') && VMSB_NESTED;
 $silo    = new VMSB_Silo();
 $map     = $silo->map_for_display();
 $orphans = $silo->orphans( 60 );
+
+// Link graph. Everything below that used to be inferred from post counts is
+// now read from the index, so an unbuilt index is worth saying out loud
+// rather than quietly rendering zeros.
+$vmsb_link_ready = VMSB_Link_Index::is_ready();
+$vmsb_link_stats = VMSB_Link_Index::stats();
+$vmsb_underlinked = $vmsb_link_ready ? VMSB_Link_Index::underlinked( 10 ) : array();
+$vmsb_anchors     = $vmsb_link_ready ? VMSB_Link_Index::anchor_report( 8 ) : array();
+$vmsb_authority   = $vmsb_link_ready ? VMSB_Link_Index::authority() : array();
 ?>
 
 <?php if ( ! $vmsb_is_nested ) : ?>
@@ -118,11 +127,124 @@ $orphans = $silo->orphans( 60 );
 			</div>
 
 			<div style="margin-top: 32px; display: flex; flex-direction: column; gap: 12px;">
-				<button class="vmsb-btn vmsb-btn-gold vmsb-btn-block" data-vmsb="god-fix" data-body='{"scope":["internal_links"]}'>Plug All Linking Gaps</button>
+				<button class="vmsb-btn vmsb-btn-gold vmsb-btn-block" data-vmsb="link-autopilot" data-body='{"limit":10}'>Run Link Autopilot</button>
 				<button class="vmsb-btn vmsb-btn-ghost vmsb-btn-block" data-vmsb="silo-audit">Run Structural Audit</button>
 			</div>
 		</article>
 	</div>
+
+	<!-- ------------------------------------------------ link intelligence -->
+	<h2 class="vmsb-h2" style="margin-top: 50px;">Internal Link Intelligence</h2>
+	<p class="vmsb-sub" style="margin-bottom: 24px;">
+		Measured from the site's own link graph, not inferred from post counts.
+	</p>
+
+	<?php if ( ! $vmsb_link_ready ) : ?>
+		<div class="vmsb-empty">
+			<h2>The link graph has not been built yet</h2>
+			<p>Nothing here can be measured until every published post has been read once. It runs automatically on the daily cron, a batch at a time, or you can start it now.</p>
+			<p style="margin-top:16px;">
+				<button class="vmsb-btn vmsb-btn-gold" data-vmsb="link-index" data-body='{"limit":100}'>Index links now</button>
+			</p>
+		</div>
+	<?php else : ?>
+
+		<div class="vmsb-grid">
+			<article class="vmsb-card">
+				<h2>Graph</h2>
+				<p class="vmsb-note"><?php echo (int) $vmsb_link_stats['sources']; ?> pages read.</p>
+				<div class="vmsb-health-metrics" style="margin-top:20px; display:flex; flex-direction:column; gap:14px;">
+					<div class="vmsb-health-stat">
+						<span class="vmsb-stat-label">Internal links</span>
+						<span class="vmsb-stat-val"><?php echo number_format_i18n( $vmsb_link_stats['internal'] ); ?></span>
+					</div>
+					<div class="vmsb-health-stat">
+						<span class="vmsb-stat-label">Placed by the Brain</span>
+						<span class="vmsb-stat-val"><?php echo number_format_i18n( $vmsb_link_stats['managed'] ); ?></span>
+					</div>
+					<div class="vmsb-health-stat">
+						<span class="vmsb-stat-label">Outbound to other sites</span>
+						<span class="vmsb-stat-val"><?php echo number_format_i18n( $vmsb_link_stats['external'] ); ?></span>
+					</div>
+					<div class="vmsb-health-stat">
+						<span class="vmsb-stat-label">Internal links pointing nowhere</span>
+						<span class="vmsb-stat-val" style="<?php echo $vmsb_link_stats['unresolved'] ? 'color:var(--crit);' : ''; ?>"><?php echo number_format_i18n( $vmsb_link_stats['unresolved'] ); ?></span>
+					</div>
+				</div>
+				<div style="margin-top:24px; display:flex; flex-direction:column; gap:10px;">
+					<button class="vmsb-btn vmsb-btn-ghost vmsb-btn-block" data-vmsb="link-index" data-body='{"limit":100}'>Refresh index</button>
+					<button class="vmsb-btn vmsb-btn-ghost vmsb-btn-block" data-vmsb="link-rebuild" data-confirm="Throw away the stored link graph and read every post again? Use this after changing your permalink structure.">Rebuild from scratch</button>
+				</div>
+			</article>
+
+			<article class="vmsb-card">
+				<h2>Strongest pages</h2>
+				<p class="vmsb-note">Internal PageRank across your own link graph &mdash; which pages actually have authority to pass.</p>
+				<table class="vmsb-table vmsb-table-narrow" style="margin-top:16px;">
+					<tbody>
+					<?php foreach ( array_slice( $vmsb_authority, 0, 8, true ) as $vmsb_pid => $vmsb_score ) :
+						$vmsb_post = get_post( $vmsb_pid );
+						if ( ! $vmsb_post ) { continue; } ?>
+						<tr>
+							<td>
+								<a href="<?php echo esc_url( (string) get_edit_post_link( $vmsb_pid ) ); ?>"><?php echo esc_html( wp_trim_words( $vmsb_post->post_title, 8 ) ); ?></a>
+							</td>
+							<td style="width:110px;">
+								<div class="vmsb-bar" style="height:6px; margin:0;"><span style="width:<?php echo (float) $vmsb_score; ?>%; background:var(--gold);"></span></div>
+							</td>
+							<td style="width:48px; text-align:right; font-weight:700;"><?php echo esc_html( round( (float) $vmsb_score ) ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+					<?php if ( ! $vmsb_authority ) : ?>
+						<tr><td><span class="vmsb-note">No internal links recorded yet.</span></td></tr>
+					<?php endif; ?>
+					</tbody>
+				</table>
+			</article>
+
+			<article class="vmsb-card">
+				<h2>Starved pages</h2>
+				<p class="vmsb-note">Fewer than three inbound links. This is where one good link moves the most.</p>
+				<table class="vmsb-table vmsb-table-narrow" style="margin-top:16px;">
+					<tbody>
+					<?php foreach ( $vmsb_underlinked as $vmsb_row ) : ?>
+						<tr>
+							<td><a href="<?php echo esc_url( (string) get_edit_post_link( $vmsb_row->ID ) ); ?>"><?php echo esc_html( wp_trim_words( $vmsb_row->post_title, 8 ) ); ?></a></td>
+							<td style="width:70px; text-align:right;">
+								<span class="vmsb-tag <?php echo (int) $vmsb_row->inbound === 0 ? 'vmsb-tag-crit' : 'vmsb-tag-gold'; ?>"><?php echo (int) $vmsb_row->inbound; ?> in</span>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+					<?php if ( ! $vmsb_underlinked ) : ?>
+						<tr><td><span class="vmsb-note">Every page has at least three inbound links.</span></td></tr>
+					<?php endif; ?>
+					</tbody>
+				</table>
+			</article>
+
+			<article class="vmsb-card">
+				<h2>Anchor spread</h2>
+				<p class="vmsb-note">The same anchor pointing at the same page over and over reads as manipulation rather than editorial.</p>
+				<table class="vmsb-table vmsb-table-narrow" style="margin-top:16px;">
+					<tbody>
+					<?php foreach ( $vmsb_anchors as $vmsb_a ) :
+						$vmsb_risky = ( (int) $vmsb_a->uses >= 8 && (int) $vmsb_a->targets === 1 ); ?>
+						<tr>
+							<td><code><?php echo esc_html( wp_trim_words( $vmsb_a->anchor, 6 ) ); ?></code></td>
+							<td style="width:90px; text-align:right;">
+								<span class="vmsb-tag <?php echo $vmsb_risky ? 'vmsb-tag-crit' : ''; ?>"><?php echo (int) $vmsb_a->uses; ?>&times;</span>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+					<?php if ( ! $vmsb_anchors ) : ?>
+						<tr><td><span class="vmsb-note">No anchor is used more than twice.</span></td></tr>
+					<?php endif; ?>
+					</tbody>
+				</table>
+			</article>
+		</div>
+
+	<?php endif; ?>
 
 	<h2 class="vmsb-h2" style="margin-top: 50px;">Sentient Silo Architect</h2>
 	<p class="vmsb-sub" style="margin-bottom: 30px;">Deep breakdown of content clusters and their authority flow.</p>
@@ -206,10 +328,16 @@ $orphans = $silo->orphans( 60 );
 
 	<?php if ( $orphans ) : ?>
 		<h2 class="vmsb-h2">Orphans</h2>
-		<p class="vmsb-note">Nothing on the site links to these, so crawlers reach them slowly and they inherit no authority.</p>
+		<p class="vmsb-note">
+			Nothing on the site links to these, so crawlers reach them slowly and they inherit no authority.
+			The Link Autopilot gives each one its first inbound link from the most relevant page that has authority to spare.
+		</p>
+		<p style="margin: 12px 0 20px;">
+			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="link-autopilot" data-body='{"limit":8}'>Rescue orphans</button>
+		</p>
 		<ul class="vmsb-orphans">
 			<?php foreach ( $orphans as $orphan ) : ?>
-				<li><a href="<?php echo esc_url( get_edit_post_link( $orphan->ID ) ); ?>"><?php echo esc_html( $orphan->post_title ); ?></a></li>
+				<li><a href="<?php echo esc_url( (string) get_edit_post_link( $orphan->ID ) ); ?>"><?php echo esc_html( $orphan->post_title ); ?></a></li>
 			<?php endforeach; ?>
 		</ul>
 	<?php endif; ?>

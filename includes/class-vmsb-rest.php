@@ -27,6 +27,12 @@ class VMSB_REST {
 			'silo-map'        => 'silo_map',
 			'silo-audit'      => 'silo_audit',
 			'silo-push-gaps'  => 'silo_push_gaps',
+			'link-report'     => 'link_report',
+			'link-index'      => 'link_index',
+			'link-rebuild'    => 'link_rebuild',
+			'link-autopilot'  => 'link_autopilot',
+			'link-suggest'    => 'link_suggest',
+			'link-apply'      => 'link_apply',
 			'heatmap-data'    => 'heatmap_data',
 			'taxonomy-audit'  => 'taxonomy_audit',
 			'taxonomy-propose'=> 'taxonomy_propose',
@@ -273,6 +279,111 @@ class VMSB_REST {
 
 	public function silo_push_gaps( $request ) {
 		return rest_ensure_response( ( new VMSB_Silo() )->push_gaps_to_plan() );
+	}
+
+	/* ---------------------------------------------------------------- links */
+
+	/**
+	 * Everything the Link Health panel needs, in one call.
+	 */
+	public function link_report( $request ) {
+		if ( ! VMSB_Link_Index::is_ready() ) {
+			return rest_ensure_response(
+				array(
+					'ready'   => false,
+					'message' => 'The link index has not finished its first build. Run "Index links" to start it.',
+					'stats'   => VMSB_Link_Index::stats(),
+				)
+			);
+		}
+
+		$authority = VMSB_Link_Index::authority();
+		$top       = array();
+		foreach ( array_slice( $authority, 0, 10, true ) as $id => $score ) {
+			$post = get_post( $id );
+			if ( ! $post ) {
+				continue;
+			}
+			$top[] = array(
+				'ID'        => (int) $id,
+				'title'     => $post->post_title,
+				'authority' => $score,
+				'inbound'   => VMSB_Link_Index::inbound_count( $id ),
+				'edit'      => get_edit_post_link( $id, 'raw' ),
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'ready'       => true,
+				'stats'       => VMSB_Link_Index::stats(),
+				'orphans'     => VMSB_Link_Index::orphans( 25 ),
+				'underlinked' => VMSB_Link_Index::underlinked( 15 ),
+				'anchors'     => VMSB_Link_Index::anchor_report( 15 ),
+				'authority'   => $top,
+				'donors'      => VMSB_Link_Index::donors( 8 ),
+			)
+		);
+	}
+
+	public function link_index( $request ) {
+		return rest_ensure_response( VMSB_Link_Index::scan_batch( (int) $request->get_param( 'limit' ) ?: 60 ) );
+	}
+
+	public function link_rebuild( $request ) {
+		VMSB_Link_Index::rebuild();
+		return rest_ensure_response( array_merge( array( 'rebuilt' => true ), VMSB_Link_Index::scan_batch( 60 ) ) );
+	}
+
+	public function link_autopilot( $request ) {
+		return rest_ensure_response( ( new VMSB_Internal_Link_Autopilot() )->funnel_authority( (int) $request->get_param( 'limit' ) ?: 10 ) );
+	}
+
+	/**
+	 * Preview a link without writing it. Runs the whole insertion path with
+	 * dry_run set, so a refusal here is the same refusal the real write would
+	 * give - including "this post is built with Elementor".
+	 */
+	public function link_suggest( $request ) {
+		$post_id   = (int) $request->get_param( 'post_id' );
+		$target_id = (int) $request->get_param( 'target_id' );
+
+		if ( ! $post_id ) {
+			return new WP_Error( 'vmsb_rest', 'A source post id is required.', array( 'status' => 400 ) );
+		}
+
+		// No explicit target: suggest the best ones we know about.
+		if ( ! $target_id ) {
+			$targets = ( new VMSB_Silo() )->semantic_targets( $post_id, 5 );
+			return rest_ensure_response( array( 'targets' => $targets ) );
+		}
+
+		$res = VMSB_Link_Inserter::insert( $post_id, $target_id, array( 'dry_run' => true ) );
+		if ( is_wp_error( $res ) ) {
+			return new WP_REST_Response( array( 'error' => $res->get_error_message(), 'code' => $res->get_error_code() ), 422 );
+		}
+		return rest_ensure_response( $res );
+	}
+
+	public function link_apply( $request ) {
+		$post_id   = (int) $request->get_param( 'post_id' );
+		$target_id = (int) $request->get_param( 'target_id' );
+		$anchor    = sanitize_text_field( (string) $request->get_param( 'anchor' ) );
+
+		if ( ! $post_id || ! $target_id ) {
+			return new WP_Error( 'vmsb_rest', 'Both a source and a target post id are required.', array( 'status' => 400 ) );
+		}
+
+		$res = VMSB_Link_Inserter::insert(
+			$post_id,
+			$target_id,
+			array( 'anchor' => $anchor, 'reason' => 'Applied by hand from the Silo screen' )
+		);
+
+		if ( is_wp_error( $res ) ) {
+			return new WP_REST_Response( array( 'error' => $res->get_error_message(), 'code' => $res->get_error_code() ), 422 );
+		}
+		return rest_ensure_response( $res );
 	}
 
 	public function heatmap_data( $request ) {

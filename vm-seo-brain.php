@@ -53,7 +53,7 @@ spl_autoload_register(
  */
 final class VMSB_Install {
 
-	const DB_VERSION = '1.12.1'; // 1.12.1: plan indexes for keyword dedupe and status+priority listings
+	const DB_VERSION = '1.13.0'; // 1.13.0: vmsb_links - the internal link graph, stored instead of recomputed
 
 	public static function activate() {
 		self::tables();
@@ -74,6 +74,15 @@ final class VMSB_Install {
 		if ( get_option( 'vmsb_db_version' ) !== self::DB_VERSION ) {
 			self::tables();
 			self::ensure_indexes();
+
+			// Two credentials were stored in plain text for as long as the
+			// admin form's secret list and VMSB_Settings' differed. Fixing the
+			// lists stops it happening again; this cleans up what is already
+			// in the table on sites that ran the old build.
+			if ( class_exists( 'VMSB_Settings' ) ) {
+				VMSB_Settings::encrypt_legacy_secrets();
+			}
+
 			update_option( 'vmsb_db_version', self::DB_VERSION );
 		}
 	}
@@ -452,6 +461,29 @@ final class VMSB_Install {
 			PRIMARY KEY (id),
 			KEY provider (provider),
 			KEY created_at (created_at)
+		) {$charset};";
+
+		// The internal link graph. Every question the linking engine asks -
+		// orphans, inbound counts, anchor distribution, internal PageRank -
+		// used to be answered by reading post content and running strpos()
+		// over it, which is O(site) per question. Parsed once on save, it is
+		// a join.
+		$sql[] = "CREATE TABLE {$p}links (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			source_id BIGINT UNSIGNED NOT NULL,
+			source_type VARCHAR(32) NOT NULL DEFAULT 'post',
+			target_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			target_url TEXT NULL,
+			target_host VARCHAR(191) NULL,
+			anchor VARCHAR(255) NULL,
+			is_internal TINYINT(1) NOT NULL DEFAULT 1,
+			is_managed TINYINT(1) NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (id),
+			KEY source (source_id),
+			KEY target (target_id, is_internal),
+			KEY anchor (anchor(64)),
+			KEY host (target_host)
 		) {$charset};";
 
 		foreach ( $sql as $statement ) {

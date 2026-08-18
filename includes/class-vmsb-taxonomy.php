@@ -61,7 +61,15 @@ class VMSB_Taxonomy {
 		return $zombies;
 	}
 
-	public function audit( array $taxonomies = array( 'category', 'post_tag' ) ) {
+	/**
+	 * @param array $taxonomies Taxonomies to audit.
+	 * @param int   $deadline   Unix time to stop by. 0 means no limit, so any
+	 *                          existing caller behaves exactly as before. A
+	 *                          site with a large tag archive has thousands of
+	 *                          terms here, and this walked every one of them
+	 *                          inside the same request as the rest of the scan.
+	 */
+	public function audit( array $taxonomies = array( 'category', 'post_tag' ), $deadline = 0 ) {
 		if ( ! (int) VMSB_Settings::get( 'feature_taxonomy', 1 ) ) {
 			return 0;
 		}
@@ -73,12 +81,18 @@ class VMSB_Taxonomy {
 			if ( ! taxonomy_exists( $tax ) ) {
 				continue;
 			}
+			if ( $deadline && time() >= $deadline ) {
+				break;
+			}
 			$terms = get_terms( array( 'taxonomy' => $tax, 'hide_empty' => false ) );
 			if ( is_wp_error( $terms ) ) {
 				continue;
 			}
 
 			foreach ( $terms as $term ) {
+				if ( $deadline && time() >= $deadline ) {
+					break 2;
+				}
 				// Empty archive — a soft 404 waiting to happen.
 				if ( 0 === $term->count ) {
 					$fixer->record( 'term', $term->term_id, 'empty_archive', 'medium', sprintf( '%s "%s" has no posts.', $tax, $term->name ), array( 'taxonomy' => $tax ) );

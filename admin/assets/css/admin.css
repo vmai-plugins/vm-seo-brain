@@ -291,6 +291,23 @@
 
 @media (max-width: 782px) {
 	.vmsb-grid { grid-template-columns: 1fr !important; }
+
+	/* The views set grid-template-columns in a style attribute, which beats
+	   any stylesheet rule without !important. .vmsb-grid was already handled;
+	   these three were not, so the Dashboard's 2fr/1fr split, the Analytics
+	   report KPIs and the pricing table all kept their desktop column counts
+	   on a phone and pushed the layout wider than the screen. */
+	.vmsb-main-layout,
+	.vmsb-report-kpis,
+	.vmsb-plans-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Tablet: three- and four-column decks are unreadable at this width but a
+   single column wastes it. */
+@media (min-width: 783px) and (max-width: 1100px) {
+	.vmsb-report-kpis,
+	.vmsb-plans-grid { grid-template-columns: repeat(2, 1fr) !important; }
+	.vmsb-main-layout { grid-template-columns: 1fr !important; }
 }
 
 .vmsb-card-wide { grid-column: span 2; }
@@ -368,6 +385,16 @@
 
 .vmsb-table-wrap { width: 100%; overflow-x: auto; margin: 10px 0; -webkit-overflow-scrolling: touch; }
 .vmsb-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
+
+/* Two-column tables do not need 600px, and the Silo page's three are not
+   inside a .vmsb-table-wrap - so on a phone they were the one thing pushing
+   the page wider than the screen. Forcing a horizontal scrollbar onto a
+   two-column list is the wrong fix; letting it shrink is the right one. */
+.vmsb-table.vmsb-table-narrow { min-width: 0; }
+@media (max-width: 782px) {
+	.vmsb-table.vmsb-table-narrow td,
+	.vmsb-table.vmsb-table-narrow th { padding-left: 8px; padding-right: 8px; }
+}
 .vmsb-table-full { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; }
 
 .vmsb-table th {
@@ -701,6 +728,14 @@
 @media (max-width: 782px) {
 	.vmsb-growth-kpi-grid { grid-template-columns: 1fr; }
 }
+
+/* The selector for this rule had been lost, leaving these declarations
+   orphaned after a closing brace and the file one "}" out of balance. The
+   colour variants (.vmsb-tag-gold, -good, -crit, ...) still applied, so tags
+   kept their background but lost the shape entirely: no padding, no pill
+   radius, no uppercase, not even inline-block. That is 43 tags across every
+   screen rendering as tinted plain text. */
+.vmsb-tag {
 	display: inline-block;
 	padding: 4px 12px;
 	border-radius: 12px;
@@ -1187,6 +1222,21 @@
 	.vmsb-tabs { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
 	.vmsb-bulk-actions { flex-wrap: wrap; }
 	.vmsb-bulk-actions select { flex: 1; }
+
+	/* Row actions are 11px text in 5px padding - about 22px tall, half the
+	   ~44px a finger reliably hits. These sit side by side in table rows
+	   (Approve / Reject / View), so on a phone the wrong one gets tapped. */
+	.vmsb-mini-btn {
+		min-height: 40px;
+		padding: 10px 14px;
+		font-size: 12px;
+	}
+	.vmsb-row-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.vmsb-row-actions .vmsb-mini-btn { flex: 1 1 auto; }
 
 	/* Master Commander Popup adjustments for small screens */
 	.vmsb-commander-popup-overlay {
