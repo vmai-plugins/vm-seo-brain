@@ -698,6 +698,13 @@ class VMSB_Fixer {
 			. "4. EEAT: Include specific data points, technical expertise, and no AI fluff ('in today's world', etc.).\n"
 			. "5. LENGTH: Content must be at least 1,400 words of deep value.\n"
 			. "6. RICH MEDIA: Provide descriptive prompts for a featured image and 2 inline images.\n\n"
+			// CONTENT above already shows real Gutenberg block comments
+			// (<!-- wp:heading {"level":2} -->), which primes the model to
+			// reproduce that exact pattern in its reply - so it needs telling
+			// explicitly that content_html is itself a JSON string and those
+			// inner quotes must be escaped for the outer JSON to parse.
+			. "JSON ESCAPING: content_html is a JSON string, and Gutenberg block comments have their own embedded {\"...\":...} JSON. "
+			. "Escape every quote inside those block attributes with a backslash for the outer JSON - <!-- wp:heading {\\\"level\\\":2} -->, never <!-- wp:heading {\"level\":2} -->.\n\n"
 			. 'Return JSON: {"content_html":"","seo_title":"","meta_description":"","slug":"","seo_score":92}';
 
 		$data = $this->ai->generate_json( $prompt, array(
@@ -724,7 +731,7 @@ class VMSB_Fixer {
 		// Update Post Content
 		wp_update_post( array(
 			'ID' => $post_id,
-			'post_content' => wp_kses_post( $data['content_html'] ),
+			'post_content' => VMSB_AI_Router::safe_html( $data['content_html'] ),
 			'post_name' => ! empty($data['slug']) ? sanitize_title($data['slug']) : $post->post_name
 		) );
 

@@ -100,6 +100,11 @@ class VMSB_Entity {
 			. wp_json_encode( $targets ) . "\n\n"
 			. "Rules: edit sentences that already discuss the related idea; every entity must appear in a factually accurate context; do not fabricate a claim about it; "
 			. "keep the edits minimal - return the full HTML with only these small insertions, everything else unchanged.\n\n"
+			// Article HTML above already contains real Gutenberg block
+			// comments with their own embedded {"...":...} JSON - content_html
+			// is itself a JSON string, so every quote inside those block
+			// attributes must be backslash-escaped or the whole reply is invalid.
+			. "JSON ESCAPING: escape every quote inside a block's {\"...\":...} attributes with a backslash - <!-- wp:heading {\\\"level\\\":2} -->, never <!-- wp:heading {\"level\":2} -->.\n\n"
 			. 'Return JSON: {"content_html":"","entities_added":[""]}';
 
 		$data = $this->ai->generate_json( $prompt, array( 'max_tokens' => 6000, 'temperature' => 0.3 ) );
@@ -192,6 +197,7 @@ class VMSB_Entity {
 			. wp_json_encode( $entity ) . "\n\n"
 			. "Rules: edit a sentence that already discusses the related idea; it must appear in a factually accurate context; do not fabricate a claim about it; "
 			. "keep the edit minimal - return the full HTML with only this small insertion, everything else unchanged.\n\n"
+			. "JSON ESCAPING: escape every quote inside a block's {\"...\":...} attributes with a backslash - <!-- wp:heading {\\\"level\\\":2} -->, never <!-- wp:heading {\"level\":2} -->.\n\n"
 			. 'Return JSON: {"content_html":""}';
 
 		$data = $this->ai->generate_json( $prompt, array( 'max_tokens' => 6000, 'temperature' => 0.3 ) );

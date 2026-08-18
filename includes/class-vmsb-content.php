@@ -76,12 +76,17 @@ class VMSB_Content {
 			. "- The brief tells the writer what to cover, what to avoid, and what the reader should be able to do afterwards.\n"
 			. "- Every piece names two or three internal link targets from the existing site.\n\n"
 			. 'Return JSON: {"plan":[{"title":"","primary_keyword":"","secondary_keywords":[],"cluster":"","intent":"","content_type":"post|slug","target_words":0,"brief":"","internal_links":[],"priority":0}]}',
-			array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 4000, 'temperature' => 0.6 )
+			array(
+				'system'      => $this->brain->context_prompt(),
+				'max_tokens'  => 4000,
+				'temperature' => 0.6,
+				'action'      => 'content_planning'
+			)
 		);
 
 		$items = isset( $data['plan'] ) ? $data['plan'] : array();
 		if ( ! $items ) {
-			$this->log->error( 'content', 'Planning returned no usable rows.' );
+			$this->log->error( 'content', 'Planning returned no usable rows: ' . ( $this->ai->get_last_error() ?: 'Check your AI configuration.' ) );
 			return 0;
 		}
 
@@ -97,6 +102,17 @@ class VMSB_Content {
 
 			$uid = substr( md5( $item['primary_keyword'] ), 0, 24 );
 			$day = (int) floor( $slot / $per_day );
+
+			// 2026 Strategy: Cannibalization Guard (Early Detection)
+			if ( class_exists('VMSB_Vector_Store') && (int) VMSB_Settings::get('vector_enabled') ) {
+				$dupe = VMSB_Vector_Store::search( $item['title'] . ' ' . $item['primary_keyword'], array( 'limit' => 1, 'threshold' => 0.92 ) );
+				if ( ! empty($dupe) ) {
+					$this->log->info( 'content', "Skipping planning for '{$item['title']}' - semantically similar to existing post #{$dupe[0]['object_id']}." );
+					$keywords->mark( $item['primary_keyword'], 'cannibalized', $dupe[0]['object_id'] );
+					continue;
+				}
+			}
+
 			$slot++;
 
 			$now = current_time( 'mysql', true );
@@ -198,7 +214,10 @@ class VMSB_Content {
 			return array( 'imported' => 0, 'skipped' => 0, 'processed' => 0, 'submitted' => 0 );
 		}
 
-		$existing_keywords = array_map( 'strtolower', (array) $wpdb->get_col( "SELECT primary_keyword FROM {$this->table()}" ) );
+		// Comprehensive Deduplication: Check both the Pipeline and the Keyword Universe.
+		$existing_in_pipeline = (array) $wpdb->get_col( "SELECT LOWER(primary_keyword) FROM {$this->table()}" );
+		$existing_in_keywords = (array) $wpdb->get_col( "SELECT LOWER(keyword) FROM {$wpdb->prefix}vmsb_keywords WHERE post_id > 0 OR status IN ('planned', 'writing')" );
+		$existing_keywords = array_unique( array_merge( $existing_in_pipeline, $existing_in_keywords ) );
 
 		$imported  = 0;
 		$skipped   = 0;
@@ -221,40 +240,47 @@ class VMSB_Content {
 				. "the best content format, and a brief telling the writer exactly what to cover, what to avoid, "
 				. "and what the reader should be able to do afterwards.\n\n"
 				. ( $language ? "LANGUAGE: the title, keyword, and brief must all be in {$language}, not English.\n\n" : '' )
-				. 'Return JSON: {"title":"","primary_keyword":"","secondary_keywords":[],"cluster":"","intent":"informational|commercial|transactional|navigational","content_type":"blog|comparison|guide|faq","target_words":1600,"brief":""}',
+				. 'Return JSON: {"title":"","primary_keyword":"","secondary_keywords":[],"cluster":"","intent":"informational|commercial|transactional|navigational","content_type":"blog|comparison|guide|faq","target_words":1600,"brief":""}'
+				. "\nIMPORTANT: Return a SINGLE JSON object. Do NOT wrap in an array or add extra closing braces/brackets.",
 				array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 700, 'temperature' => 0.5, 'persona' => 'strategist' )
 			);
 
 			if ( empty( $data['title'] ) || empty( $data['primary_keyword'] ) ) {
+				$reason = $this->ai->get_last_error() ?: 'AI returned invalid plan schema.';
+				$this->log->warn( 'content', "Skipping topic '{$topic}': {$reason}" );
 				$skipped++;
 				continue;
 			}
 
-			if ( in_array( strtolower( $data['primary_keyword'] ), $existing_keywords, true ) ) {
+			$suggested_kw = strtolower( trim( $data['primary_keyword'] ) );
+
+			if ( in_array( $suggested_kw, $existing_keywords, true ) ) {
+				$this->log->info( 'content', "Skipping topic '{$topic}': Keyword '{$suggested_kw}' already exists in pipeline or as a published post." );
 				$skipped++;
 				continue;
 			}
 
 			// World-Class Audit: Semantic Duplicate Check
 			if ( class_exists('VMSB_Vector_Store') && VMSB_Settings::get('vector_enabled') ) {
+				// Use the suggested title for semantic comparison - it's a better representation of intent than the raw topic string.
 				$hits = VMSB_Vector_Store::search( $data['title'], array( 'limit' => 1, 'threshold' => 0.85 ) );
 				if ( $hits ) {
 					$skipped++;
-					$this->log->info( 'content', "Skipping import of topic '{$topic}' - semantically similar to existing content: " . get_the_title($hits[0]['object_id']) );
+					$this->log->info( 'content', "Skipping topic '{$topic}' - semantically similar (>{$hits[0]['score']}) to existing content: " . get_the_title($hits[0]['object_id']) );
 					continue;
 				}
 			}
 
-			$uid = substr( md5( $data['primary_keyword'] ), 0, 24 );
+			$uid = substr( md5( $suggested_kw ), 0, 24 );
 			$status = VMSB_Settings::get('posts_per_day') >= 10 ? 'approved' : 'planned';
 
-			$wpdb->query( $wpdb->prepare(
+			$inserted = $wpdb->query( $wpdb->prepare(
 				"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, secondary_keywords, cluster, intent, content_language, content_type, brief, internal_links, target_words, priority, status, created_at, updated_at)
 				 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%f,%s,%s,%s)
 				 ON DUPLICATE KEY UPDATE title = VALUES(title), brief = VALUES(brief), updated_at = VALUES(updated_at)",
 				$uid,
 				sanitize_text_field( $data['title'] ),
-				sanitize_text_field( $data['primary_keyword'] ),
+				$suggested_kw,
 				wp_json_encode( array_slice( (array) ( $data['secondary_keywords'] ?? array() ), 0, 6 ) ),
 				sanitize_text_field( $data['cluster'] ?? '' ),
 				sanitize_key( $data['intent'] ?? 'informational' ),
@@ -269,8 +295,21 @@ class VMSB_Content {
 				$now
 			) );
 
-			$existing_keywords[] = strtolower( $data['primary_keyword'] );
-			$imported++;
+			if ( $inserted ) {
+				// Also mark/add to the keyword universe so other discovery tools don't pick it up
+				$kw_engine = new VMSB_Keywords();
+				$kw_engine->upsert( $suggested_kw, array(
+					'intent'  => $data['intent'] ?? 'informational',
+					'cluster' => $data['cluster'] ?? '',
+					'source'  => 'import',
+				) );
+				$kw_engine->mark( $suggested_kw, 'planned' );
+
+				$existing_keywords[] = $suggested_kw;
+				$imported++;
+			} else {
+				$skipped++;
+			}
 		}
 
 		if ( $imported > 0 ) {
@@ -632,7 +671,12 @@ class VMSB_Content {
 			. "<!-- wp:list --><ul><li>...</li></ul><!-- /wp:list -->, so the published post is fully editable block-by-block, not one opaque HTML blob.\n\n"
 			. "IMAGES: featured_image_prompt is one specific visual concept for the hero image (not a restatement of the title). "
 			. "inline_image_prompts is 2 more specific, concrete visual concepts, each tied to a different H2 section and visually distinct from the featured image and from each other - not generic filler like 'a photo related to the topic'.\n\n"
-			. 'Return JSON: {"post_title":"","slug":"","content_html":"","excerpt":"","seo_title":"","meta_description":"","featured_image_prompt":"","inline_image_prompts":[],"faq":[{"q":"","a":""}],"suggested_category":"","suggested_tags":"","seo_score":92}';
+			. "JSON ESCAPING - READ CAREFULLY: content_html is itself a JSON string value, and it contains Gutenberg block comments that have their OWN embedded JSON, "
+			. "e.g. {\"level\":2}. Every double-quote inside those block attributes MUST be backslash-escaped so the OUTER JSON stays valid - "
+			. "write <!-- wp:heading {\\\"level\\\":2} --> , never <!-- wp:heading {\"level\":2} -->. "
+			. "This applies to every single block with attributes in the article (headings, images, groups, lists with attributes, etc.) - missing even one escape anywhere in the piece invalidates the entire response and the whole article is discarded.\n\n"
+			. 'Return JSON: {"post_title":"","slug":"","content_html":"","excerpt":"","seo_title":"","meta_description":"","featured_image_prompt":"","inline_image_prompts":[],"faq":[{"q":"","a":""}],"suggested_category":"","suggested_tags":"","seo_score":92}'
+			. "\nIMPORTANT: Return a SINGLE JSON object. Do NOT wrap in an array or add extra closing braces/brackets.";
 
 		$data = $this->ai->generate_json(
 			$prompt,
@@ -689,13 +733,14 @@ class VMSB_Content {
 		}
 
 		// THE GATE. Nothing the brain writes reaches a live URL unchecked.
-		$html   = wp_kses_post( $data['content_html'] );
 		$report = class_exists( 'VMSB_Quality_Gate' )
-			? VMSB_Quality_Gate::evaluate( $html, array(
+			? VMSB_Quality_Gate::evaluate( $data['content_html'], array(
 				'title'   => $data['post_title'] ?? $item->title,
 				'keyword' => $item->primary_keyword,
 			) )
 			: array( 'verdict' => 'pass', 'score' => 100 );
+
+		$html = VMSB_AI_Router::safe_html( $data['content_html'] );
 
 		if ( 'reject' === $report['verdict'] ) {
 			$wpdb->update( $this->table(), array( 'status' => 'rejected', 'last_error' => $report['summary'] ), array( 'id' => $item->id ) );
@@ -747,6 +792,20 @@ class VMSB_Content {
 				$post_type = strtolower( $item->cluster );
 			} else {
 				$post_type = 'post';
+			}
+		}
+
+		// Take the publish slot before the post exists, not after. The check at
+		// the top of this method ran before a ~40s model call, so it could only
+		// ever report what was true before the work started; this is the last
+		// moment where refusing still means nothing went live.
+		$cap_note = '';
+		if ( 'publish' === $status ) {
+			$cap = (int) VMSB_Settings::get( 'posts_per_day', 3 );
+			if ( ! $this->claim_publish_slot( $cap ) ) {
+				$status   = 'draft';
+				$cap_note = "Daily publish cap of {$cap} was reached while this was being written, so it was saved as a draft instead.";
+				( new VMSB_Logger() )->info( 'content', $cap_note, array( 'plan' => $item->id ) );
 			}
 		}
 
@@ -924,9 +983,15 @@ class VMSB_Content {
 
 		$wpdb->update(
 			$this->table(),
-			array( 'status' => 'publish' === $status ? 'published' : 'drafted', 'post_id' => $post_id, 'last_error' => null, 'updated_at' => current_time( 'mysql', true ) ),
+			// $cap_note is set only when the daily cap sent a finished article
+			// to draft. Recording it here is what makes that visible on the
+			// pipeline instead of the row just quietly reading "Drafted".
+			array( 'status' => 'publish' === $status ? 'published' : 'drafted', 'post_id' => $post_id, 'last_error' => ( '' !== $cap_note ? $cap_note : null ), 'updated_at' => current_time( 'mysql', true ) ),
 			array( 'id' => $item->id )
 		);
+
+		// Synchronize keyword status
+		( new VMSB_Keywords() )->mark( $item->primary_keyword, 'published', $post_id );
 
 		// Record what Rank Math's on-page tests actually say about this post,
 		// under our own key. Replaces the invented rank_math_seo_score that
@@ -954,19 +1019,9 @@ class VMSB_Content {
 		( new VMSB_Keywords() )->mark( $item->primary_keyword, 'published', $post_id );
 
 		if ( 'publish' === $status ) {
-			// Drip counter tracks posts that actually went live, so a
-			// review-first setup is never throttled by drafts it queued for
-			// a human. autoload 'no' because this is read on demand and a
-			// new key is created every day - left autoloading, a year of
-			// them rides along on every single request forever.
-			$today_key = 'vmsb_pub_' . gmdate( 'Ymd' );
-			$today_val = (int) get_option( $today_key, 0 ) + 1;
-			if ( false === get_option( $today_key, false ) ) {
-				add_option( $today_key, $today_val, '', 'no' );
-			} else {
-				update_option( $today_key, $today_val );
-			}
-
+			// The drip counter was already incremented by claim_publish_slot()
+			// above, before the post was created - counting it here as well
+			// would double-count every published post against the cap.
 			$this->ping_sitemap();
 			do_action( 'vmsb_post_produced', $post_id );
 		}
@@ -1020,6 +1075,15 @@ class VMSB_Content {
 		$data = $this->ai->generate_json(
 			"TITLE: {$post->post_title}\nFOCUS KEYWORD: {$keyword}\n\nCURRENT CONTENT:\n{$post->post_content}\n\nTASK: {$instruction}\n\n"
 			. "Keep every accurate fact and every existing internal link. Return the complete revised article, not a diff.\n\n"
+			// CURRENT CONTENT above already contains real Gutenberg block
+			// comments (<!-- wp:heading {"level":2} --> and similar) - the
+			// model is being shown that exact pattern right before being
+			// asked to return content_html as a JSON string, so it is
+			// primed to reproduce it. Every quote inside those block
+			// attributes must be backslash-escaped in the reply or the
+			// whole JSON response is invalid.
+			. "JSON ESCAPING: content_html is a JSON string, and Gutenberg block comments have their own embedded {\"...\":...} JSON. "
+			. "Escape every quote inside those block attributes with a backslash for the outer JSON - <!-- wp:heading {\\\"level\\\":2} -->, never <!-- wp:heading {\"level\":2} -->.\n\n"
 			. 'Return JSON: {"content_html":"","change_summary":""}',
 			array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 8000, 'temperature' => 0.6, 'complexity' => 'premium', 'persona' => 'wordsmith' )
 		);
@@ -1033,12 +1097,12 @@ class VMSB_Content {
 		if ( (int) VMSB_Settings::get( 'require_review' ) ) {
 			// Park the revision instead of overwriting the live page.
 			wp_save_post_revision( $post_id );
-			update_post_meta( $post_id, '_vmsb_pending_revision', wp_kses_post( $data['content_html'] ) );
+			update_post_meta( $post_id, '_vmsb_pending_revision', VMSB_AI_Router::safe_html( $data['content_html'] ) );
 			update_post_meta( $post_id, '_vmsb_pending_reason', isset( $data['change_summary'] ) ? $data['change_summary'] : $reason );
 			return array( 'pending_review' => true, 'post_content' => $before );
 		}
 
-		wp_update_post( array( 'ID' => $post_id, 'post_content' => wp_kses_post( $data['content_html'] ) ) );
+		wp_update_post( array( 'ID' => $post_id, 'post_content' => VMSB_AI_Router::safe_html( $data['content_html'] ) ) );
 		return array( 'post_content' => $before );
 	}
 
@@ -1087,7 +1151,7 @@ class VMSB_Content {
 		}
 
 		$before = $post->post_content;
-		wp_update_post( array( 'ID' => $post_id, 'post_content' => wp_kses_post( $pending ) ) );
+		wp_update_post( array( 'ID' => $post_id, 'post_content' => VMSB_AI_Router::safe_html( $pending ) ) );
 		delete_post_meta( $post_id, '_vmsb_pending_revision' );
 		delete_post_meta( $post_id, '_vmsb_pending_reason' );
 
@@ -1151,7 +1215,7 @@ class VMSB_Content {
 		$new_content = $data['text'];
 		wp_update_post( array(
 			'ID'           => $post_id,
-			'post_content' => wp_kses_post( $new_content ),
+			'post_content' => VMSB_AI_Router::safe_html( $new_content ),
 			'post_modified' => current_time( 'mysql' ),
 			'post_modified_gmt' => current_time( 'mysql', 1 )
 		) );
@@ -1394,6 +1458,11 @@ class VMSB_Content {
 			'priority' => 30 // Boost priority for retries
 		), array( 'id' => $id ) );
 
+		// Background the production to avoid Gateway Timeouts (524) on slow AI calls
+		if ( class_exists('VMSB_Task_Runner') ) {
+			return VMSB_Task_Runner::queue( 'produce_post', array( 'id' => $id ), 50, 'Retrying with senior editor critique' );
+		}
+
 		return $this->produce( $id );
 	}
 
@@ -1439,6 +1508,48 @@ class VMSB_Content {
 		}
 
 		do_action( 'vmsb_post_produced', $post_id );
+	}
+
+	/**
+	 * Atomically take one of today's publish slots.
+	 *
+	 * True when a slot was reserved, false when the cap is already spent.
+	 *
+	 * The cap used to be enforced by reading the counter at the top of
+	 * produce() and incrementing it once the finished article came back from
+	 * the model - about forty seconds later. Two runs overlapping anywhere in
+	 * that window both read the same count, both passed the check, and both
+	 * published, taking the day past its cap. Reserving the slot in a single
+	 * conditional UPDATE closes that window: the database decides, once, who
+	 * gets the last slot.
+	 *
+	 * Written through $wpdb rather than update_option() because the options
+	 * API has no compare-and-set - so the cache is dropped by hand after.
+	 */
+	private function claim_publish_slot( $cap ) {
+		global $wpdb;
+
+		$key = 'vmsb_pub_' . gmdate( 'Ymd' );
+
+		// A new key every day, read on demand: never autoloaded, or a year of
+		// them rides along on every request. INSERT IGNORE (rather than
+		// add_option) so two callers racing to create it cannot reset a
+		// counter the other has already incremented.
+		$wpdb->query( $wpdb->prepare(
+			"INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, '0', 'no')",
+			$key
+		) );
+
+		$claimed = (int) $wpdb->query( $wpdb->prepare(
+			"UPDATE {$wpdb->options} SET option_value = option_value + 1
+			 WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d",
+			$key,
+			(int) $cap
+		) );
+
+		wp_cache_delete( $key, 'options' );
+
+		return $claimed > 0;
 	}
 
 	public function stats() {

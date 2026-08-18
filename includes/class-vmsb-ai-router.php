@@ -29,6 +29,31 @@ class VMSB_AI_Router {
 	}
 
 	/**
+	 * KSES wrapper that preserves Gutenberg block comments.
+	 */
+	public static function safe_html( $html ) {
+		if ( empty( $html ) || ! is_string( $html ) ) {
+			return (string) $html;
+		}
+
+		// Preserve Gutenberg block comments
+		$blocks = array();
+		$html = preg_replace_callback( '/<!--\s*\/?wp:.*?-->/s', function( $m ) use ( &$blocks ) {
+			$id = '[[VMSB_BLOCK_' . count( $blocks ) . ']]';
+			$blocks[ $id ] = $m[0];
+			return $id;
+		}, $html );
+
+		$html = wp_kses_post( $html );
+
+		if ( ! empty( $blocks ) ) {
+			$html = str_replace( array_keys( $blocks ), array_values( $blocks ), $html );
+		}
+
+		return $html;
+	}
+
+	/**
 	 * @param string $prompt   User prompt.
 	 * @param array  $args     system, json, temperature, max_tokens, cache_ttl, kb (bool), provider, complexity (cheap|standard|premium), persona (strategist|wordsmith|auditor|thief), attempt (int), action (string)
 	 * @return array{ok:bool,text:string,provider:string,model:string,error:string,usage:array}
@@ -238,7 +263,7 @@ class VMSB_AI_Router {
 
 					$verdict = ! empty( $quality_check['ok'] ) ? trim( $quality_check['text'] ) : '';
 
-					if ( 0 !== stripos( $verdict, 'PASS' ) && $args['attempt'] < 2 ) {
+					if ( ! empty($verdict) && 0 !== stripos( $verdict, 'PASS' ) && $args['attempt'] < 2 ) {
 						( new VMSB_Logger() )->warn( 'ai', 'Peer Review Loop: Auditor identified gaps. Initiating recursive refinement pass.' );
 
 						$args['attempt']++;
@@ -307,13 +332,65 @@ class VMSB_AI_Router {
 	 */
 	public function generate_json( $prompt, array $args = array() ) {
 		$args['json']   = true;
-		$args['system'] = trim( ( isset( $args['system'] ) ? $args['system'] : '' ) . "\nReturn only raw JSON. No markdown fences, no commentary." );
+		$args['system'] = trim( ( isset( $args['system'] ) ? $args['system'] : '' ) . "\nReturn only raw JSON. No markdown fences, no commentary. Use only the specified keys." );
 
 		$res = $this->generate( $prompt, $args );
 		if ( empty( $res['ok'] ) ) {
 			return null;
 		}
 		$parsed = self::parse_json( $res['text'] );
+
+		// Everything parse_json() can repair on its own - including the
+		// Gutenberg-attribute-escaping failure this was rewritten for - is
+		// already fixed by the time we get here, so this retry no longer
+		// fires for that whole class of failure. What is left is genuinely
+		// unsalvageable text, and it comes in a few different shapes that
+		// each need a different instruction back to the model: a reply cut
+		// off mid-object needs more room, not a scolding about commentary; a
+		// reply that asked a clarifying question needs telling to just use
+		// the context it already has; and it is misleading to tell the model
+		// it added commentary when it did not. One forceful, targeted retry -
+		// not a loop, capped by _json_retried.
+		if ( null === $parsed && empty( $args['_json_retried'] ) ) {
+			$retry_args                  = $args;
+			$retry_args['_json_retried'] = true;
+
+			$cause = self::diagnose_json_failure( $res['text'] );
+			switch ( $cause ) {
+				case 'truncated':
+					// Retrying with the same budget just reproduces the same
+					// cutoff, so give this attempt more room - capped so one
+					// bad prompt can't silently double every call's cost.
+					if ( ! empty( $retry_args['max_tokens'] ) ) {
+						$retry_args['max_tokens'] = min( (int) $retry_args['max_tokens'] * 2, 16000 );
+					}
+					$hint = "Your previous reply was cut off before it finished - an object or array you opened was never closed. "
+						. "Either write more concisely so the complete object fits, or, if the content genuinely needs the space, prioritise finishing every field over adding more detail to any single one. "
+						. "Output ONLY the complete, raw JSON object now.";
+					break;
+
+				case 'no_json_attempted':
+				case 'commentary':
+					$hint = "Your previous reply was not valid JSON - it contained a question, a refusal, or commentary instead of pure data. "
+						. "You already have every piece of context you need to complete this task; do not ask for more. Do not explain, do not add anything before or after the object. "
+						. "Output ONLY the raw JSON object now.";
+					break;
+
+				default: // 'malformed' - structurally complete but still would not parse.
+					$hint = "Your previous reply was not valid JSON. The most common cause is an unescaped double-quote inside a string value - "
+						. "check every quote, especially inside any embedded markup or code, is backslash-escaped for the OUTER JSON. "
+						. "Output ONLY the raw JSON object now.";
+			}
+
+			$retry_args['system'] = trim( $args['system'] . "\n\n{$hint}" );
+
+			$retry_res = $this->generate( $prompt, $retry_args );
+			if ( ! empty( $retry_res['ok'] ) ) {
+				$res    = $retry_res;
+				$parsed = self::parse_json( $res['text'] );
+			}
+		}
+
 		if ( null === $parsed ) {
 			// The call succeeded but the reply wasn't valid/salvageable JSON -
 			// this is a different failure than a provider error, so don't leave
@@ -333,6 +410,53 @@ class VMSB_AI_Router {
 		return $parsed;
 	}
 
+	/**
+	 * Work out WHY a reply failed to parse as JSON, so the one retry
+	 * generate_json() spends can give the model an instruction that
+	 * actually matches what went wrong, instead of a fixed guess.
+	 *
+	 * Three checks, cheap and in order of how conclusive they are:
+	 *
+	 * 1. No { or [ anywhere - the model answered in prose, not JSON.
+	 * 2. Brace/bracket count imbalance - a genuinely complete reply always
+	 *    balances, even when it has an unrelated quoting defect somewhere
+	 *    in the middle (a Gutenberg attribute pair like {"level":2} adds
+	 *    one open and one close, so it never causes an imbalance on its
+	 *    own). An imbalance is close to conclusive evidence the model was
+	 *    still writing when it ran out of tokens.
+	 * 3. A question mark or a refusal/clarifying phrase before the JSON
+	 *    starts (or in place of it) - a request for more information
+	 *    instead of using the context already given.
+	 *
+	 * Anything that clears all three is 'malformed': structurally complete,
+	 * not a refusal, but still broken - most often a stray unescaped quote
+	 * parse_json()'s targeted Gutenberg fix did not cover.
+	 *
+	 * @param string $raw_text The model's raw reply, before any salvage step.
+	 * @return string One of: no_json_attempted, truncated, commentary, malformed.
+	 */
+	private static function diagnose_json_failure( $raw_text ) {
+		$text = trim( (string) $raw_text );
+
+		if ( ! preg_match( '/[\{\[]/', $text ) ) {
+			return 'no_json_attempted';
+		}
+
+		$opens  = substr_count( $text, '{' ) + substr_count( $text, '[' );
+		$closes = substr_count( $text, '}' ) + substr_count( $text, ']' );
+		if ( $opens > $closes ) {
+			return 'truncated';
+		}
+
+		$before_json = trim( preg_replace( '/[\{\[].*$/s', '', $text ) );
+		if ( '' !== $before_json && ( false !== strpos( $before_json, '?' )
+			|| preg_match( '/\b(please provide|please upload|could you|i need|i cannot|i don\'t have|as an ai)\b/i', $before_json ) ) ) {
+			return 'commentary';
+		}
+
+		return 'malformed';
+	}
+
 	public static function parse_json( $text ) {
 		$text = trim( (string) $text );
 
@@ -342,34 +466,111 @@ class VMSB_AI_Router {
 		$text = preg_replace( '/(}|\])[^}\]]*$/s', '$1', $text ); // Strip everything after last } or ]
 		$text = trim( $text );
 
-		// Salvage Step 0.5: Fix stray "}" or "]" in the middle of the string
-		// Sometimes models hallucinate the end of a block inside a content field.
-		// We only apply this if standard decoding fails.
+		// Salvage Step 0.5: Gutenberg block attributes embedded unescaped.
+		//
+		// Every content-writing prompt in this plugin asks the model to put
+		// real block markup - <!-- wp:heading {"level":2} -->,
+		// <!-- wp:image {"id":42,"sizeSlug":"large"} --> - inside a JSON
+		// string value. That is JSON nested inside JSON: every quote in the
+		// block's own {...} attributes has to come back out as \" for the
+		// OUTER json_decode() to succeed. A model reliably forgets this at
+		// least once in any article with more than a couple of headings or
+		// images, and it only takes one miss anywhere in a few thousand
+		// words to break the entire payload - invisibly, because the parts
+		// before and after the miss still look perfectly formed.
+		//
+		// Run this before the first decode attempt, unconditionally: it is a
+		// no-op on text with no such block comments, and on already-correctly-
+		// escaped ones (the negative lookbehind below skips a \" that is
+		// already escaped, so it never double-escapes a model that got it
+		// right). Fixing this here means the common case reaches
+		// json_decode() clean and never touches the blunter salvage regexes
+		// below at all - those are tuned for different failure shapes and
+		// have no business running against content that only needed this.
+		$text = self::escape_gutenberg_attrs( $text );
 
-		// Salvage Step 1: Standard Parse
+		// Initial Attempt: Pure Standard Parse
 		$data = json_decode( $text, true );
 		if ( JSON_ERROR_NONE === json_last_error() ) {
 			return $data;
 		}
 
-		// Salvage Step 2: Recursive Deep Salvage (Handle early closure hallucinations)
-		// If the model closed a block prematurely, e.g., "...Deal size." } ], "next_key":...
-		// We look for patterns like " } ], " or " } , " and try to remove the erroneous closure.
-		$salvaged = preg_replace( '/"(\s*)\}\s*\]\s*,\s*"/', '"$1, "', $text );
-		$salvaged = preg_replace( '/"(\s*)\}\s*,\s*"/', '"$1, "', $salvaged );
-		$data = json_decode( $salvaged, true );
-		if ( JSON_ERROR_NONE === json_last_error() ) {
-			return $data;
-		}
+		// --- Start Cumulative Salvage Flow ---
+		// If standard parsing failed, apply multiple fixes sequentially.
 
-		// Salvage Step 3: Fix trailing commas (common LLM mistake)
-		$fixed = preg_replace( '/,\s*([\]\}])/', '$1', $text );
-		$data  = json_decode( $fixed, true );
+		// Salvage 1: Fix "Smart Quotes" (common when AI tries to be 'fancy')
+		$text = str_replace( array( "\u{201C}", "\u{201D}", "\u{2018}", "\u{2019}" ), array( '"', '"', "'", "'" ), $text );
+
+		// Salvage 2: Handle raw newlines inside JSON strings
+		// json_decode() fails if there are literal newlines within a double-quoted string.
+		$text = preg_replace_callback( '/"((?:[^"\\\\]|\\\\.)*)"/s', function( $matches ) {
+			return '"' . str_replace( array( "\n", "\r" ), array( "\\n", "\\r" ), $matches[1] ) . '"';
+		}, $text );
+
+		// Salvage 3: Handle early closure hallucinations (e.g. "Value" } ], "next_key":)
+		// This happens when the model thinks it's closing an array/object mid-flow.
+		// Pattern: closing quote, then junk (spaces, braces, brackets), then optional comma, then opening quote.
+		$text = preg_replace( '/"(\s*)[\}\s\]]+,?\s*"/s', '"$1, "', $text );
+
+		// Salvage 4: Fix trailing commas (common LLM mistake)
+		$text = preg_replace( '/,\s*([\]\}])/', '$1', $text );
+
+		// Final Attempt: Parse the salvaged text
+		$data = json_decode( $text, true );
 		if ( JSON_ERROR_NONE === json_last_error() ) {
 			return $data;
 		}
 
 		return null;
+	}
+
+	/**
+	 * Re-escape the double quotes inside a Gutenberg block comment's own
+	 * {...} attribute JSON, without touching quotes anywhere else in the
+	 * text.
+	 *
+	 * Deliberately narrow: this only matches inside
+	 * <!-- wp:name {...} --> / <!-- /wp:name --> comments, specifically
+	 * because that is the one place this codebase's own prompts ask the
+	 * model to embed a second layer of JSON. A generic "fix any unescaped
+	 * quote anywhere" pass would be far more likely to mangle a genuine
+	 * quoted word in the article's prose than to help - see
+	 * tests/test-parse-json.php's "quote in plain prose" case, which must
+	 * keep failing rather than being silently (and probably wrongly)
+	 * repaired.
+	 *
+	 * The attribute capture is non-greedy up to the next " -->", not a
+	 * brace-balanced match - regex cannot balance arbitrarily nested braces
+	 * in general, and does not need to here: a Gutenberg block comment's
+	 * attribute JSON is always immediately followed by " -->" with nothing
+	 * else after it, including when the attributes are themselves nested
+	 * (style.spacing.margin.top and similar). Only a value inside the
+	 * attributes that happened to contain the literal substring " -->"
+	 * could fool this, which is not a realistic block attribute.
+	 *
+	 * The space before the opening brace is optional (\s*, not \s+):
+	 * WordPress's own serializer (get_comment_delimited_block_content() in
+	 * wp-includes/blocks.php) always includes it, but this is repairing a
+	 * model's imitation of that format, not the real serializer, so a
+	 * model that drops the space still gets fixed rather than skipped.
+	 *
+	 * @param string $text Raw model output, still containing literal
+	 *                     newlines/whitespace exactly as received - this
+	 *                     runs before any other normalisation.
+	 * @return string
+	 */
+	private static function escape_gutenberg_attrs( $text ) {
+		return preg_replace_callback(
+			'/<!--\s*(\/?wp:[a-zA-Z0-9\/_-]+)\s*(\{.*?\})\s*-->/',
+			static function ( $m ) {
+				// Escape every quote not already escaped, so a block the
+				// model DID get right passes through unchanged instead of
+				// being double-escaped into "\\\"level\\\"".
+				$fixed_attrs = preg_replace( '/(?<!\\\\)"/', '\\\\"', $m[2] );
+				return '<!-- ' . $m[1] . ' ' . $fixed_attrs . ' -->';
+			},
+			$text
+		);
 	}
 
 	/* ---------------------------------------------------------------- providers */
@@ -380,7 +581,14 @@ class VMSB_AI_Router {
 		$bot_id = VMSB_Settings::get( 'aipuffer_bot_id' );
 
 		// Intelligence: If URL is empty or using the placeholder, assume Local Mode (AI Power/Engine installed here)
-		$is_local = empty($base) || strpos( $base, 'your-aipuffer-host' ) !== false || ( untrailingslashit($base) === untrailingslashit(home_url()) );
+		$is_local = empty($base) || strpos( $base, 'your-aipuffer-host' ) !== false;
+		if ( ! $is_local ) {
+			$base_normalized = preg_replace( '/^https?:\/\//', '', untrailingslashit( strtolower( $base ) ) );
+			$home_normalized = preg_replace( '/^https?:\/\//', '', untrailingslashit( strtolower( home_url() ) ) );
+			if ( $base_normalized === $home_normalized ) {
+				$is_local = true;
+			}
+		}
 
 		if ( ! $is_local && ! $key ) {
 			return $this->fail( 'AI Puffer is not configured.' );
@@ -412,6 +620,22 @@ class VMSB_AI_Router {
 		// Try different namespaces for AI Puffer / AI Power / AI Engine
 		$namespaces = array( 'aipkit/v1', 'mwai/v1', 'wpaicg/v1', 'aipuffer/v1' );
 		$last_error = 'Unknown error';
+
+		if ( $is_local ) {
+			// 100% Compatibility: Try Direct Class Bridge first to bypass REST/HTTP issues.
+			$direct = $this->call_aipkit_direct( $prompt, $args, $bot_id );
+			if ( $direct && ! empty($direct['ok']) ) {
+				return $direct;
+			}
+
+			// Early diagnostic: If in local mode, we must have a compatible bridge plugin.
+			$has_power  = class_exists( '\WPAICG\Chat\Storage\BotStorage' ) || post_type_exists( 'wpaicg_chatbots' );
+			$has_engine = get_option( 'mwai_options' ) || class_exists( 'Meow_MWAI_Core' );
+
+			if ( ! $has_power && ! $has_engine ) {
+				return $this->fail( 'AI Puffer is in Local Mode, but no compatible bridge (AI Power or AI Engine) was detected on this site. Please install one of these to use the local Puffer bridge.' );
+			}
+		}
 
 		$context = array(
 			'site_dna' => VMSB_Settings::get( 'business_description' ),
@@ -524,8 +748,15 @@ class VMSB_AI_Router {
 					$this->log->info( 'aipuffer', "Local REST bridge success on {$ns}.", array('bot' => $bot_id) );
 					return $this->extract_aipuffer_reply( $data, $args['forced_model'] ?? 'aipuffer' );
 				}
-				$last_error = is_wp_error( $response ) ? $response->get_error_message() : ( method_exists($response, 'get_data') ? wp_json_encode($response->get_data()) : 'REST Internal Error' );
+
+				$data = method_exists($response, 'get_data') ? $response->get_data() : array();
+				$last_error = is_wp_error( $response ) ? $response->get_error_message() : ( isset($data['message']) ? $data['message'] : wp_json_encode($data) );
 				$this->log->warn( 'aipuffer', "Local REST bridge failed on {$ns}: " . $last_error );
+
+				// Diagnostic: If internal route is missing, skip the external post to same site.
+				if ( isset($data['code']) && $data['code'] === 'rest_no_route' ) {
+					continue;
+				}
 			}
 
 			$res = $this->post( $url, $request_body, array( 'Authorization' => 'Bearer ' . $key, 'X-API-KEY' => $key ), 120 );
@@ -536,7 +767,68 @@ class VMSB_AI_Router {
 			$last_error = $res['error'] . ' (' . $url . ')';
 		}
 
+		if ( strpos( $last_error, 'No route was found' ) !== false ) {
+			return $this->fail( 'AI Puffer Connection Failed: No compatible REST route was found. Ensure AI Power or AI Engine is installed and its REST API is enabled.' );
+		}
+
 		return $this->fail( $last_error );
+	}
+
+	/**
+	 * Direct Zero-Distance Bridge for AI Power / AIPKit.
+	 * Bypasses HTTP/REST for 100% compatibility when on the same server.
+	 */
+	private function call_aipkit_direct( $prompt, $args, $bot_id ) {
+		if ( ! class_exists('\WPAICG\Core\AIPKit_AI_Caller') ) return null;
+
+		try {
+			// Scenario A: Chatbot-specific call
+			if ( $bot_id && class_exists('\WPAICG\Chat\Core\AIService') && class_exists('\WPAICG\Chat\Storage\BotStorage') ) {
+				$bot_storage = new \WPAICG\Chat\Storage\BotStorage();
+				$bot_settings = $bot_storage->get_chatbot_settings($bot_id);
+				if ( $bot_settings ) {
+					$service = new \WPAICG\Chat\Core\AIService();
+					$full_prompt = $prompt;
+					if ( ! empty($args['system']) ) {
+						$full_prompt = "CONTEXT:\n" . $args['system'] . "\n\nTASK:\n" . $prompt;
+					}
+
+					$ai_result = $service->generate_response($full_prompt, $bot_settings, []);
+					if ( ! is_wp_error($ai_result) ) {
+						$this->log->info( 'aipuffer', "AI Power Direct Bridge (Chat) success.", array('bot' => $bot_id) );
+						return $this->ok($ai_result['content'] ?? '', $bot_settings['model'] ?? 'unknown', $ai_result['usage'] ?? []);
+					}
+					return $this->fail( $ai_result->get_error_message() );
+				}
+			}
+
+			// Scenario B: Generic generation (no bot)
+			if ( ! $bot_id ) {
+				$caller = new \WPAICG\Core\AIPKit_AI_Caller();
+				$provider_label = \WPAICG\AIPKit_Providers::normalize_provider_label($args['provider'] ?: 'openai');
+				$model = $args['forced_model'] ?: 'gpt-4o-mini';
+
+				$ai_result = $caller->make_standard_call(
+					$provider_label,
+					$model,
+					$this->messages($prompt, $args),
+					array(
+						'temperature' => (float)$args['temperature'],
+						'max_completion_tokens' => (int)$args['max_tokens']
+					)
+				);
+
+				if ( ! is_wp_error($ai_result) ) {
+					$this->log->info( 'aipuffer', "AI Power Direct Bridge (Text) success.", array('model' => $model) );
+					return $this->ok($ai_result['content'] ?? '', $model, $ai_result['usage'] ?? []);
+				}
+				return $this->fail( $ai_result->get_error_message() );
+			}
+		} catch ( \Throwable $e ) {
+			$this->log->error( 'aipuffer', 'AI Power direct bridge exception: ' . $e->getMessage() );
+		}
+
+		return null;
 	}
 
 	private function extract_aipuffer_reply( $data, $model ) {
@@ -690,9 +982,10 @@ class VMSB_AI_Router {
 
 	private function post( $url, $body, $headers = array(), $timeout = 90 ) {
 		$args = array(
-			'timeout' => $timeout,
-			'headers' => array_merge( array( 'Content-Type' => 'application/json' ), $headers ),
-			'body'    => wp_json_encode( $body ),
+			'timeout'    => $timeout,
+			'user-agent' => 'VM-SEO-Brain/' . VMSB_VERSION . '; ' . home_url(),
+			'headers'    => array_merge( array( 'Content-Type' => 'application/json' ), $headers ),
+			'body'       => wp_json_encode( $body ),
 		);
 
 		// Intelligence: Auto-disable SSL verify for .local or placeholder sites
