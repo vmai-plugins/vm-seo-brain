@@ -90,6 +90,7 @@ final class VMSB_Core {
 
 		if ( is_admin() ) {
 			new VMSB_Admin();
+			add_action( 'admin_init', array( $this, 'heartbeat' ) );
 		}
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );
@@ -98,6 +99,32 @@ final class VMSB_Core {
 
 	public function load_textdomain() {
 		load_plugin_textdomain( 'vm-seo-brain', false, dirname( plugin_basename( VMSB_FILE ) ) . '/languages' );
+	}
+
+	/**
+	 * Heartbeat: Process a small batch of background tasks while the admin
+	 * is active, reducing wait time for crons.
+	 */
+	public function heartbeat() {
+		if ( ! is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
+			return;
+		}
+
+		// Only on our own pages to avoid slowing down the whole WP admin.
+		$page = isset( $_GET['page'] ) ? $_GET['page'] : '';
+		if ( 0 !== strpos( $page, 'vmsb' ) ) {
+			return;
+		}
+
+		$last = (int) get_transient( 'vmsb_heartbeat_tick' );
+		if ( $last && ( time() - $last ) < 300 ) {
+			return; // Max once every 5 minutes
+		}
+
+		if ( class_exists( 'VMSB_Task_Runner' ) && VMSB_Task_Runner::pending_count() > 0 ) {
+			set_transient( 'vmsb_heartbeat_tick', time(), 3600 );
+			VMSB_Task_Runner::process( 1 ); // Just one task per heartbeat to keep it snappy
+		}
 	}
 
 	/**

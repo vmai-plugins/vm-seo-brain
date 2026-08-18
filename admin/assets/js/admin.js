@@ -167,11 +167,14 @@
 		if ( route === 'opportunity-scan' ) { return 'Found ' + data.found + ' opportunities. Refreshing...'; }
 		if ( route === 'evaluate-pivot' ) { return 'Strategic Pivot decided: ' + data.pivot_name; }
 		if ( route === 'video-to-blog' ) { return 'Video transformed. New pillar post queued in Content Factory.'; }
+		if ( route === 'retry-critique' ) {
+			return data.queued ? 'Critique task queued. The agent will rewrite in the background.' : ( data.post_id ? 'Success! Redirecting to draft...' : 'Retry started.' );
+		}
 		return JSON.stringify( data, null, 2 );
 	}
 
 	function reloadIfNeeded( route ) {
-		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert', 'license-verify', 'cluster-architect', 'battle-roadmap', 'growth-scan', 'growth-suggestion-approve', 'growth-suggestion-reject', 'agents-run-strategist', 'opportunity-scan', 'evaluate-pivot', 'action-rollback', 'video-to-blog', 'task-retry', 'task-cancel', 'execute-opportunity', 'graph-sync' ];
+		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert', 'license-verify', 'cluster-architect', 'battle-roadmap', 'growth-scan', 'growth-suggestion-approve', 'growth-suggestion-reject', 'agents-run-strategist', 'opportunity-scan', 'evaluate-pivot', 'action-rollback', 'video-to-blog', 'task-retry', 'task-cancel', 'execute-opportunity', 'graph-sync', 'retry-critique' ];
 		if ( routes.indexOf( route ) !== -1 ) {
 			const msg = ( route === 'import-topics' || route === 'pull-bulk-topics' ) ? '&vmsb_msg=import_done' : ( route === 'license-verify' ? '&vmsb_msg=license_active' : '' );
 			setTimeout( () => {
@@ -967,6 +970,317 @@
 			btn.prop('disabled', false).text(label);
 		}
 	});
+
+	/* ------------------------------------------------------------ pipeline dashboard
+	 *
+	 * The pipeline screen was a server-rendered table with a client-side text
+	 * filter: it could not show work moving, it searched only the 200 rows that
+	 * happened to be in the DOM, and when a query returned nothing it rendered
+	 * a header with no body and no explanation. This owns the rows instead, so
+	 * there is one source of truth for what a row looks like, every empty
+	 * result says why it is empty, and a row that is being written updates
+	 * itself while you watch it.
+	 */
+	( function pipelineDashboard() {
+		const body = document.getElementById( 'vmsb-pipe-body' );
+		if ( ! body ) { return; }
+
+		const flow     = document.getElementById( 'vmsb-flow' );
+		const searchEl = document.getElementById( 'vmsb-pipeline-search' );
+		const stampEl  = document.getElementById( 'vmsb-pipe-stamp' );
+		const liveEl   = document.getElementById( 'vmsb-pipe-live' );
+		const liveTxt  = document.getElementById( 'vmsb-pipe-live-text' );
+		const refreshEl= document.getElementById( 'vmsb-pipe-refresh' );
+
+		const FAST = 6000;   // something is actively being written
+		const SLOW = 30000;  // nothing moving; just stay roughly current
+
+		let stage    = 'all';
+		let query    = '';
+		let timer    = null;
+		let inFlight = false;
+		let signature= '';
+		let searchSeq= 0;
+
+		// Why a given stage can legitimately be empty, and what to do about it.
+		// A blank table that does not say this is the whole complaint.
+		const EMPTY = {
+			all:       [ 'Nothing in the pipeline yet', 'Plan a topic from Authority Discovery, import a list in bulk, or let the strategist queue work on its next cycle.' ],
+			planned:   [ 'No planned topics', 'Planned topics are ideas the brain has captured but you have not cleared for writing yet.' ],
+			approved:  [ 'Nothing approved and waiting', 'Approved topics sit here until a writer slot frees up. Approve something from Planned to fill this.' ],
+			writing:   [ 'No agent is writing right now', 'This fills while a draft is being generated. Run a production batch to put something through.' ],
+			drafted:   [ 'No drafts waiting on you', 'Finished drafts land here for review before they go live.' ],
+			published: [ 'Nothing published yet', 'Posts appear here once they reach a live URL.' ],
+			failed:    [ 'Nothing has failed', 'Good news — no run stopped on an error.' ],
+			rejected:  [ 'Nothing rejected', 'Topics you discard end up here and can be re-planned.' ]
+		};
+
+		function scoreClass( n ) { return n >= 85 ? 'good' : ( n >= 70 ? 'med' : 'low' ); }
+
+		function cell( r ) {
+			let s = '<span class="vmsb-tag state-' + esc( r.status ) + '">'
+				+ esc( r.status.charAt( 0 ).toUpperCase() + r.status.slice( 1 ) ) + '</span>';
+
+			// A writing row is the only one worth watching, so say what it is
+			// doing rather than just that it is busy.
+			if ( r.status === 'writing' ) {
+				s += '<div class="vmsb-agent-line"><span class="vmsb-dot vmsb-dot-gold"></span>'
+					+ '<small>' + esc( r.agent || 'Reasoning…' ) + '</small></div>';
+			}
+			return s;
+		}
+
+		function rowHtml( r ) {
+			let topic = '<strong>' + esc( r.title ) + '</strong>';
+			if ( r.pillar ) { topic += ' <span class="vmsb-tag vmsb-tag-purple vmsb-tag-xs">Pillar</span>'; }
+			if ( r.keyword ) { topic += '<div class="vmsb-pipe-kw"><code>' + esc( r.keyword ) + '</code></div>'; }
+			if ( r.note )  { topic += '<div class="vmsb-editor-note">✍️ ' + esc( r.note ) + '</div>'; }
+			if ( r.error ) { topic += '<div class="vmsb-error-box">⚠️ ' + esc( r.error ) + '</div>'; }
+
+			const quality = r.quality > 0
+				? '<div class="vmsb-tiny-score ' + scoreClass( r.quality ) + '"><span>' + r.quality + '</span></div>'
+				: '<span class="vmsb-note">—</span>';
+
+			let actions = '<button type="button" class="vmsb-mini-btn vmsb-pipe-note" data-id="' + r.id
+				+ '" data-note="' + esc( r.note ) + '">Note</button>';
+
+			if ( r.status === 'failed' ) {
+				actions += ' <button class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="retry-critique" data-id="' + r.id + '">Retry</button>';
+			} else if ( r.status === 'planned' || r.status === 'suggested' ) {
+				actions += ' <button class="vmsb-mini-btn" data-vmsb="bulk-action" data-body=\'{"ids":[' + r.id + '],"bulk_action":"bulk-approve"}\'>Approve</button>';
+			}
+			if ( r.edit_url ) {
+				actions += ' <a href="' + esc( r.edit_url ) + '" class="vmsb-mini-btn vmsb-btn-ghost">Edit</a>';
+			}
+			if ( r.status === 'published' && r.view_url ) {
+				actions += ' <a href="' + esc( r.view_url ) + '" target="_blank" rel="noopener" class="vmsb-mini-btn vmsb-btn-ghost">View</a>';
+			}
+
+			return '<tr class="state-row-' + esc( r.status ) + '">'
+				+ '<td><input type="checkbox" class="vmsb-row-cb" value="' + r.id + '"></td>'
+				+ '<td>' + cell( r ) + '</td>'
+				+ '<td class="vmsb-pipe-topic">' + topic + '</td>'
+				+ '<td>' + quality + '</td>'
+				+ '<td><span class="vmsb-note">' + esc( r.age ) + ( r.age ? ' ago' : '' ) + '</span></td>'
+				+ '<td><div class="vmsb-bar vmsb-mini-bar"><span style="width:'
+					+ Math.max( 0, Math.min( 100, r.priority * 10 ) ) + '%"></span></div></td>'
+				+ '<td class="vmsb-row-actions">' + actions + '</td>'
+				+ '</tr>';
+		}
+
+		function notice( title, note, kind ) {
+			return '<tr class="vmsb-pipe-notice"><td colspan="7"><div class="vmsb-empty-state'
+				+ ( kind ? ' is-' + kind : '' ) + '">'
+				+ '<p class="vmsb-empty-title">' + esc( title ) + '</p>'
+				+ '<p class="vmsb-note">' + esc( note ) + '</p>'
+				+ '</div></td></tr>';
+		}
+
+		function render( data ) {
+			// Preserve any selection across a background refresh - a poll
+			// firing must not silently empty a bulk selection you were part
+			// way through making.
+			const checked = new Set(
+				Array.from( body.querySelectorAll( '.vmsb-row-cb:checked' ) ).map( cb => cb.value )
+			);
+
+			const rows = data.rows || [];
+			let html;
+
+			if ( ! rows.length ) {
+				if ( query ) {
+					html = notice( 'No match for “' + query + '”',
+						'Nothing in ' + ( stage === 'all' ? 'the pipeline' : 'this stage' ) + ' matches that. This searches every row in the database, not just the ones on screen.' );
+				} else {
+					const copy = EMPTY[ stage ] || EMPTY.all;
+					html = notice( copy[ 0 ], copy[ 1 ] );
+				}
+			} else {
+				html = rows.map( rowHtml ).join( '' );
+				if ( rows.length >= data.limit ) {
+					html += '<tr class="vmsb-pipe-notice"><td colspan="7"><span class="vmsb-note">'
+						+ 'Showing the top ' + rows.length + ' by priority. Filter by stage or search to narrow it down.'
+						+ '</span></td></tr>';
+				}
+			}
+
+			body.innerHTML = html;
+
+			if ( checked.size ) {
+				body.querySelectorAll( '.vmsb-row-cb' ).forEach( cb => {
+					if ( checked.has( cb.value ) ) { cb.checked = true; }
+				} );
+			}
+		}
+
+		const POSTURE_LABEL = {
+			ahead:       'Ahead of pace',
+			on_track:    'On pace',
+			behind:      'Behind pace',
+			unreachable: 'Not reachable in this window'
+		};
+
+		function paintGoal( goal ) {
+			const box = document.getElementById( 'vmsb-goal' );
+			if ( ! box ) { return; }
+
+			if ( ! goal || ! goal.active ) { box.hidden = true; return; }
+			box.hidden = false;
+
+			const posture = goal.posture || 'on_track';
+			box.setAttribute( 'data-posture', posture );
+
+			document.getElementById( 'vmsb-goal-phase' ).textContent   = 'Phase ' + goal.phase;
+			document.getElementById( 'vmsb-goal-posture' ).textContent = POSTURE_LABEL[ posture ] || posture;
+			document.getElementById( 'vmsb-goal-achieved' ).textContent = Number( goal.achieved || 0 ).toLocaleString();
+			document.getElementById( 'vmsb-goal-target' ).textContent   = Number( goal.target || 0 ).toLocaleString() + ' sessions';
+			document.getElementById( 'vmsb-goal-days' ).textContent =
+				' · day ' + goal.day + ', ' + goal.days_left + ' left';
+
+			const pct = Math.max( 0, Math.min( 100, Number( goal.pct_of_target || 0 ) ) );
+			document.getElementById( 'vmsb-goal-fill' ).style.width = pct + '%';
+			document.getElementById( 'vmsb-goal-note' ).textContent = goal.note || '';
+
+			// The levers that can actually move the number inside the window.
+			const focus = Array.isArray( goal.focus ) ? goal.focus : [];
+			document.getElementById( 'vmsb-goal-focus' ).innerHTML = focus.length
+				? '<span class="vmsb-goal-focus-title">Biggest levers</span>' + focus.map( f =>
+					'<div class="vmsb-goal-lever"><span>' + esc( f.lever ) + '</span>'
+					+ '<strong>+' + Number( f.upside || 0 ).toLocaleString() + '</strong></div>'
+				  ).join( '' )
+				: '<span class="vmsb-goal-focus-title">Biggest levers</span>'
+				  + '<p class="vmsb-note">Not enough Search Console history yet to size them.</p>';
+		}
+
+		function paintCounts( stats ) {
+			if ( ! flow ) { return; }
+			let total = 0;
+			Object.keys( stats || {} ).forEach( k => { total += stats[ k ]; } );
+
+			flow.querySelectorAll( '[data-count]' ).forEach( el => {
+				const key = el.getAttribute( 'data-count' );
+				el.textContent = key === 'all' ? total : ( stats[ key ] || 0 );
+			} );
+		}
+
+		function setLive( busy ) {
+			if ( ! liveEl ) { return; }
+			liveEl.hidden = ! busy;
+			if ( busy && liveTxt ) { liveTxt.textContent = 'Agent working — live'; }
+		}
+
+		function schedule( ms ) {
+			clearTimeout( timer );
+			timer = setTimeout( poll, ms );
+		}
+
+		// A scheduled refresh. Skips a screen nobody is looking at - but only
+		// a *refresh*: the first paint and anything the operator asked for
+		// still run, or a page opened in a background tab would sit on its
+		// skeleton until the tab was focused, showing nothing at all.
+		function poll() { load( false ); }
+
+		async function load( force ) {
+			if ( inFlight ) { return; }
+
+			// offsetParent covers every reason the table can be hidden,
+			// including the nested case where this panel is itself active but
+			// the Production tab wrapping it is not.
+			if ( ! force && ( document.hidden || body.offsetParent === null ) ) {
+				schedule( SLOW );
+				return;
+			}
+
+			inFlight = true;
+			const seq = ++searchSeq;
+
+			try {
+				const data = await call( 'pipeline-feed', { stage: stage, search: query, limit: 60 } );
+
+				// A slower earlier request must not overwrite a newer one.
+				if ( seq !== searchSeq ) { return; }
+
+				const sig = JSON.stringify( data.rows ) + JSON.stringify( data.stats ) + JSON.stringify( data.goal );
+				if ( sig !== signature ) {
+					signature = sig;
+					render( data );
+					paintCounts( data.stats );
+					paintGoal( data.goal );
+				}
+
+				const busy = ( data.rows || [] ).some( r => r.status === 'writing' )
+					|| ( data.tasks || [] ).some( t => t.status === 'running' || t.status === 'retrying' );
+
+				setLive( busy );
+				if ( stampEl ) { stampEl.textContent = 'Updated ' + new Date().toLocaleTimeString(); }
+				schedule( busy ? FAST : SLOW );
+			} catch ( e ) {
+				// Never fail to a blank table - that is indistinguishable from
+				// "you have no content", which is the wrong conclusion.
+				body.innerHTML = notice( 'Could not load the pipeline', e.message, 'error' );
+				setLive( false );
+				schedule( SLOW );
+			} finally {
+				inFlight = false;
+			}
+		}
+
+		if ( flow ) {
+			flow.addEventListener( 'click', function ( e ) {
+				const chip = e.target.closest( '.vmsb-flow-chip' );
+				if ( ! chip ) { return; }
+				flow.querySelectorAll( '.vmsb-flow-chip' ).forEach( c => c.classList.remove( 'is-active' ) );
+				chip.classList.add( 'is-active' );
+				stage = chip.getAttribute( 'data-stage' ) || 'all';
+				signature = '';
+				load( true );
+			} );
+		}
+
+		if ( searchEl ) {
+			let debounce = null;
+			searchEl.addEventListener( 'input', function () {
+				clearTimeout( debounce );
+				debounce = setTimeout( function () {
+					query = searchEl.value.trim();
+					signature = '';
+					load( true );
+				}, 300 );
+			} );
+		}
+
+		if ( refreshEl ) {
+			refreshEl.addEventListener( 'click', function () { signature = ''; load( true ); } );
+		}
+
+		// Editor note, without an inline onclick carrying an escaped string.
+		body.addEventListener( 'click', async function ( e ) {
+			const btn = e.target.closest( '.vmsb-pipe-note' );
+			if ( ! btn ) { return; }
+
+			const note = window.prompt( 'Editor note:', btn.getAttribute( 'data-note' ) || '' );
+			if ( note === null ) { return; }
+
+			try {
+				await call( 'save-editor-note', { id: parseInt( btn.getAttribute( 'data-id' ), 10 ), note: note } );
+				signature = '';
+				load( true );
+			} catch ( err ) {
+				alert( 'Could not save the note: ' + err.message );
+			}
+		} );
+
+		document.addEventListener( 'visibilitychange', function () {
+			if ( ! document.hidden ) { load( true ); }
+		} );
+
+		// Revealing the table by switching tabs should show current data, not
+		// whatever was true when the page loaded. load() no-ops when the table
+		// is still hidden, so this is safe to fire on any tab.
+		$( document ).on( 'click', '.vmsb-tab', function () { setTimeout( function () { load( true ); }, 0 ); } );
+
+		load( true );
+	} )();
 
 	// Expose for inline usage
 	VMSB.call = call;

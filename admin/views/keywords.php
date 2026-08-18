@@ -119,13 +119,28 @@ $planned_count = $k->count('planned');
 			<div class="vmsb-card" style="padding:20px; background: linear-gradient(135deg, var(--panel) 0%, rgba(69, 170, 242, 0.03) 100%);">
 				<h3 style="margin:0 0 15px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted);">Intent Evolution</h3>
 				<?php
-				$intent_dist = $wpdb->get_results("SELECT intent, COUNT(*) as n FROM {$table} WHERE intent IS NOT NULL GROUP BY intent ORDER BY n DESC");
+				// Two fixes in one query. This ran a separate COUNT per intent
+				// inside the loop below - and that COUNT filtered on
+				// "position <= 10" without "position > 0", so every unranked
+				// keyword (position 0) was counted as ranking in the top 10.
+				// Every other ranked count in this file guards position > 0;
+				// this one did not, which is why the success rate here read
+				// far higher than the Top-10 figure above it computed from
+				// the very same table.
+				$intent_dist = $wpdb->get_results(
+					"SELECT intent,
+					        COUNT(*) AS n,
+					        SUM(CASE WHEN position > 0 AND position <= 10 THEN 1 ELSE 0 END) AS top10
+					 FROM {$table}
+					 WHERE intent IS NOT NULL
+					 GROUP BY intent
+					 ORDER BY n DESC"
+				);
 				?>
 				<div class="vmsb-intent-chart" style="display:flex; flex-direction:column; gap:12px;">
 					<?php foreach ($intent_dist as $id) :
-						$i_pct = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE intent = %s AND position <= 10", $id->intent));
 						$total_i = max(1, (int)$id->n);
-						$success_rate = round(($i_pct / $total_i) * 100);
+						$success_rate = round(((int)$id->top10 / $total_i) * 100);
 					?>
 						<div class="vmsb-intent-row">
 							<div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">

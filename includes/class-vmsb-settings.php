@@ -122,6 +122,14 @@ class VMSB_Settings {
 			'growth_target'     => 50000,
 			'growth_window'     => 50,
 			'auto_growth_mode'  => 0,
+
+			// Goal ladder (VMSB_Goal). growth_target/growth_window above seed
+			// phase 1; every phase after that is sized from measured rate.
+			// The controller only ever moves posts_per_day, and only between
+			// these bounds - it never touches auto_publish or require_review.
+			'goal_autopilot'    => 1,
+			'goal_min_posts'    => 1,
+			'goal_max_posts'    => 12,
 			'staleness_threshold_days' => 365,
 
 			// Vector memory. Thresholds at 0 auto-calibrate to the embedding model.
@@ -179,6 +187,15 @@ class VMSB_Settings {
 
 			// News / trend hijacking.
 			'news_enabled'          => 0,
+
+			// The Video Pipeline agent was gated on 'content_enabled', which
+			// is not a setting and never has been - it appeared exactly once
+			// in the codebase, in the toggle map itself. Settings::get()
+			// returned null, (int) null is 0, so the agent was permanently
+			// switched off: fully implemented (VMSB_Video_Agent::sweep) and
+			// unreachable. Off by default like the other agents that spend AI
+			// calls on an optional output, but reachable now.
+			'video_enabled'         => 0,
 
 			// Global expansion.
 			'global_locations'      => '', // comma-separated cities/regions
@@ -262,6 +279,7 @@ class VMSB_Settings {
 			}
 		}
 		update_option( self::OPTION, $store, 'yes' );
+		delete_option( 'vmsb_decryption_failed' );
 		self::$cache = $new;
 		return $new;
 	}
@@ -296,6 +314,9 @@ class VMSB_Settings {
 			// (a wp-config secret rotation/migration) - every stored API key goes
 			// silently blank otherwise, and every AI call starts failing with a
 			// confusing "not configured" error instead of pointing at the cause.
+			if ( ! get_option( 'vmsb_decryption_failed' ) ) {
+				update_option( 'vmsb_decryption_failed', time(), false );
+			}
 			if ( class_exists( 'VMSB_Logger' ) ) {
 				( new VMSB_Logger() )->warn( 'settings', 'Could not decrypt a stored secret - AUTH_KEY may have changed since it was saved. Re-enter API keys in Settings.' );
 			}

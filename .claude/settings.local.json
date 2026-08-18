@@ -229,7 +229,15 @@
       "Bash(sed -n '/DEFAULT_TESTS/,/];/p' includes/abilities/content-analysis/class-content-analysis-data.php)",
       "Bash(echo \"=== where custom schema meta reaches the graph ===\")",
       "Bash(sed -n '/function get_persona_temperature/,/^\t}/p' includes/class-vmsb-ai-router.php)",
-      "Bash(grep -n 'add_menu_page\\\\|add_submenu_page\\\\|'\\\\''vmsb-\\\\|$pages = ' admin/class-vmsb-admin.php)"
+      "Bash(grep -n 'add_menu_page\\\\|add_submenu_page\\\\|'\\\\''vmsb-\\\\|$pages = ' admin/class-vmsb-admin.php)",
+      "Bash(cd \"/c/xampp/htdocs/wordpress/wp-content/plugins/vm-seo-brain\" *)",
+      "Bash(mkdir -p /tmp/vmsb_json_test)",
+      "Read(//c/xampp/htdocs/wordpress/wp-content/plugins/vm-seo-brain/**)",
+      "Bash(awk '/public static function parse_json/,/^\\\\t\\\\}$/' includes/class-vmsb-ai-router.php)",
+      "Bash(/c/xampp/php/php.exe -v)",
+      "Bash(/c/xampp/php/php.exe /tmp/vmsb_json_test/harness.php)",
+      "Bash(cd \"/c/xampp/htdocs/wordpress/wp-content/plugins/vm-seo-brain\" && ls tests/ 2>/dev/null | head -20)",
+      "Bash(grep -n \"आध्यात्मिक शांति\" \"/c/xampp/htdocs/wordpress/wp-content/plugins/vm-seo-brain/tests/test-parse-json.php\")"
     ]
   }
 }

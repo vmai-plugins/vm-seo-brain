@@ -95,9 +95,10 @@ class VMSB_AIPuffer {
 			}
 
 			$response = wp_remote_get( $endpoint, array(
-				'headers'   => $headers,
-				'timeout'   => 15,
-				'sslverify' => ! VMSB_Settings::get('insecure_ssl')
+				'headers'    => $headers,
+				'timeout'    => 15,
+				'user-agent' => 'VM-SEO-Brain/' . VMSB_VERSION . '; ' . home_url(),
+				'sslverify'  => ! VMSB_Settings::get('insecure_ssl')
 			) );
 
 			if ( is_wp_error( $response ) ) {
@@ -148,14 +149,44 @@ class VMSB_AIPuffer {
 				) );
 			}
 			// Try AI Power (AIPKit)
-			if ( class_exists( '\WPAICG\Vector\AIPKit_Vector_Store_Manager' ) ) {
+			if ( class_exists( '\WPAICG\Vector\AIPKit_Vector_Text_Ingestion_Service' ) ) {
+				try {
+					$v_service = new \WPAICG\Vector\AIPKit_Vector_Text_Ingestion_Service(
+						new \WPAICG\Vector\AIPKit_Vector_Store_Manager(),
+						new \WPAICG\Core\AIPKit_AI_Caller()
+					);
+
+					// AI Power's internal settings for embeddings
+					$opts = get_option('aipkit_options', []);
+					$e_provider = $opts['embeddings']['provider'] ?? 'openai';
+					$e_model    = $opts['embeddings']['model'] ?? 'text-embedding-3-small';
+					$v_provider = $opts['vector_store']['provider'] ?? ''; // e.g. pinecone
+
+					if ( $v_provider ) {
+						$v_service->ingest_text(
+							$v_provider,
+							$kb_id, // target_id
+							wp_strip_all_tags( $content ),
+							$e_provider,
+							$e_model,
+							array_merge( $metadata, array( 'title' => $title ) ),
+							\WPAICG\AIPKit_Providers::get_provider_data($v_provider)
+						);
+					}
+				} catch ( \Throwable $e ) {
+					( new VMSB_Logger() )->error( 'aipuffer', 'AI Power knowledge-base push failed: ' . $e->getMessage() );
+				}
+			} elseif ( class_exists( '\WPAICG\Vector\AIPKit_Vector_Store_Manager' ) ) {
+				// Fallback for older versions or if ingestion service is missing
 				try {
 					$v_manager = new \WPAICG\Vector\AIPKit_Vector_Store_Manager();
-					$v_manager->upsert_item( $kb_id, array(
-						'title'   => $title,
-						'content' => wp_strip_all_tags( $content ),
-						'metadata'=> $metadata
-					) );
+					if ( method_exists($v_manager, 'upsert_item') ) {
+						$v_manager->upsert_item( $kb_id, array(
+							'title'   => $title,
+							'content' => wp_strip_all_tags( $content ),
+							'metadata'=> $metadata
+						) );
+					}
 				} catch ( \Throwable $e ) {
 					( new VMSB_Logger() )->error( 'aipuffer', 'AI Power knowledge-base push failed: ' . $e->getMessage() );
 				}
@@ -179,7 +210,8 @@ class VMSB_AIPuffer {
 							'metadata'=> $metadata
 						)
 					) ),
-					'timeout' => 15
+					'timeout' => 15,
+					'user-agent' => 'VM-SEO-Brain/' . VMSB_VERSION . '; ' . home_url(),
 				) );
 				if ( ! is_wp_error( $res ) && wp_remote_retrieve_response_code( $res ) === 200 ) break;
 			}

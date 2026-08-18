@@ -60,6 +60,22 @@ class VMSB_Scheduler {
 			$content->produce( $item->id );
 		}
 
+		// Work the roadmap forward whenever it is behind. Queued only when
+		// there is something to action, so a caught-up site never spends a
+		// drain slot on a call that would immediately no-op - and a site that
+		// fell behind closes the gap an entry an hour instead of never.
+		if ( (int) VMSB_Settings::get( 'goal_autopilot' ) && class_exists( 'VMSB_Roadmap' ) ) {
+			$behind = ( new VMSB_Roadmap() )->days_behind();
+			if ( $behind > 0 ) {
+				VMSB_Task_Runner::queue(
+					'roadmap_execute',
+					array(),
+					90,
+					sprintf( 'Roadmap is %d day(s) behind.', $behind )
+				);
+			}
+		}
+
 		// Drain the queue - a small, steady trickle rather than a burst inside
 		// the daily request. Raised from 2 now that the daily and weekly
 		// passes queue their work here instead of running it themselves; the
@@ -104,6 +120,19 @@ class VMSB_Scheduler {
 
 		if ( (int) VMSB_Settings::get( 'god_mode' ) ) {
 			VMSB_Task_Runner::queue( 'auto_fix_queue', array( 'limit' => 25 ), 82, 'God Mode daily fix pass.' );
+		}
+
+		// The goal controller is queued directly rather than left to compete
+		// for the strategist's handful of slots below. It is cheap - no model
+		// call - and it decides what every other agent is for: phase
+		// advancement and publishing pace both hang off it, so a day where it
+		// lost a slot to a sweep agent is a day the ladder stood still.
+		if ( (int) VMSB_Settings::get( 'goal_autopilot' ) ) {
+			VMSB_Task_Runner::queue( 'goal_review', array(), 96, 'Check phase progress and set the pace.' );
+
+			if ( ! get_option( 'vmsb_battle_plan' ) ) {
+				VMSB_Task_Runner::queue( 'battle_roadmap', array(), 95, 'No roadmap yet - the executor has nothing to read.' );
+			}
 		}
 
 		// The strategist scores the optional intelligence agents against this

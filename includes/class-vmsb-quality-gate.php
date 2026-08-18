@@ -262,7 +262,12 @@ class VMSB_Quality_Gate {
 			. "names, or examples that couldn't apply to literally any competitor). Quote the specific phrases that read this way, if any.\n\n"
 			. 'Return JSON: {"alignment_score":0,"answers_query":true,"reasoning":"","unverified_claims":[],"originality_score":0,"generic_patterns":[]}';
 
-		$data = $ai->generate_json( $prompt, array( 'system' => $profile, 'max_tokens' => 700, 'temperature' => 0.2 ) );
+		$data = $ai->generate_json( $prompt, array(
+			'system'      => $profile,
+			'max_tokens'  => 700,
+			'temperature' => 0.2,
+			'action'      => 'quality_audit'
+		) );
 		if ( ! is_array( $data ) || ! isset( $data['alignment_score'] ) ) {
 			return array_merge( $empty, array( 'detail' => 'Alignment response unparseable.' ) );
 		}

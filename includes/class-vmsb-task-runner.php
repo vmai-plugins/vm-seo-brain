@@ -69,9 +69,46 @@ class VMSB_Task_Runner {
 	}
 
 	/**
-	 * Process a batch of tasks.
+	 * Process a batch of tasks, one batch at a time across the whole site.
+	 *
+	 * Cron, the "Run Production Batch" button and any other trigger can fire
+	 * at the same moment. Each batch is internally serial and neither can
+	 * steal the other's rows - the claim in run_batch() is transactional - but
+	 * two batches still stack their AI calls on top of each other against the
+	 * same provider rate limits, and a throttled or truncated reply is exactly
+	 * what surfaces later as an unparseable model response. So: overlapping
+	 * runs are refused rather than queued, and whatever this pass skips is
+	 * still sitting in the queue for the next one.
+	 *
+	 * GET_LOCK is released when the connection closes, so a fatal or a timeout
+	 * mid-batch cannot strand the lock the way a flag row would.
 	 */
 	public static function process( $limit = 3 ) {
+		global $wpdb;
+
+		$lock = substr( $wpdb->prefix . 'vmsb_batch', 0, 64 );
+		$got  = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) );
+
+		// NULL means the lock could not be evaluated at all - no permission,
+		// or a server that does not offer GET_LOCK. That is a reason to run
+		// unlocked, not a reason to stop processing work entirely.
+		if ( null === $got ) {
+			return self::run_batch( $limit );
+		}
+
+		if ( '1' !== (string) $got ) {
+			( new VMSB_Logger() )->info( 'task_runner', 'A batch is already running; this pass was skipped.' );
+			return array( 'ran' => 0, 'results' => array(), 'skipped' => 'A batch is already running. Its work stays queued.' );
+		}
+
+		try {
+			return self::run_batch( $limit );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+		}
+	}
+
+	private static function run_batch( $limit = 3 ) {
 		global $wpdb;
 		$table = self::table();
 
@@ -454,9 +491,30 @@ class VMSB_Task_Runner {
 				return $res;
 
 			case 'battle_roadmap':
+				// Drawn against the *active phase*, not the site-wide setting,
+				// so phase 2's roadmap aims at phase 2's number.
+				$goal_phase = ( new VMSB_Goal() )->current();
 				return ( new VMSB_Roadmap() )->generate_plan(
-					(int) VMSB_Settings::get( 'growth_target', 50000 ),
-					(int) VMSB_Settings::get( 'growth_window', 50 )
+					$goal_phase ? (int) $goal_phase['target'] : (int) VMSB_Settings::get( 'growth_target', 50000 ),
+					$goal_phase ? (int) $goal_phase['window'] : (int) VMSB_Settings::get( 'growth_window', 50 )
+				);
+
+			case 'roadmap_execute':
+				return ( new VMSB_Roadmap() )->execute_today();
+
+			case 'goal_review':
+				$goal      = new VMSB_Goal();
+				$advance   = $goal->review();
+				$directive = $goal->directive();
+				$applied   = $goal->apply( $directive );
+
+				return array(
+					'phase'     => $directive['phase'] ?? null,
+					'posture'   => $directive['posture'] ?? 'none',
+					'advanced'  => (bool) $advance['advanced'],
+					'reason'    => $advance['reason'],
+					'pace'      => $applied,
+					'note'      => $directive['note'] ?? '',
 				);
 
 			case 'silo_integrity':
@@ -476,6 +534,11 @@ class VMSB_Task_Runner {
 				$res = ( new VMSB_Thief() )->blitz( 3 );
 				update_option( 'vmsb_last_competitor_blitz', time(), false );
 				return $res;
+
+			case 'produce_post':
+				$id = (int) ( $payload['id'] ?? 0 );
+				if ( ! $id ) return new WP_Error( 'vmsb_task', 'No plan id supplied.' );
+				return ( new VMSB_Content() )->produce( $id );
 
 			default:
 				return new WP_Error( 'vmsb_task', "Unknown task type: {$task_type}" );

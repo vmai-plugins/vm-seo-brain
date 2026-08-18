@@ -121,13 +121,24 @@ class VMSB_Model_Sync {
 		$all_models = array();
 		$base = untrailingslashit( VMSB_Settings::get( 'aipuffer_url' ) );
 		$key  = VMSB_Settings::get( 'aipuffer_key' );
-		$is_local = empty($base) || ( untrailingslashit($base) === untrailingslashit(home_url()) );
+
+		$is_local = empty($base);
+		if ( ! $is_local ) {
+			$base_normalized = preg_replace( '/^https?:\/\//', '', strtolower( $base ) );
+			$home_normalized = preg_replace( '/^https?:\/\//', '', strtolower( untrailingslashit( home_url() ) ) );
+			if ( $base_normalized === $home_normalized ) {
+				$is_local = true;
+			}
+		}
 
 		// 1. Remote Sync
 		if ( ! $is_local && $base ) {
 			// Try AI Power's internal model list if available via REST
 			$url = $base . '/wp-json/aipkit/v1/models';
-			$res = wp_remote_get( add_query_arg('aipkit_api_key', $key, $url) );
+			$res = wp_remote_get( add_query_arg('aipkit_api_key', $key, $url), array(
+				'user-agent' => 'VM-SEO-Brain/' . VMSB_VERSION . '; ' . home_url(),
+				'timeout'    => 15
+			) );
 
 			if ( ! is_wp_error($res) && wp_remote_retrieve_response_code($res) === 200 ) {
 				$body = json_decode( wp_remote_retrieve_body($res), true );

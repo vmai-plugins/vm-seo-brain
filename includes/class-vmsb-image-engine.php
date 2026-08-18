@@ -320,6 +320,13 @@ class VMSB_Image_Engine {
 		$model    = VMSB_Settings::get( 'aipuffer_image_model', 'dall-e-3' );
 		$size     = (int) VMSB_Settings::get( 'image_width' ) . 'x' . (int) VMSB_Settings::get( 'image_height' );
 
+		if ( $is_local ) {
+			$direct = $this->call_aipkit_image_direct( $prompt, $provider, $model, $size );
+			if ( $direct && ! is_wp_error($direct) ) {
+				return $direct;
+			}
+		}
+
 		$body = array(
 			'prompt'          => $prompt,
 			'provider'        => $provider,
@@ -385,6 +392,34 @@ class VMSB_Image_Engine {
 		}
 
 		return new WP_Error( 'vmsb_aipuffer', $last_error );
+	}
+
+	/**
+	 * Direct Zero-Distance Bridge for AI Power / AIPKit (Images).
+	 * Bypasses HTTP/REST for 100% compatibility when on the same server.
+	 */
+	private function call_aipkit_image_direct( $prompt, $provider, $model, $size ) {
+		if ( ! class_exists('\WPAICG\Images\AIPKit_Image_Manager') ) return null;
+
+		try {
+			$img_manager = new \WPAICG\Images\AIPKit_Image_Manager();
+			$options = array(
+				'provider' => $provider,
+				'model'    => $model,
+				'size'     => $size,
+				'n'        => 1,
+			);
+			$res = $img_manager->generate_image( $prompt, $options );
+
+			if ( ! is_wp_error($res) ) {
+				return $this->extract_image_from_aipuffer_data( $res );
+			}
+			return $res;
+		} catch ( \Throwable $e ) {
+			( new VMSB_Logger() )->error( 'aipuffer', 'AI Power image direct bridge exception: ' . $e->getMessage() );
+		}
+
+		return null;
 	}
 
 	private function extract_image_from_aipuffer_data( $data ) {

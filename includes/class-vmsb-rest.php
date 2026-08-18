@@ -124,6 +124,7 @@ class VMSB_REST {
 			'task-detail'         => 'task_detail',
 			'task-cancel'         => 'task_cancel',
 			'task-retry'          => 'task_retry',
+			'pipeline-feed'       => 'pipeline_feed',
 			'global-search'       => 'global_search',
 			'evaluate-pivot'      => 'evaluate_pivot',
 			'graph-data'          => 'graph_data',
@@ -565,6 +566,9 @@ class VMSB_REST {
 		$res = ( new VMSB_Content() )->retry_with_critique( $id );
 		if ( is_wp_error( $res ) ) {
 			return new WP_REST_Response( array( 'error' => $res->get_error_message() ), 422 );
+		}
+		if ( is_int( $res ) ) {
+			return rest_ensure_response( array( 'queued' => true, 'task_id' => $res ) );
 		}
 		return rest_ensure_response( array( 'post_id' => $res, 'edit_url' => get_edit_post_link( $res, 'raw' ) ) );
 	}
@@ -1054,6 +1058,152 @@ class VMSB_REST {
 	 * column on the task row itself (see VMSB_Task_Runner::log_event), not
 	 * a separate events table.
 	 */
+	/**
+	 * Everything the Pipeline dashboard renders, in one call.
+	 *
+	 * The pipeline and queue screens were pure server-rendered tables: the only
+	 * way to see that a row had moved from 'approved' to 'writing' to
+	 * 'published' was to reload the page. That is the single most important
+	 * thing this screen has to show - work moving - and it was the one thing it
+	 * could not show. This is the read side that lets the dashboard poll.
+	 *
+	 * Stage counts are always the unfiltered totals so the funnel keeps
+	 * reporting the true shape of the pipeline while you are filtered into one
+	 * stage of it.
+	 */
+	public function pipeline_feed( $request ) {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'vmsb_plan';
+
+		$stage  = sanitize_key( (string) $request->get_param( 'stage' ) );
+		$search = trim( (string) $request->get_param( 'search' ) );
+		$limit  = (int) $request->get_param( 'limit' );
+		if ( $limit < 1 || $limit > 200 ) {
+			$limit = 60;
+		}
+
+		$where = array( '1=1' );
+		$args  = array();
+
+		$stages = array( 'planned', 'suggested', 'approved', 'writing', 'drafted', 'published', 'failed', 'rejected' );
+		if ( $stage && 'all' !== $stage && in_array( $stage, $stages, true ) ) {
+			$where[] = 'status = %s';
+			$args[]  = $stage;
+		}
+		if ( '' !== $search ) {
+			$like    = '%' . $wpdb->esc_like( $search ) . '%';
+			$where[] = '(title LIKE %s OR primary_keyword LIKE %s)';
+			$args[]  = $like;
+			$args[]  = $like;
+		}
+		$args[] = $limit;
+
+		$sql = "SELECT * FROM {$table} WHERE " . implode( ' AND ', $where )
+			. " ORDER BY FIELD(status,'failed','writing','approved','planned','suggested','drafted','published','rejected'), priority DESC, id DESC"
+			. ' LIMIT %d';
+
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $args ) );
+
+		// One pass for posts + meta rather than two lookups per row below.
+		$post_ids = array_values( array_filter( array_map(
+			static function ( $r ) { return isset( $r->post_id ) ? (int) $r->post_id : 0; },
+			$rows
+		) ) );
+		if ( $post_ids ) {
+			_prime_post_caches( $post_ids, false, true );
+		}
+
+		$now  = time();
+		$out  = array();
+		foreach ( $rows as $row ) {
+			$post_id = isset( $row->post_id ) ? (int) $row->post_id : 0;
+			$quality = $post_id ? get_post_meta( $post_id, '_vmsb_quality', true ) : null;
+			$created = strtotime( (string) $row->created_at );
+			$updated = strtotime( (string) $row->updated_at );
+
+			$out[] = array(
+				'id'        => (int) $row->id,
+				'title'     => (string) $row->title,
+				'keyword'   => (string) $row->primary_keyword,
+				'status'    => (string) $row->status,
+				'type'      => (string) $row->content_type,
+				'priority'  => (float) $row->priority,
+				'pillar'    => (bool) $row->is_pillar,
+				'note'      => (string) $row->editor_note,
+				'error'     => (string) $row->last_error,
+				// What the agent says it is doing right now - the whole reason
+				// a 'writing' row is worth watching instead of reloading.
+				'agent'     => (string) $row->agent_task,
+				'quality'   => is_array( $quality ) && isset( $quality['score'] ) ? (int) $quality['score'] : 0,
+				'post_id'   => $post_id,
+				'edit_url'  => $post_id ? (string) get_edit_post_link( $post_id, 'raw' ) : '',
+				'view_url'  => $post_id ? (string) get_permalink( $post_id ) : '',
+				'age'       => $created ? human_time_diff( $created, $now ) : '',
+				'idle'      => $updated ? human_time_diff( $updated, $now ) : '',
+			);
+		}
+
+		$stats = array();
+		foreach ( (array) $wpdb->get_results( "SELECT status, COUNT(*) n FROM {$table} GROUP BY status", ARRAY_A ) as $r ) {
+			$stats[ $r['status'] ] = (int) $r['n'];
+		}
+
+		$tasks_table = $wpdb->prefix . 'vmsb_tasks';
+		$task_rows   = $wpdb->get_results(
+			"SELECT * FROM {$tasks_table}
+			 WHERE status IN ('queued','running','retrying','failed')
+			 ORDER BY FIELD(status,'failed','running','retrying','queued'), score DESC, queued_at DESC
+			 LIMIT 50"
+		);
+
+		$tasks = array();
+		foreach ( $task_rows as $task ) {
+			$tasks[] = array(
+				'id'       => (int) $task->id,
+				'label'    => class_exists( 'VMSB_Strategist' ) ? VMSB_Strategist::agent_label( $task->task_type ) : (string) $task->task_type,
+				'type'     => (string) $task->task_type,
+				'reason'   => (string) $task->reason,
+				'status'   => (string) $task->status,
+				'score'    => (float) $task->score,
+				'attempts' => (int) $task->attempts,
+				'max'      => (int) $task->max_attempts,
+				'error'    => (string) $task->last_error,
+			);
+		}
+
+		$cap   = (int) VMSB_Settings::get( 'posts_per_day', 3 );
+		$today = (int) get_option( 'vmsb_pub_' . gmdate( 'Ymd' ), 0 );
+
+		// The goal is what the whole pipeline is for, so it rides along with
+		// the same poll rather than needing a second request.
+		$goal = null;
+		if ( class_exists( 'VMSB_Goal' ) ) {
+			try {
+				$goal = ( new VMSB_Goal() )->directive();
+			} catch ( \Throwable $e ) {
+				$goal = null;
+			}
+		}
+
+		return rest_ensure_response( array(
+			'rows'  => $out,
+			'stats' => $stats,
+			'tasks' => $tasks,
+			'goal'  => $goal,
+			'today' => array(
+				'published' => $today,
+				'cap'       => $cap,
+				// The cap only throttles when posts can actually go live; in
+				// review-first mode drafting is unlimited and the bar is a lie.
+				'live'      => (int) VMSB_Settings::get( 'auto_publish' ) && ! (int) VMSB_Settings::get( 'require_review' ),
+			),
+			'stage'   => $stage ? $stage : 'all',
+			'showing' => count( $out ),
+			'limit'   => $limit,
+		) );
+	}
+
 	public function task_detail( $request ) {
 		global $wpdb;
 		$id  = (int) $request->get_param( 'id' );

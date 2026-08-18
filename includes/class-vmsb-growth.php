@@ -91,11 +91,33 @@ class VMSB_Growth {
 	 * Where the site is against the target, and what the honest projection says.
 	 */
 	public function status() {
+		return $this->status_for(
+			(int) VMSB_Settings::get( 'growth_target' ),
+			(int) VMSB_Settings::get( 'growth_window' ),
+			(int) get_option( 'vmsb_installed_at', time() )
+		);
+	}
+
+	/**
+	 * The same model, measured against an arbitrary target, window and start.
+	 *
+	 * status() is anchored to install date and the site-wide growth_target,
+	 * which is right for "how is the site doing" but cannot express "how is
+	 * phase 2 doing" - a phase starts when the previous one was hit, not when
+	 * the plugin was installed. VMSB_Goal drives the phase ladder through
+	 * here so both views share one projection model rather than drifting
+	 * apart with two.
+	 *
+	 * @param int $target   Sessions to reach within the window.
+	 * @param int $window   Window length in days.
+	 * @param int $anchor   Unix timestamp the window is measured from.
+	 */
+	public function status_for( $target, $window, $anchor ) {
 		global $wpdb;
 
-		$target       = (int) VMSB_Settings::get( 'growth_target' );
-		$window       = max( 1, (int) VMSB_Settings::get( 'growth_window' ) );
-		$installed_at = (int) get_option( 'vmsb_installed_at', time() );
+		$target       = (int) $target;
+		$window       = max( 1, (int) $window );
+		$installed_at = (int) $anchor;
 		$day          = min( $window, max( 1, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) + 1 ) );
 		$days_left    = max( 0, $window - $day );
 

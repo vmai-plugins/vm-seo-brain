@@ -276,6 +276,20 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 						</div>
 
 						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
+							<h3 style="margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold);">Goal Ladder</h3>
+							<p class="vmsb-note" style="margin-bottom: 20px;">
+								Phase 1 uses the Growth Target and window above. When a phase is met the next opens automatically at 3&times; the target, with a window sized from the growth rate actually measured &mdash; not a fixed guess.
+								The controller only ever moves publishing velocity, and only between the bounds below. It never changes Auto-Publish or the review hold, and when a target cannot be reached in its window it holds the maximum sustainable pace and says so rather than escalating.
+							</p>
+							<div class="vmsb-form-grid">
+								<label class="vmsb-check"><input type="checkbox" name="<?php echo esc_attr( $field( 'goal_autopilot' ) ); ?>" value="1" <?php checked( $s['goal_autopilot'], 1 ); ?>> Run the goal ladder: advance phases and adjust pace automatically</label>
+								<label>Growth Window (Days per phase)<input type="number" name="<?php echo esc_attr( $field( 'growth_window' ) ); ?>" value="<?php echo esc_attr( $s['growth_window'] ); ?>" min="1"></label>
+								<label>Minimum Posts / Day<input type="number" name="<?php echo esc_attr( $field( 'goal_min_posts' ) ); ?>" value="<?php echo esc_attr( $s['goal_min_posts'] ); ?>" min="0" max="50"></label>
+								<label>Maximum Posts / Day<input type="number" name="<?php echo esc_attr( $field( 'goal_max_posts' ) ); ?>" value="<?php echo esc_attr( $s['goal_max_posts'] ); ?>" min="1" max="50"></label>
+							</div>
+						</div>
+
+						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
 							<h3 style="margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold);">Quality Gate</h3>
 							<p class="vmsb-note" style="margin-bottom: 20px;">Every drafted article is scored before it can publish. Below the minimum score it is held for review instead. These thresholds decide what ships.</p>
 							<div class="vmsb-form-grid">
@@ -344,6 +358,7 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 									'news_enabled'         => 'News Scout (trending topics)',
 									'programmatic_enabled' => 'Programmatic SEO',
 									'backlink_enabled'     => 'Backlink Outreach',
+									'video_enabled'        => 'Video Pipeline (YouTube scripts)',
 								);
 								foreach ( $vmsb_agent_toggles as $vmsb_key => $vmsb_label ) :
 								?>

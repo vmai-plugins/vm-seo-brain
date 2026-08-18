@@ -44,6 +44,13 @@ class VMSB_Strategist {
 			'trend_scout'      => array( 'brain',       1.5, 50 ),
 			'link_rebalance'   => array( 'silo',        1.0, 50 ),
 			'battle_roadmap'   => array( 'brain',       2.0, 70 ),
+			// Highest base impact in the table on purpose: this is the agent
+			// that decides what every other agent is for. It is cheap (no AI
+			// call) and it gates phase advancement.
+			'goal_review'      => array( 'brain',       0.5, 85 ),
+			// Cheap and daily: turns the day's roadmap entry into a queued
+			// row. No AI call of its own.
+			'roadmap_execute'  => array( 'brain',       0.5, 75 ),
 			'content_duel'     => array( 'entity',      1.5, 55 ),
 			'self_heal'        => array( 'brain',       1.0, 60 ),
 			'auto_fix_queue'   => array( 'fixer',       1.5, 65 ),
@@ -77,6 +84,24 @@ class VMSB_Strategist {
 	 * *when* to run something that's enabled; it never overrides the toggle
 	 * that decides *whether* to run it at all.
 	 */
+	/**
+	 * Is a task's feature switch on? An entry may name several switches, in
+	 * which case any one of them being on is enough - see battle_roadmap,
+	 * which belongs to both God Mode and the goal ladder.
+	 */
+	private static function toggle_enabled( $task ) {
+		$toggle = self::toggle_for( $task );
+		if ( ! $toggle ) {
+			return true;
+		}
+		foreach ( (array) $toggle as $key ) {
+			if ( (int) VMSB_Settings::get( $key ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private static function toggle_for( $task ) {
 		return array(
 			'aeo_sweep'       => 'aeo_enabled',
@@ -93,7 +118,14 @@ class VMSB_Strategist {
 			'thief_scout'     => 'competitor_enabled',
 			'trend_scout'     => 'news_enabled',
 			'link_rebalance'  => 'god_mode',
-			'battle_roadmap'  => 'god_mode',
+			// Either switch enables it. god_mode is off by default, and the
+			// roadmap is now a hard dependency of roadmap_execute - gated on
+			// god_mode alone the goal ladder shipped broken: the executor
+			// would run under goal_autopilot and find no plan to read, every
+			// day, forever.
+			'battle_roadmap'  => array( 'god_mode', 'goal_autopilot' ),
+			'goal_review'     => 'goal_autopilot',
+			'roadmap_execute' => 'goal_autopilot',
 			'content_duel'    => 'entity_enabled',
 			'self_heal'       => 'learning_enabled',
 			'auto_fix_queue'  => 'god_mode',
@@ -105,7 +137,7 @@ class VMSB_Strategist {
 			'growth_scan'     => 'auto_growth_mode',
 			'content_defense' => 'learning_enabled',
 			'semantic_mesh'   => 'vector_enabled',
-			'video_pipeline'  => 'content_enabled',
+			'video_pipeline'  => 'video_enabled',
 			'freshness_boost' => 'god_mode',
 		)[ $task ] ?? null;
 	}
@@ -120,9 +152,22 @@ class VMSB_Strategist {
 		$budget_spent_pct = ($router->calls_today() / max(1, (int)VMSB_Settings::get('max_ai_calls_day'))) * 100;
 		$is_budget_critical = $budget_spent_pct > 80;
 
+		// Read once for the whole plan: status() runs several aggregate
+		// queries plus levers(), and nothing about it changes between tasks
+		// inside a single scoring pass.
+		$goal_posture = 'unknown';
+		if ( class_exists( 'VMSB_Goal' ) ) {
+			try {
+				$goal_status  = ( new VMSB_Goal() )->status();
+				$goal_posture = $goal_status ? $goal_status['posture'] : 'none';
+			} catch ( \Throwable $e ) {
+				// Scoring must never be the thing that takes the queue down.
+				( new VMSB_Logger() )->warn( 'goal', 'Posture unavailable while planning: ' . $e->getMessage() );
+			}
+		}
+
 		foreach ( self::catalogue() as $task => $spec ) {
-			$toggle = self::toggle_for( $task );
-			if ( $toggle && ! (int) VMSB_Settings::get( $toggle ) ) {
+			if ( ! self::toggle_enabled( $task ) ) {
 				continue;
 			}
 
@@ -143,9 +188,26 @@ class VMSB_Strategist {
 				$score *= 0.2;
 			}
 
-			// Authority Blitz: Boost production if behind on 1000-post goal
-			if ( $state['published_posts'] < 3000 && $task === 'hydrate_pipeline' ) {
-				$score *= 3.0; // TRIPLE priority for high-velocity sites
+			// Steer by the goal, not by raw post count. This used to read
+			// "published_posts < 3000", which treated a site 1% behind its
+			// traffic target exactly like one 10x behind, and kept tripling
+			// production on a site that had already hit its number. The
+			// posture below comes from measured sessions against the active
+			// phase, so the blitz fires when it is actually warranted - and
+			// stands down at 'unreachable' rather than escalating into a
+			// window that cannot be won.
+			if ( in_array( $task, array( 'hydrate_pipeline', 'growth_scan', 'silo_integrity' ), true ) ) {
+				if ( 'behind' === $goal_posture ) {
+					$score *= 3.0;
+				} elseif ( 'ahead' === $goal_posture ) {
+					$score *= 0.6;
+				}
+			}
+
+			// The controller itself must outrank the work it schedules, or a
+			// busy queue can starve the thing that decides what to queue.
+			if ( 'goal_review' === $task && in_array( $goal_posture, array( 'behind', 'unreachable' ), true ) ) {
+				$score *= 1.5;
 			}
 
 			$plan[] = array(
@@ -179,6 +241,8 @@ class VMSB_Strategist {
 			'trend_scout'      => 'Watches RSS/Trends signals for timely angles worth news-jacking.',
 			'link_rebalance'   => 'Redistributes internal link authority toward pages that are close to breaking through.',
 			'battle_roadmap'   => "Builds a day-by-day plan toward the site's growth_target traffic goal.",
+			'goal_review'      => 'Checks the active growth phase against measured traffic, advances the ladder when a phase lands, and nudges publishing pace within its bounds.',
+			'roadmap_execute'  => "Actions today's entry from the battle roadmap by queueing its keyword into the content plan.",
 			'content_duel'     => "Pits a striking-distance page against a rival's equivalent to find the gap.",
 			'self_heal'        => 'Same healing pass as Improvement Loop, triggered independently when learning is enabled.',
 			'auto_fix_queue'   => 'Drains the open technical/on-page issues queue automatically.',
@@ -223,6 +287,8 @@ class VMSB_Strategist {
 			'trend_scout'      => 'Trend Scout',
 			'link_rebalance'   => 'Link Flow Engineer',
 			'battle_roadmap'   => 'Growth Roadmapper',
+			'goal_review'      => 'Goal Controller',
+			'roadmap_execute'  => 'Roadmap Executor',
 			'content_duel'     => 'Content Duelist',
 			'self_heal'        => 'Prompt Healer',
 			'auto_fix_queue'   => 'Auto-Fixer',
@@ -277,8 +343,7 @@ class VMSB_Strategist {
 
 		$fleet = array();
 		foreach ( self::catalogue() as $task => $spec ) {
-			$toggle  = self::toggle_for( $task );
-			$enabled = ! $toggle || (int) VMSB_Settings::get( $toggle );
+			$enabled = self::toggle_enabled( $task );
 			$latest  = isset( $latest_by_type[ $task ] ) ? $latest_by_type[ $task ] : null;
 
 			$fleet[] = array(
@@ -331,6 +396,19 @@ class VMSB_Strategist {
 
 	private static function expected_impact( $task, $base, array $state ) {
 		switch ( $task ) {
+			case 'roadmap_execute':
+				// Nothing to do once today's entry has been actioned, and
+				// nothing to do at all without a plan to read. Returning 0
+				// drops it from the queue entirely rather than burning a task
+				// slot on a call that would immediately no-op.
+				$roadmap = new VMSB_Roadmap();
+				if ( ! get_option( 'vmsb_battle_plan' ) ) {
+					return 0;
+				}
+				$done = (array) get_option( VMSB_Roadmap::EXECUTED_KEY, array() );
+				return ( isset( $done['day'] ) && (int) $done['day'] === $roadmap->current_day() ) ? 0 : $base;
+
+
 			case 'aeo_sweep':
 			case 'entity_sweep':
 				// Both reason better once the vector index is roughly current -
@@ -387,7 +465,11 @@ class VMSB_Strategist {
 				return $state['published_posts'] > 10 ? $base : 0;
 
 			case 'battle_roadmap':
-				return empty( get_option( 'vmsb_battle_plan' ) ) ? $base : (int) ( $base * 0.2 );
+				// Now that roadmap_execute reads this plan daily, having no
+				// plan is not merely a missed report - it stalls the executor
+				// and the whole ladder behind it. Full priority until one
+				// exists, then well down the list.
+				return empty( get_option( 'vmsb_battle_plan' ) ) ? 100 : (int) ( $base * 0.2 );
 
 			case 'content_duel':
 				return $state['published_posts'] > 5 ? $base : 0;

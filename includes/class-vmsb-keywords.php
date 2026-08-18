@@ -113,6 +113,7 @@ class VMSB_Keywords {
 
 		$this->score_all();
 		$this->cluster();
+		$this->auto_map_posts( 150 );
 
 		$this->log->info( 'keywords', "Research pass complete. {$found} keywords touched." );
 		return $found;
@@ -656,5 +657,35 @@ if ( ! $this->google->is_connected() ) {
 	public function get_keyword_intent_for_post( $post_id ) {
 		global $wpdb;
 		return $wpdb->get_var( $wpdb->prepare( "SELECT intent FROM {$this->table()} WHERE post_id = %d LIMIT 1", $post_id ) ) ?: 'informational';
+	}
+
+	/**
+	 * Scans for keywords that should be linked to existing posts but aren't yet.
+	 * Helps prevent duplicate planning and improves the content gap report.
+	 */
+	public function auto_map_posts( $limit = 100 ) {
+		global $wpdb;
+		$keywords = $wpdb->get_results( "SELECT id, keyword FROM {$this->table()} WHERE post_id IS NULL OR post_id = 0 LIMIT " . (int)$limit );
+
+		if ( ! $keywords ) {
+			return 0;
+		}
+
+		$mapped = 0;
+		foreach ( $keywords as $kw ) {
+			// 1. Exact Match by Title
+			$post_id = $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM $wpdb->posts WHERE post_title = %s AND post_status = 'publish' LIMIT 1", $kw->keyword ) );
+
+			// 2. Exact Match by Rank Math Focus Keyword
+			if ( ! $post_id && class_exists( 'VMSB_RankMath' ) ) {
+				$post_id = $wpdb->get_var( $wpdb->prepare( "SELECT post_id FROM $wpdb->postmeta WHERE meta_key = 'rank_math_focus_keyword' AND meta_value = %s LIMIT 1", $kw->keyword ) );
+			}
+
+			if ( $post_id ) {
+				$this->mark( $kw->keyword, 'published', $post_id );
+				$mapped++;
+			}
+		}
+		return $mapped;
 	}
 }

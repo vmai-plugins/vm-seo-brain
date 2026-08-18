@@ -424,12 +424,26 @@ class VMSB_Admin {
 		}
 	}
 
+	/**
+	 * Cache-busting version for a bundled asset: its mtime when readable,
+	 * the plugin version otherwise (some hosts disable stat on the path).
+	 */
+	private static function asset_version( $relative ) {
+		$path = VMSB_DIR . $relative;
+		$time = @filemtime( $path );
+		return $time ? (string) $time : VMSB_VERSION;
+	}
+
 	public function assets( $hook ) {
 		if ( false === strpos( $hook, 'vmsb' ) ) {
 			return;
 		}
-		wp_enqueue_style( 'vmsb-admin', VMSB_URL . 'admin/assets/css/admin.css', array(), VMSB_VERSION );
-		wp_enqueue_script( 'vmsb-admin', VMSB_URL . 'admin/assets/js/admin.js', array(), VMSB_VERSION, true );
+		// Version by file mtime, falling back to the plugin version. Both
+		// assets were pinned to VMSB_VERSION alone, so any change shipped
+		// without a version bump - every fix between releases - stayed
+		// invisible behind the browser cache until a manual hard refresh.
+		wp_enqueue_style( 'vmsb-admin', VMSB_URL . 'admin/assets/css/admin.css', array(), self::asset_version( 'admin/assets/css/admin.css' ) );
+		wp_enqueue_script( 'vmsb-admin', VMSB_URL . 'admin/assets/js/admin.js', array(), self::asset_version( 'admin/assets/js/admin.js' ), true );
 		wp_localize_script(
 			'vmsb-admin',
 			'VMSB',
@@ -534,6 +548,7 @@ class VMSB_Admin {
 			// only changeable directly in the database.
 			'quality_min_score', 'quality_min_words', 'quality_min_alignment',
 			'quality_min_originality', 'programmatic_daily_cap',
+			'goal_min_posts', 'goal_max_posts',
 		);
 		foreach ( $int_keys as $key ) {
 			if ( isset( $fields[ $key ] ) ) {
@@ -550,6 +565,7 @@ class VMSB_Admin {
 			'quality_gate', 'quality_dup_block',
 			'learning_enabled', 'vector_enabled', 'competitor_enabled',
 			'news_enabled', 'programmatic_enabled', 'backlink_enabled',
+			'goal_autopilot', 'video_enabled',
 		) as $key ) {
 			$clean[ $key ] = empty( $fields[ $key ] ) ? 0 : 1;
 		}
@@ -582,6 +598,10 @@ class VMSB_Admin {
 	}
 
 	public function notices() {
+		if ( get_option( 'vmsb_decryption_failed' ) ) {
+			echo '<div class="notice notice-error"><p><strong>VM SEO Brain:</strong> Could not decrypt your API keys. This usually happens after a site migration or if <code>AUTH_KEY</code> was changed in <code>wp-config.php</code>. Please re-enter your API keys in <a href="' . admin_url('admin.php?page=vmsb-settings') . '">Settings</a> to restore functionality.</p></div>';
+		}
+
 		if ( empty( $_GET['vmsb_msg'] ) ) {
 			return;
 		}

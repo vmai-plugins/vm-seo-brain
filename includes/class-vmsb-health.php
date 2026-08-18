@@ -86,10 +86,13 @@ class VMSB_Health {
 		);
 
 		// Environment Health
+		$decrypt_failed = get_option( 'vmsb_decryption_failed' );
 		$checks['openssl'] = array(
 			'label'  => 'Encryption Support (OpenSSL)',
-			'ok'     => function_exists('openssl_encrypt'),
-			'detail' => function_exists('openssl_encrypt') ? 'Available.' : 'Missing - API keys cannot be safely decrypted. Please enable OpenSSL on your server.',
+			'ok'     => function_exists('openssl_encrypt') && ! $decrypt_failed,
+			'detail' => ! function_exists('openssl_encrypt')
+				? 'Missing - API keys cannot be safely decrypted. Please enable OpenSSL on your server.'
+				: ( $decrypt_failed ? 'Decryption failed - AUTH_KEY mismatch. Re-save your API keys.' : 'Available.' ),
 		);
 
 		// Indexing API health

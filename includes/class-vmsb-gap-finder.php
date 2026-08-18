@@ -34,18 +34,24 @@ class VMSB_Gap_Finder {
 		$competitors = ( new VMSB_Competitor() )->list_all();
 		$comp_context = array_map( fn($c) => $c->domain, array_slice($competitors, 0, 5) );
 
+		if ( empty($gsc_context) && empty($comp_context) ) {
+			return new WP_Error( 'vmsb_gap', 'Insufficient data for Gap Discovery. Please run Keyword Research or add Competitors in the SEO Lab first.' );
+		}
+
 		// 3. AI Reasoning: Identify "Golden Gaps"
 		$brain = new VMSB_Brain();
-		$cpts  = $brain->profile()['cpts'];
+		$profile = $brain->profile();
+		$cpts  = $profile['cpts'] ?? array();
 		$cpt_context = ! empty( $cpts )
 			? "\n\nSITE CONTENT TYPES (Routes): " . wp_json_encode( $cpts )
 			. "\nSMART ROUTING: set 'content_type' to 'post' for a standard blog gap, or one of the slugs above when the gap "
 			. "is specifically that kind of entity (a place for a 'destinations' type, a happening for an 'events' type)."
 			: '';
-		$prompt = "Act as a Market Dominance Strategist. Find the top {$limit} content gaps for this business.\n\n"
+
+		$prompt = "Act as a Market Dominance Strategist. Find the top {$limit} content gaps for this business: '{$profile['name']}'.\n\n"
 			. "DATA SIGNALS:\n"
-			. "- Under-served Keywords (GSC): " . implode( ", ", $gsc_context ) . "\n"
-			. "- Top Rivals: " . implode( ", ", $comp_context ) . "\n"
+			. "- Under-served Keywords (GSC): " . (empty($gsc_context) ? "None yet." : implode( ", ", $gsc_context )) . "\n"
+			. "- Top Rivals: " . (empty($comp_context) ? "None tracked." : implode( ", ", $comp_context )) . "\n"
 			. $cpt_context . "\n\n"
 			. "TASK:\n"
 			. "Select/Identify the absolute best opportunities that will drive the most REVENUE and AUTHORITY.\n"
@@ -60,7 +66,8 @@ class VMSB_Gap_Finder {
 		) );
 
 		if ( empty($data['gaps']) ) {
-			return new WP_Error( 'vmsb_gap', 'Gap Discovery returned no usable data.' );
+			$reason = $this->ai->get_last_error() ?: 'The AI failed to identify any usable gaps from current signals.';
+			return new WP_Error( 'vmsb_gap', 'Gap Discovery failed: ' . $reason );
 		}
 
 		return array_slice( (array)$data['gaps'], 0, $limit );
