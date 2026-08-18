@@ -489,6 +489,21 @@ class VMSB_AI_Router {
 		// have no business running against content that only needed this.
 		$text = self::escape_gutenberg_attrs( $text );
 
+		// Salvage Step 0.6: Any other unescaped HTML attribute quote.
+		//
+		// Step 0.5 only covers a block comment's own {"...":...} attribute
+		// JSON. It does nothing for a plain HTML attribute like
+		// <a href="...">, which several prompts explicitly ask the model to
+		// insert (internal links, image alt text) - a different HTML
+		// construct producing the exact same failure class: an unescaped "
+		// inside a JSON string value. This targets that shape specifically -
+		// name="value" - which essentially never occurs in ordinary prose,
+		// so unlike a generic "repair any stray quote" pass it cannot
+		// misfire on real dialogue or quoted terms in the article text (see
+		// tests/test-parse-json.php's "quote in plain prose" case, and the
+		// docblock on escape_html_attrs() below).
+		$text = self::escape_html_attrs( $text );
+
 		// Initial Attempt: Pure Standard Parse
 		$data = json_decode( $text, true );
 		if ( JSON_ERROR_NONE === json_last_error() ) {
@@ -568,6 +583,48 @@ class VMSB_AI_Router {
 				// being double-escaped into "\\\"level\\\"".
 				$fixed_attrs = preg_replace( '/(?<!\\\\)"/', '\\\\"', $m[2] );
 				return '<!-- ' . $m[1] . ' ' . $fixed_attrs . ' -->';
+			},
+			$text
+		);
+	}
+
+	/**
+	 * Re-escape the quotes that delimit an HTML attribute value -
+	 * name="value" - anywhere they appear unescaped inside the text, without
+	 * touching quotes anywhere else.
+	 *
+	 * This is the sibling of escape_gutenberg_attrs() above, for a different
+	 * source of the same failure class: several prompts explicitly instruct
+	 * the model to insert real HTML attributes into content_html - internal
+	 * links (<a href="...">), image alt text, occasionally title/target/
+	 * class. Each one is an unescaped-quote landmine for the outer JSON the
+	 * exact same way a Gutenberg block's {"level":2} is, but the earlier
+	 * fix's regex is scoped to <!-- wp:name {...} --> and does not match
+	 * this shape at all.
+	 *
+	 * A general "repair any unescaped quote anywhere" tokenizer was
+	 * prototyped and rejected: it cannot reliably tell a real JSON string
+	 * boundary apart from ordinary prose punctuation that happens to look
+	 * like one (quoted dialogue or terms separated by commas - plausible in
+	 * this site's Sanskrit/Hindi pilgrimage content), and a wrong guess
+	 * there can decode to syntactically valid but silently truncated JSON,
+	 * which is worse than a clean failure. name="value" carries no such
+	 * ambiguity - that exact shape does not occur in natural prose - so this
+	 * stays a narrow, pattern-based fix like its sibling, not a guess.
+	 *
+	 * @param string $text
+	 * @return string
+	 */
+	private static function escape_html_attrs( $text ) {
+		return preg_replace_callback(
+			'/([a-zA-Z_:][a-zA-Z0-9_:.-]*)="([^"]*)"/',
+			static function ( $m ) {
+				// The unescaped quotes are the attribute's own delimiters -
+				// escape those, plus any stray quote already inside the
+				// value (the negative lookbehind keeps this idempotent on a
+				// value the model already escaped correctly).
+				$fixed_val = preg_replace( '/(?<!\\\\)"/', '\\\\"', $m[2] );
+				return $m[1] . '=\\"' . $fixed_val . '\\"';
 			},
 			$text
 		);

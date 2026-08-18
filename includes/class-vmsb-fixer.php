@@ -699,12 +699,14 @@ class VMSB_Fixer {
 			. "5. LENGTH: Content must be at least 1,400 words of deep value.\n"
 			. "6. RICH MEDIA: Provide descriptive prompts for a featured image and 2 inline images.\n\n"
 			// CONTENT above already shows real Gutenberg block comments
-			// (<!-- wp:heading {"level":2} -->), which primes the model to
-			// reproduce that exact pattern in its reply - so it needs telling
-			// explicitly that content_html is itself a JSON string and those
-			// inner quotes must be escaped for the outer JSON to parse.
-			. "JSON ESCAPING: content_html is a JSON string, and Gutenberg block comments have their own embedded {\"...\":...} JSON. "
-			. "Escape every quote inside those block attributes with a backslash for the outer JSON - <!-- wp:heading {\\\"level\\\":2} -->, never <!-- wp:heading {\"level\":2} -->.\n\n"
+			// (<!-- wp:heading {"level":2} -->) and may contain links
+			// (<a href="...">), which primes the model to reproduce both
+			// patterns in its reply - so it needs telling explicitly that
+			// content_html is itself a JSON string and every inner quote
+			// from either source must be escaped for the outer JSON to parse.
+			. "JSON ESCAPING: content_html is a JSON string. Escape every quote for the outer JSON, in both places it appears: "
+			. "a block comment's own embedded {\"...\":...} JSON - <!-- wp:heading {\\\"level\\\":2} -->, never <!-- wp:heading {\"level\":2} --> - "
+			. "and any HTML attribute value, especially links - <a href=\\\"/page/\\\">text</a>, never <a href=\"/page/\">text</a>.\n\n"
 			. 'Return JSON: {"content_html":"","seo_title":"","meta_description":"","slug":"","seo_score":92}';
 
 		$data = $this->ai->generate_json( $prompt, array(

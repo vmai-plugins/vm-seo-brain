@@ -1,9 +1,11 @@
 <?php
 /**
- * Standalone exercise of VMSB_AI_Router::parse_json() against the exact
- * failure a real producer run hit: Gutenberg block attributes like
- * {"level":2} embedded in the content_html string value without the model
- * escaping the inner quotes for the outer JSON envelope.
+ * Standalone exercise of VMSB_AI_Router::parse_json() against real producer
+ * failures: unescaped double quotes inside the content_html JSON string
+ * value, from two distinct sources - Gutenberg block attributes like
+ * {"level":2}, and plain HTML attributes like <a href="...">. Both are JSON
+ * (or JSON-like) nested inside JSON: every quote has to come back out as \"
+ * for the outer json_decode() to succeed.
  *
  * parse_json() is pure PHP (no WP functions), so this runs the real method
  * from the real file directly - no stubs, no bootstrap.
@@ -121,6 +123,33 @@ $broken_namespaced = <<<'JSON'
 {"post_title":"Embed","slug":"embed","content_html":"<!-- wp:core-embed/youtube {"url":"https://youtube.com/x"} --><figure>embed</figure><!-- /wp:core-embed/youtube -->","excerpt":"x","seo_title":"x","meta_description":"x","featured_image_prompt":"x","inline_image_prompts":[],"faq":[],"suggested_category":"x","suggested_tags":"x","seo_score":80}
 JSON;
 
+// 13. The Varanasi bug: an unescaped <a href="..."> link - the internal-link
+//     prompt explicitly asks the model to insert these, and it is a wholly
+//     different HTML construct from a Gutenberg block attribute, so this
+//     needs its own salvage step, not a reuse of escape_gutenberg_attrs().
+$broken_href = <<<'JSON'
+{"post_title":"Varanasi Guide","slug":"varanasi-guide","content_html":"<!-- wp:paragraph --><p>Begin at the <a href="https://example.com/kashi-vishwanath/">Kashi Vishwanath Temple</a>, the heart of the city.</p><!-- /wp:paragraph -->","excerpt":"x","seo_title":"x","meta_description":"x","featured_image_prompt":"x","inline_image_prompts":[],"faq":[],"suggested_category":"x","suggested_tags":"x","seo_score":95}
+JSON;
+
+// 14. Multiple unescaped attributes on one tag (href + title + target).
+$broken_multi_attr = <<<'JSON'
+{"post_title":"Guide","slug":"guide","content_html":"<a href="https://x.com/" title="Visit" target="_blank">Temple</a>","excerpt":"x","seo_title":"x","meta_description":"x","featured_image_prompt":"x","inline_image_prompts":[],"faq":[],"suggested_category":"x","suggested_tags":"x","seo_score":90}
+JSON;
+
+// 15. Unescaped href nested inside an array of objects (faq answers often
+//     contain links back into the site).
+$broken_href_in_faq = <<<'JSON'
+{"post_title":"Guide","slug":"guide","content_html":"<p>Text.</p>","excerpt":"x","seo_title":"x","meta_description":"x","featured_image_prompt":"x","inline_image_prompts":[],"faq":[{"q":"Where?","a":"See <a href="https://x.com/">here</a>."}],"suggested_category":"x","suggested_tags":"x","seo_score":90}
+JSON;
+
+// 16. A quote inside plain prose, adjacent to a comma, mimicking JSON
+//     structure closely enough to fool a naive lookahead (dialogue/quoted
+//     terms separated by commas are plausible in this site's pilgrimage
+//     content: mantras, place names). Must still fail cleanly - proves the
+//     href fix is genuinely pattern-scoped (name="value"), not a generic
+//     quote-repair that could silently truncate real content.
+$broken_prose_comma_quotes = '{"post_title":"A Guide","slug":"a-guide","content_html":"<p>Mantras like "Om Namah Shivaya", "Hare Krishna" are chanted daily.</p>","excerpt":"x","seo_title":"x","meta_description":"x","featured_image_prompt":"x","inline_image_prompts":[],"faq":[],"suggested_category":"x","suggested_tags":"x","seo_score":90}';
+
 // ---------------------------------------------------------------- run
 
 echo "=== VMSB_AI_Router::parse_json() ===\n\n";
@@ -133,6 +162,9 @@ check( 'smart quotes (regression check)', VMSB_AI_Router::parse_json( $smart_quo
 check( 'raw newline in string (regression check)', VMSB_AI_Router::parse_json( $raw_newline ), true );
 check( 'trailing comma (regression check)', VMSB_AI_Router::parse_json( $trailing_comma ), true );
 check( 'quote in plain prose stays a genuine failure', VMSB_AI_Router::parse_json( $broken_prose_quote ), false );
+check( 'unescaped href attribute (the Varanasi bug)', VMSB_AI_Router::parse_json( $broken_href ), true, array( 'Kashi Vishwanath Temple', 'heart of the city' ) );
+check( 'multiple unescaped attributes on one tag', VMSB_AI_Router::parse_json( $broken_multi_attr ), true, array( 'title="Visit"', 'target="_blank"' ) );
+check( 'prose with comma-separated quoted phrases stays a genuine failure (no false positive)', VMSB_AI_Router::parse_json( $broken_prose_comma_quotes ), false );
 
 // ---- byte-exact checks: prove the fix does not corrupt what it touches ----
 
@@ -172,6 +204,22 @@ if ( $d ) {
 	check_exact( '  -> namespaced block decodes correctly',
 		$d, 'content_html',
 		'<!-- wp:core-embed/youtube {"url":"https://youtube.com/x"} --><figure>embed</figure><!-- /wp:core-embed/youtube -->'
+	);
+}
+
+$d = check( 'href attribute repaired byte-exact', VMSB_AI_Router::parse_json( $broken_href ), true );
+if ( $d ) {
+	check_exact( '  -> href block decodes to exactly one clean form',
+		$d, 'content_html',
+		'<!-- wp:paragraph --><p>Begin at the <a href="https://example.com/kashi-vishwanath/">Kashi Vishwanath Temple</a>, the heart of the city.</p><!-- /wp:paragraph -->'
+	);
+}
+
+$d = check( 'href inside a nested faq array repaired', VMSB_AI_Router::parse_json( $broken_href_in_faq ), true );
+if ( $d ) {
+	check_exact( '  -> nested faq answer decodes correctly',
+		$d, 'faq',
+		array( array( 'q' => 'Where?', 'a' => 'See <a href="https://x.com/">here</a>.' ) )
 	);
 }
 

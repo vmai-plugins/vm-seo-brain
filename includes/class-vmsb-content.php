@@ -671,10 +671,11 @@ class VMSB_Content {
 			. "<!-- wp:list --><ul><li>...</li></ul><!-- /wp:list -->, so the published post is fully editable block-by-block, not one opaque HTML blob.\n\n"
 			. "IMAGES: featured_image_prompt is one specific visual concept for the hero image (not a restatement of the title). "
 			. "inline_image_prompts is 2 more specific, concrete visual concepts, each tied to a different H2 section and visually distinct from the featured image and from each other - not generic filler like 'a photo related to the topic'.\n\n"
-			. "JSON ESCAPING - READ CAREFULLY: content_html is itself a JSON string value, and it contains Gutenberg block comments that have their OWN embedded JSON, "
-			. "e.g. {\"level\":2}. Every double-quote inside those block attributes MUST be backslash-escaped so the OUTER JSON stays valid - "
-			. "write <!-- wp:heading {\\\"level\\\":2} --> , never <!-- wp:heading {\"level\":2} -->. "
-			. "This applies to every single block with attributes in the article (headings, images, groups, lists with attributes, etc.) - missing even one escape anywhere in the piece invalidates the entire response and the whole article is discarded.\n\n"
+			. "JSON ESCAPING - READ CAREFULLY: content_html is itself a JSON string value. EVERY double-quote character anywhere inside it - "
+			. "with no exceptions - MUST be backslash-escaped so the OUTER JSON stays valid. This includes two very different places: "
+			. "(1) a Gutenberg block comment's own embedded JSON, e.g. {\"level\":2} - write <!-- wp:heading {\\\"level\\\":2} --> , never <!-- wp:heading {\"level\":2} -->; "
+			. "(2) any HTML attribute value, especially the internal links above - write <a href=\\\"/some-page/\\\">anchor text</a> , never <a href=\"/some-page/\">anchor text</a>. "
+			. "This applies to every block with attributes and every link/attribute in the article - missing even one escape anywhere in the piece invalidates the entire response and the whole article is discarded.\n\n"
 			. 'Return JSON: {"post_title":"","slug":"","content_html":"","excerpt":"","seo_title":"","meta_description":"","featured_image_prompt":"","inline_image_prompts":[],"faq":[{"q":"","a":""}],"suggested_category":"","suggested_tags":"","seo_score":92}'
 			. "\nIMPORTANT: Return a SINGLE JSON object. Do NOT wrap in an array or add extra closing braces/brackets.";
 
@@ -1076,14 +1077,15 @@ class VMSB_Content {
 			"TITLE: {$post->post_title}\nFOCUS KEYWORD: {$keyword}\n\nCURRENT CONTENT:\n{$post->post_content}\n\nTASK: {$instruction}\n\n"
 			. "Keep every accurate fact and every existing internal link. Return the complete revised article, not a diff.\n\n"
 			// CURRENT CONTENT above already contains real Gutenberg block
-			// comments (<!-- wp:heading {"level":2} --> and similar) - the
-			// model is being shown that exact pattern right before being
-			// asked to return content_html as a JSON string, so it is
-			// primed to reproduce it. Every quote inside those block
-			// attributes must be backslash-escaped in the reply or the
-			// whole JSON response is invalid.
-			. "JSON ESCAPING: content_html is a JSON string, and Gutenberg block comments have their own embedded {\"...\":...} JSON. "
-			. "Escape every quote inside those block attributes with a backslash for the outer JSON - <!-- wp:heading {\\\"level\\\":2} -->, never <!-- wp:heading {\"level\":2} -->.\n\n"
+			// comments (<!-- wp:heading {"level":2} --> and similar) and
+			// existing internal links (<a href="...">) that the model is
+			// told to keep - it is primed to reproduce both patterns right
+			// before being asked to return content_html as a JSON string.
+			// Every quote in either one must be backslash-escaped in the
+			// reply or the whole JSON response is invalid.
+			. "JSON ESCAPING: content_html is a JSON string. Escape every quote for the outer JSON, in both places it appears: "
+			. "a block comment's own embedded {\"...\":...} JSON - <!-- wp:heading {\\\"level\\\":2} -->, never <!-- wp:heading {\"level\":2} --> - "
+			. "and any HTML attribute value, especially links - <a href=\\\"/page/\\\">text</a>, never <a href=\"/page/\">text</a>.\n\n"
 			. 'Return JSON: {"content_html":"","change_summary":""}',
 			array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 8000, 'temperature' => 0.6, 'complexity' => 'premium', 'persona' => 'wordsmith' )
 		);
