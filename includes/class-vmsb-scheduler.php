@@ -15,18 +15,51 @@ class VMSB_Scheduler {
 		add_action( self::HOURLY, array( $this, 'run_hourly' ) );
 		add_action( self::DAILY, array( $this, 'run_daily' ) );
 		add_action( self::WEEKLY, array( $this, 'run_weekly' ) );
+		add_filter( 'cron_schedules', array( __CLASS__, 'register_schedules' ) );
 		add_action( 'init', array( __CLASS__, 'schedule' ) );
+	}
+
+	/**
+	 * WordPress core only ships hourly/twicedaily/daily - 'weekly' is not a
+	 * real recurrence unless something registers it here. Without this,
+	 * wp_schedule_event(..., 'weekly', ...) below returned WP_Error on every
+	 * page load (silently, since the return value was never checked) and
+	 * the entire weekly pass - keyword research, silo rebuild, content plan,
+	 * link autopilot, competitor/news/market scans, and the only periodic
+	 * license revalidation in the plugin - never ran on a clean install.
+	 */
+	public static function register_schedules( $schedules ) {
+		if ( ! isset( $schedules['weekly'] ) ) {
+			$schedules['weekly'] = array(
+				'interval' => WEEK_IN_SECONDS,
+				'display'  => __( 'Once Weekly', 'vm-seo-brain' ),
+			);
+		}
+		return $schedules;
 	}
 
 	public static function schedule() {
 		if ( ! wp_next_scheduled( self::HOURLY ) ) {
-			wp_schedule_event( time() + 300, 'hourly', self::HOURLY );
+			self::log_if_failed( wp_schedule_event( time() + 300, 'hourly', self::HOURLY ), self::HOURLY );
 		}
 		if ( ! wp_next_scheduled( self::DAILY ) ) {
-			wp_schedule_event( strtotime( 'tomorrow 3:00am' ), 'daily', self::DAILY );
+			self::log_if_failed( wp_schedule_event( strtotime( 'tomorrow 3:00am' ), 'daily', self::DAILY ), self::DAILY );
 		}
 		if ( ! wp_next_scheduled( self::WEEKLY ) ) {
-			wp_schedule_event( strtotime( 'next monday 4:00am' ), 'weekly', self::WEEKLY );
+			self::log_if_failed( wp_schedule_event( strtotime( 'next monday 4:00am' ), 'weekly', self::WEEKLY ), self::WEEKLY );
+		}
+	}
+
+	/**
+	 * wp_schedule_event() returning WP_Error (unrecognized recurrence,
+	 * scheduling disabled by a filter, etc.) used to fail silently - the
+	 * hook would just never fire again, with nothing anywhere to explain
+	 * why. One bad registration here is exactly the kind of thing that
+	 * should be loud, not discovered months later.
+	 */
+	private static function log_if_failed( $result, $hook ) {
+		if ( is_wp_error( $result ) && class_exists( 'VMSB_Logger' ) ) {
+			( new VMSB_Logger() )->error( 'scheduler', "Failed to schedule {$hook}: " . $result->get_error_message() );
 		}
 	}
 
@@ -55,9 +88,36 @@ class VMSB_Scheduler {
 			)
 		);
 
-		$due   = $content->due_items( max( 1, (int) ceil( (int) VMSB_Settings::get( 'posts_per_day' ) / 8 ) ) );
+		// Queued, not run inline.
+		//
+		// produce() is the heaviest thing this plugin does: up to eight model
+		// round trips - the main draft, an independent fact-verification pass,
+		// the quality gate's own calls, then images - inside a single request.
+		// Running that directly in the cron tick meant one slow article could
+		// exhaust max_execution_time and take the whole hourly run with it,
+		// and because produce() marks the row 'writing' before it starts, a
+		// process killed mid-draft left the row stuck in 'writing' with no
+		// task and nothing watching it. The only thing that ever noticed was
+		// the three-hour sweep below, which marked it permanently 'failed' -
+		// no retry, no diagnosis, just "Writing timeout or server crash". This
+		// install has 5 such rows, the most recent from today, and 2 more
+		// sitting in 'writing' right now.
+		//
+		// The task runner already solves all of it and was already wired for
+		// this exact job ('produce_post' existed, used only by the critique
+		// retry path): one article per task, attempt tracking with backoff,
+		// and reclaim_stalled() picking up an abandoned run after 30 minutes
+		// instead of 3 hours. process(4) further down this same method drains
+		// the queue, so throughput is unchanged - what changes is that a crash
+		// now costs one retryable task rather than the run plus the row.
+		$due = $content->due_items( max( 1, (int) ceil( (int) VMSB_Settings::get( 'posts_per_day' ) / 8 ) ) );
 		foreach ( $due as $item ) {
-			$content->produce( $item->id );
+			VMSB_Task_Runner::queue(
+				'produce_post',
+				array( 'id' => (int) $item->id ),
+				60,
+				'Scheduled article: ' . wp_trim_words( (string) $item->title, 8 )
+			);
 		}
 
 		// Work the roadmap forward whenever it is behind. Queued only when
@@ -102,10 +162,16 @@ class VMSB_Scheduler {
 		// of showing up as "nothing happened" three days later.
 		( new VMSB_Health() )->check();
 
-		// Housekeeping: pure DELETEs.
+		// Housekeeping: automated log and data pruning across all engines.
 		$log->prune( 45 );
 		VMSB_Task_Runner::prune( 14 );
 		self::prune_drip_counters( 14 );
+		if ( class_exists( 'VMSB_Usage' ) ) {
+			VMSB_Usage::prune( 90 );
+		}
+		if ( class_exists( 'VMSB_Performance' ) ) {
+			( new VMSB_Performance() )->prune( 180 );
+		}
 
 		// Everything below used to run right here, in this request.
 		VMSB_Task_Runner::queue( 'vector_index', array( 'limit' => 40 ), 95, 'Keep the semantic index current.' );

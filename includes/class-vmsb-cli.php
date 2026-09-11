@@ -36,10 +36,22 @@ class VMSB_CLI {
 		}
 
 		// 2. Process the queue.
-		$results = VMSB_Task_Runner::process( $limit );
-		foreach ( $results as $res ) {
-			$status = $res['ok'] ? "✅" : "❌";
-			WP_CLI::line( "{$status} Task: {$res['task']} - " . ( $res['message'] ?? '' ) );
+		$batch = VMSB_Task_Runner::process( $limit );
+
+		// process() returns array( 'ran' =>, 'results' =>, ['skipped' =>] ) -
+		// this used to foreach over $batch itself (the wrapper), not
+		// $batch['results'] (the actual per-task list), so every iteration
+		// value was either the 'ran' count (an int) or the 'results' array
+		// as one single value - neither has 'ok'/'task' keys, and if a
+		// concurrent batch was already running, 'skipped' is a plain string,
+		// which PHP 8 throws a fatal TypeError on for ['ok'] string-offset
+		// access rather than just warning.
+		if ( ! empty( $batch['skipped'] ) ) {
+			WP_CLI::line( "⏭️  " . $batch['skipped'] );
+		}
+		foreach ( (array) ( $batch['results'] ?? array() ) as $res ) {
+			$status = ! empty( $res['ok'] ) ? "✅" : "❌";
+			WP_CLI::line( "{$status} Task: " . ( $res['task'] ?? '?' ) . " - " . ( $res['message'] ?? '' ) );
 		}
 
 		WP_CLI::success( "Cycle complete." );

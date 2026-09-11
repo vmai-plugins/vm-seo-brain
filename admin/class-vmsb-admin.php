@@ -374,52 +374,24 @@ class VMSB_Admin {
 			58
 		);
 
-		// WordPress auto-creates a first submenu item that duplicates the
-		// parent's label ("SEO Brain") if we don't claim that slug ourselves -
-		// registering it explicitly with a distinct "Dashboard" label avoids
-		// the confusing "SEO Brain > SEO Brain" repetition in the sidebar.
-		add_submenu_page(
-			'vmsb',
-			'VM SEO Brain — Dashboard',
-			'Dashboard',
-			VMSB_CAP,
-			'vmsb',
-			array( $this, 'render_dashboard' )
+		// 5 Clean Job-Oriented Hubs + Setup Wizard
+		$hubs = array(
+			'vmsb'           => array( 'Overview', 'render_dashboard' ),
+			'vmsb-content'   => array( 'Content Engine', 'render_page' ),
+			'vmsb-seo'       => array( 'SEO Lab', 'render_page' ),
+			'vmsb-analytics' => array( 'Performance & Logs', 'render_page' ),
+			'vmsb-settings'  => array( 'Settings', 'render_page' ),
+			'vmsb-wizard'    => array( 'Setup Wizard', 'render_page' ),
 		);
 
-		// The Brain UX Overhaul: Job-oriented navigation buckets.
-		//
-		// Taxonomy Lab, Observability, and Logs are fully built, working
-		// screens (real classes, real tables, real REST-wired buttons) that
-		// fell out of this array when it replaced the old flat menu and were
-		// never folded into another page as a tab the way keywords/silo/
-		// competitive/issues/memory were - an oversight, not an intentional
-		// removal. Concretely: the "God Fix" confirm dialog on the Issues
-		// page tells the user to "revert any change later from the logs",
-		// but with no menu item there was no way to reach that page at all.
-		$pages = array(
-			'vmsb-growth'        => 'Growth',
-			'vmsb-production'    => 'Production',
-			'vmsb-pipeline'      => 'Pipeline',
-			'vmsb-agents'        => 'Agent Fleet',
-			'vmsb-seo'           => 'SEO Lab',
-			'vmsb-taxonomy'      => 'Taxonomy Lab',
-			'vmsb-intelligence'  => 'Intelligence',
-			'vmsb-analytics'     => 'Analytics',
-			'vmsb-learning'      => 'Learning',
-			'vmsb-observability' => 'Observability',
-			'vmsb-logs'          => 'Logs',
-			'vmsb-settings'      => 'Settings',
-		);
-
-		foreach ( $pages as $slug => $label ) {
+		foreach ( $hubs as $slug => $config ) {
 			add_submenu_page(
 				'vmsb',
-				'VM SEO Brain — ' . $label,
-				$label,
+				'VM SEO Brain — ' . $config[0],
+				$config[0],
 				VMSB_CAP,
 				$slug,
-				array( $this, 'render_page' )
+				array( $this, $config[1] )
 			);
 		}
 	}
@@ -462,22 +434,70 @@ class VMSB_Admin {
 	}
 
 	public function render_page() {
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : 'vmsb';
+
+		$route_map = array(
+			'vmsb'               => 'dashboard',
+			'vmsb-command'       => 'dashboard',
+			'vmsb-content'       => 'production',
+			'vmsb-production'    => 'production',
+			'vmsb-pipeline'      => 'production',
+			'vmsb-growth'        => 'production',
+			'vmsb-agents'        => 'production',
+			'vmsb-seo'           => 'seo',
+			'vmsb-taxonomy'      => 'seo',
+			'vmsb-intelligence'  => 'seo',
+			'vmsb-analytics'     => 'analytics',
+			'vmsb-learning'      => 'analytics',
+			'vmsb-observability' => 'analytics',
+			'vmsb-logs'          => 'analytics',
+			'vmsb-settings'      => 'settings',
+			'vmsb-plans'         => 'settings',
+			'vmsb-wizard'        => 'wizard',
+		);
+
+		$view = isset( $route_map[ $page ] ) ? $route_map[ $page ] : str_replace( 'vmsb-', '', $page );
+
 		echo '<div class="wrap vmsb vmsb-theme-wrapper">';
 		$this->render_header_utility();
-		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : 'vmsb';
-		$view = str_replace( 'vmsb-', '', $page );
 		$this->view( $view );
 		echo '</div>';
 	}
 
 	private function render_header_utility() {
-		echo '<div class="vmsb-header-utility" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding: 10px 0; border-bottom: 1px solid var(--vmsb-border);"> ';
-		self::breadcrumbs();
-		echo '<div style="display:flex; align-items:center; gap:20px;">';
-		echo '<div class="vmsb-global-search"><span>🔍</span><input type="text" placeholder="Global Brain Search..."></div>';
-		echo '<div class="vmsb-notification-hub" id="vmsb-notifications-trigger">🔔<span class="vmsb-count" hidden></span></div>';
-		echo '</div>';
-		echo '</div>';
+		$s = VMSB_Settings::masked();
+		$ai_configured = ! empty( $s['ai_primary'] ) && (
+			! empty( $s['aipuffer_key'] ) || ! empty( $s['openai_key'] ) ||
+			! empty( $s['gemini_key'] ) || ! empty( $s['openrouter_key'] ) ||
+			! empty( $s['ollama_url'] ) || ! empty( $s['omniroute_url'] )
+		);
+		$onboarded = get_option( 'vmsb_onboarded', false );
+		$mode = VMSB_Settings::get( 'theme_mode', 'dark' );
+		?>
+		<div class="vmsb-top-bar">
+			<div class="vmsb-top-left">
+				<?php self::breadcrumbs(); ?>
+			</div>
+			<div class="vmsb-top-right">
+				<div class="vmsb-status-pill <?php echo $ai_configured ? 'is-live' : 'is-warning'; ?>">
+					<span class="vmsb-status-dot"></span>
+					<span><?php echo $ai_configured ? esc_html( ucfirst( $s['ai_primary'] ) ) . ' Active' : 'Setup Required'; ?></span>
+				</div>
+				<?php if ( ! $onboarded || ! $ai_configured ) : ?>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-wizard' ) ); ?>" class="vmsb-wizard-btn">
+						⚡ Setup Wizard
+					</a>
+				<?php endif; ?>
+				<button type="button" class="vmsb-btn-theme-toggle" id="vmsb-theme-toggle" title="Toggle Light/Dark Theme">
+					<?php echo $mode === 'lite' ? '🌙' : '☀️'; ?>
+				</button>
+				<button type="button" class="vmsb-command-btn" id="vmsb-open-commander" title="Open AI Command Assistant (Ctrl+K)">
+					<span>🧠 Commander</span>
+					<kbd>⌘K</kbd>
+				</button>
+			</div>
+		</div>
+		<?php
 	}
 
 	private function view( $name ) {
@@ -522,11 +542,20 @@ class VMSB_Admin {
 			'sheet_id', 'sheet_tab', 'bulk_topics_tab', 'theme_mode', 'aipuffer_image_provider', 'aipuffer_image_model',
 			'google_imagen_model', 'banana_model', 'webhook_url',
 			'conversion_goal', 'cta_style',
+			'outreach_from_name', 'outreach_tone',
+			'omniroute_url', 'omniroute_text_model', 'omniroute_image_model', 'omniroute_video_model',
 		);
 		foreach ( $text_keys as $key ) {
 			if ( isset( $fields[ $key ] ) ) {
 				$clean[ $key ] = sanitize_text_field( $fields[ $key ] );
 			}
+		}
+
+		// A malformed value here isn't just cosmetic: VMSB_Backlinks::is_enabled()
+		// gates the whole outreach feature on is_email() passing, so this has to
+		// go through the same sanitizer WordPress uses for real email fields.
+		if ( isset( $fields['outreach_from_email'] ) ) {
+			$clean['outreach_from_email'] = sanitize_email( $fields['outreach_from_email'] );
 		}
 
 		// One list, held by VMSB_Settings, which is also what encrypts on save
@@ -541,7 +570,7 @@ class VMSB_Admin {
 		}
 
 		$int_keys = array(
-			'image_width', 'image_height', 'posts_per_day', 'max_ai_calls_day', 'growth_target',
+			'image_width', 'image_height', 'image_quality', 'posts_per_day', 'max_ai_calls_day', 'growth_target',
 			'growth_window', 'max_god_fixes_day', 'staleness_threshold_days',
 			// Quality gate thresholds and the programmatic cap. The code has
 			// always read these; until now no form offered them, so they were
@@ -556,10 +585,19 @@ class VMSB_Admin {
 			}
 		}
 
+		// The ROI benchmarks below are dollar/percentage values, not whole
+		// numbers - (int) would truncate a $1.85 CPC down to $1.
+		foreach ( array( 'avg_cpc', 'default_aov', 'default_conversion_rate' ) as $key ) {
+			if ( isset( $fields[ $key ] ) ) {
+				$clean[ $key ] = max( 0, (float) $fields[ $key ] );
+			}
+		}
+
 		foreach ( array(
-			'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl', 'thief_auto_plan',
+			'god_mode', 'auto_publish', 'require_review', 'profile_locked', 'insecure_ssl',
 			'webhook_enabled', 'auto_growth_mode', 'feature_aeo', 'feature_entity', 'feature_silo',
 			'feature_images', 'feature_taxonomy', 'feature_production', 'feature_maintenance', 'feature_schema',
+			'feature_llms_txt', 'feature_citability',
 			// Quality gate switches and the per-agent toggles, all previously
 			// readable by the code but unreachable from any screen.
 			'quality_gate', 'quality_dup_block',
@@ -599,18 +637,40 @@ class VMSB_Admin {
 
 	public function notices() {
 		if ( get_option( 'vmsb_decryption_failed' ) ) {
-			echo '<div class="notice notice-error"><p><strong>VM SEO Brain:</strong> Could not decrypt your API keys. This usually happens after a site migration or if <code>AUTH_KEY</code> was changed in <code>wp-config.php</code>. Please re-enter your API keys in <a href="' . admin_url('admin.php?page=vmsb-settings') . '">Settings</a> to restore functionality.</p></div>';
+			echo '<div class="notice notice-error"><p><strong>VM SEO Brain:</strong> Could not decrypt your API keys. This usually happens after a site migration or if <code>AUTH_KEY</code> was changed in <code>wp-config.php</code>. Please re-enter your API keys in <a href="' . esc_url( admin_url('admin.php?page=vmsb-settings') ) . '">Settings</a> to restore functionality.</p></div>';
+		}
+
+		$screen = get_current_screen();
+		if ( $screen && strpos( $screen->id, 'vmsb' ) !== false && $screen->id !== 'seo-brain_page_vmsb-wizard' ) {
+			$onboarded = get_option( 'vmsb_onboarded', false );
+			$s = VMSB_Settings::masked();
+			$has_ai = ! empty( $s['openai_key'] ) || ! empty( $s['gemini_key'] ) || ! empty( $s['openrouter_key'] ) || ! empty( $s['aipuffer_key'] ) || ! empty( $s['ollama_url'] );
+
+			if ( ! $onboarded || ! $has_ai ) {
+				?>
+				<div class="notice notice-info vmsb-onboard-notice is-dismissible" style="border-left-color: #d4af37; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between;">
+					<div>
+						<strong style="font-size: 14px;">🚀 Welcome to VM SEO Brain:</strong>
+						<span style="margin-left: 8px;">Your autonomous SEO assistant is ready. Complete the 2-minute setup wizard to connect your AI model and generate your first strategy.</span>
+					</div>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-wizard' ) ); ?>" class="button button-primary" style="background: #d4af37; border-color: #c9a227; color: #000; font-weight: 600; text-shadow: none;">
+						Launch Quick Setup →
+					</a>
+				</div>
+				<?php
+			}
 		}
 
 		if ( empty( $_GET['vmsb_msg'] ) ) {
 			return;
 		}
 		$messages = array(
-			'saved'            => array( 'success', 'Settings saved.' ),
-			'google_connected' => array( 'success', 'Google connected.' ),
-			'google_failed'    => array( 'error', 'Google failed.' ),
-			'import_done'      => array( 'success', 'Topics imported successfully. View them in the Pipeline.' ),
+			'saved'            => array( 'success', 'Settings saved successfully.' ),
+			'google_connected' => array( 'success', 'Google Cloud synchronized.' ),
+			'google_failed'    => array( 'error', 'Google Cloud authorization failed.' ),
+			'import_done'      => array( 'success', 'Topics imported successfully. View them in Content Engine.' ),
 			'license_active'   => array( 'success', 'License activated successfully! Your plan is now: ' . strtoupper(VMSB_License::plan()) ),
+			'wizard_completed' => array( 'success', 'Setup Wizard completed! Your SEO Brain is now calibrated.' ),
 		);
 		$key = sanitize_key( wp_unslash( $_GET['vmsb_msg'] ) );
 		if ( ! isset( $messages[ $key ] ) ) {
@@ -621,14 +681,22 @@ class VMSB_Admin {
 
 	public static function breadcrumbs() {
 		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : 'vmsb';
-		$label = str_replace( 'vmsb-', '', $page );
-		$label = ucwords( str_replace( '-', ' ', $label ) );
-		if ( $page === 'vmsb' ) $label = 'Dashboard';
 
-		echo '<nav class="vmsb-breadcrumbs" style="margin-bottom:20px; font-size:12px; color:var(--muted);">';
-		echo '<a href="' . admin_url('admin.php?page=vmsb') . '" style="color:inherit; text-decoration:none;">Brain</a>';
-		echo ' <span style="margin:0 8px; opacity:0.5;">&rarr;</span> ';
-		echo '<span style="color:var(--gold-soft); font-weight:600;">' . esc_html($label) . '</span>';
+		$labels = array(
+			'vmsb'           => 'Overview',
+			'vmsb-content'   => 'Content Engine',
+			'vmsb-seo'       => 'SEO Lab',
+			'vmsb-analytics' => 'Performance & Logs',
+			'vmsb-settings'  => 'Settings',
+			'vmsb-wizard'    => 'Setup Wizard',
+		);
+
+		$label = isset( $labels[ $page ] ) ? $labels[ $page ] : ucwords( str_replace( array( 'vmsb-', '-' ), array( '', ' ' ), $page ) );
+
+		echo '<nav class="vmsb-breadcrumbs">';
+		echo '<a href="' . esc_url( admin_url('admin.php?page=vmsb') ) . '" class="vmsb-bc-root">🧠 SEO Brain</a>';
+		echo '<span class="vmsb-bc-sep">/</span>';
+		echo '<span class="vmsb-bc-current">' . esc_html($label) . '</span>';
 		echo '</nav>';
 	}
 }

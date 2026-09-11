@@ -24,7 +24,6 @@ class VMSB_Settings {
 	 */
 	public static $secret_keys = array(
 		'aipuffer_key',
-		'aiengine_key',
 		'openai_key',
 		'gemini_key',
 		'openrouter_key',
@@ -37,7 +36,7 @@ class VMSB_Settings {
 		'cloudflare_api_token',
 		'semrush_key',
 		'ahrefs_token',
-		'keyword_planner_dev_token',
+		'omniroute_key',
 	);
 
 	/** The bullet run masked() substitutes for a stored credential. */
@@ -69,7 +68,9 @@ class VMSB_Settings {
 			'openai_key'      => '',
 			'openai_model'    => 'gpt-4o-mini',
 			'gemini_key'      => '',
-			'gemini_model'    => 'gemini-2.0-flash',
+			// gemini-2.0-flash was retired by Google; the API answers calls to
+			// it with "no longer available ... use models/gemini-3.6-flash".
+			'gemini_model'    => 'gemini-3.6-flash',
 			'openrouter_key'  => '',
 			'openrouter_model'=> 'anthropic/claude-3.5-sonnet',
 			'ollama_url'      => 'http://127.0.0.1:11434',
@@ -95,6 +96,10 @@ class VMSB_Settings {
 			'google_imagen_model'     => 'imagen-3',
 			'image_width'     => 1200,
 			'image_height'    => 675,
+			// Re-encode quality for generated images. 82 is the usual sweet
+			// spot for photographic content: visually indistinguishable from
+			// 100 at normal viewing size, at a fraction of the weight.
+			'image_quality'   => 82,
 			'image_style'     => 'premium professional business photography, editorial commercial style, corporate aesthetic, high-end studio lighting, sharp focus, clean and professional, no text',
 
 			// Google.
@@ -156,7 +161,6 @@ class VMSB_Settings {
 
 			// Competitor intelligence.
 			'competitor_enabled'    => 1,
-			'thief_auto_plan'       => 0,
 
 			// Backlinks. Off by default - outreach sends real email under your name.
 			'backlink_enabled'      => 0,
@@ -179,6 +183,14 @@ class VMSB_Settings {
 			'roi_enabled'           => 1,
 			'conversion_goal'       => '', // free text: what counts as a conversion
 			'cta_style'             => 'direct, one clear action, no pressure tactics',
+			// These three used to be hardcoded constants applied to every
+			// site regardless of vertical (a $1.85 CPC and $50 AOV mean
+			// something very different to a legal firm than a blog) and
+			// presented as computed figures in the Boardroom report and
+			// revenue-opportunity scoring with no way to correct them.
+			'avg_cpc'               => 1.85,  // Used when no real GA4 revenue exists yet to value organic clicks against.
+			'default_aov'           => 50,    // Fallback average order value when a page has no measured GA4 revenue/conversions yet.
+			'default_conversion_rate' => 2.0, // Percent. Assumed conversion rate for revenue-opportunity scoring absent real data.
 
 			// CTR testing.
 			'ctr_test_enabled'      => 1,
@@ -204,8 +216,6 @@ class VMSB_Settings {
 			// model-estimated numbers when a key is absent).
 			'semrush_key'           => '',
 			'ahrefs_token'          => '',
-			'keyword_planner_customer_id' => '',
-			'keyword_planner_dev_token'   => '',
 
 			// Site Kit / Elementor integration awareness.
 			'sitekit_prefer'        => 1, // prefer Site Kit's GA4/GSC connection when present
@@ -219,6 +229,12 @@ class VMSB_Settings {
 			'webhook_url'     => '',
 			'webhook_events'  => array( 'content_published' ),
 
+			'omniroute_url'        => '',
+			'omniroute_key'        => '',
+			'omniroute_text_model' => 'auto',
+			'omniroute_image_model'=> 'flux',
+			'omniroute_video_model'=> 'luma-ray',
+
 			// Feature Toggles (Granular Control)
 			'feature_aeo'        => 1,
 			'feature_entity'     => 1,
@@ -228,6 +244,8 @@ class VMSB_Settings {
 			'feature_production' => 1,
 			'feature_maintenance' => 1,
 			'feature_schema'     => 1,
+			'feature_llms_txt'   => 1,
+			'feature_citability' => 1,
 		);
 	}
 
@@ -269,19 +287,95 @@ class VMSB_Settings {
 		return $val;
 	}
 
+	/**
+	 * Persist a partial set of changes.
+	 *
+	 * Secrets are NEVER round-tripped through all(). They used to be, and it
+	 * destroyed credentials permanently:
+	 *
+	 *   1. decrypt() fails once (AUTH_KEY rotated, a wp-config restore, a
+	 *      host migration) and returns '' - by design, so a bad key does not
+	 *      surface as garbage - and all() caches that ''.
+	 *   2. ANY later update() - including ones that touch nothing related,
+	 *      like the circuit breaker's update(['god_mode' => 0]) - started
+	 *      from $all = self::all(), so every secret in $new was already ''.
+	 *   3. The encrypt loop skipped them, because '' is empty().
+	 *   4. update_option() then wrote those ''s straight over the stored
+	 *      ciphertext. The encrypted key was now gone for good, and what had
+	 *      been a recoverable "re-enter your keys" became unrecoverable.
+	 *
+	 * The circuit breaker made that a self-sustaining loop: blank keys fail
+	 * every AI call, five failures disable God Mode via update(), and that
+	 * write wipes the keys again. This install logged 16,698 of those and
+	 * ended with all five API keys stored as empty strings.
+	 *
+	 * So: a secret is written only when $changes explicitly names it.
+	 * Anything else is carried across as the raw stored ciphertext, byte for
+	 * byte, without a decrypt/re-encrypt cycle that could lose it. An
+	 * explicit empty value is still honoured - that is a deliberate clear.
+	 */
 	public static function update( array $changes ) {
-		$all = self::all();
-		$new = array_merge( $all, $changes );
+		$all   = self::all();
+		$new   = array_merge( $all, $changes );
 		$store = $new;
+
+		$raw = get_option( self::OPTION, array() );
+		$raw = is_array( $raw ) ? $raw : array();
+
 		foreach ( self::$secret_keys as $k ) {
-			if ( ! empty( $store[ $k ] ) ) {
-				$store[ $k ] = self::encrypt( $store[ $k ] );
+			// The mask is what masked() renders into the form, not a credential.
+			// The admin save handler already filters it out, but update() is
+			// public: any other caller round-tripping a masked() array through
+			// here would otherwise encrypt a row of bullets and store it as the
+			// key, destroying the real one exactly as the blanking bug did.
+			$is_mask = array_key_exists( $k, $changes ) && self::is_masked( $changes[ $k ] );
+
+			if ( array_key_exists( $k, $changes ) && ! $is_mask ) {
+				// Explicitly set this time: encrypt it, or honour a clear.
+				$store[ $k ] = ( '' === $changes[ $k ] || null === $changes[ $k ] )
+					? ''
+					: self::encrypt( $changes[ $k ] );
+				continue;
+			}
+
+			// Untouched (or masked): preserve exactly what is on disk.
+			$store[ $k ] = array_key_exists( $k, $raw ) ? $raw[ $k ] : '';
+
+			// Keep the in-memory copy consistent with what was actually kept,
+			// so a masked value never leaks back out through the return array.
+			if ( $is_mask ) {
+				$new[ $k ] = self::decrypt( $store[ $k ] );
 			}
 		}
+
 		update_option( self::OPTION, $store, 'yes' );
-		delete_option( 'vmsb_decryption_failed' );
+
+		// Only clear the "decryption failed" flag when this write actually
+		// re-supplied a secret. Clearing it on every unrelated save hid a
+		// still-broken AUTH_KEY behind a green settings screen.
+		if ( array_intersect_key( $changes, array_flip( self::$secret_keys ) ) ) {
+			delete_option( 'vmsb_decryption_failed' );
+		}
+
 		self::$cache = $new;
 		return $new;
+	}
+
+	/**
+	 * The OmniRoute base URL with any trailing "/v1" removed.
+	 *
+	 * Every caller appends its own "/v1/..." path, so an operator who pastes
+	 * the endpoint they were given - "https://host/v1", which is what the
+	 * OmniRoute docs and dashboard both show - produced "/v1/v1/models" and
+	 * "/v1/v1/images/generations". This install is configured exactly that way
+	 * and works only because the gateway happens to tolerate the doubled
+	 * segment; nothing guarantees that, and no error would explain it if a
+	 * future version stopped. Normalising here fixes every call site at once
+	 * rather than asking the operator to paste the URL a particular way.
+	 */
+	public static function omniroute_base() {
+		$url = untrailingslashit( trim( (string) self::get( 'omniroute_url' ) ) );
+		return preg_replace( '#/v\d+$#', '', $url );
 	}
 
 	private static function key_material() {
@@ -382,5 +476,41 @@ class VMSB_Settings {
 		}
 
 		return $migrated;
+	}
+
+	/**
+	 * Published posts of the site's safe post types that are missing ALL of
+	 * the given postmeta keys - the "due for an audit pass" query that
+	 * VMSB_AEO::sweep(), VMSB_Entity::sweep(), and VMSB_Schema::sweep() each
+	 * independently hand-rolled with an identical esc_sql()+implode()
+	 * post-type IN-clause. Centralized so that escaping logic exists in one
+	 * place instead of three copies that could drift.
+	 *
+	 * @param string|string[] $meta_keys One key (AEO/Entity), or several -
+	 *                                   a post only qualifies if it has NONE
+	 *                                   of them (Schema's native-or-RankMath
+	 *                                   FAQ check).
+	 * @return int[] Post IDs, oldest-audited-first (by post_date).
+	 */
+	public static function posts_missing_meta( $meta_keys, $limit = 5 ) {
+		global $wpdb;
+		$safe_types = (array) self::get( 'safe_post_types', array( 'post' ) );
+		$types_sql  = "'" . implode( "','", array_map( 'esc_sql', $safe_types ) ) . "'";
+
+		$joins  = array();
+		$wheres = array();
+		$i      = 0;
+		foreach ( (array) $meta_keys as $meta_key ) {
+			$alias = 'm' . $i++;
+			$joins[]  = $wpdb->prepare( "LEFT JOIN {$wpdb->postmeta} {$alias} ON {$alias}.post_id = p.ID AND {$alias}.meta_key = %s", $meta_key );
+			$wheres[] = "{$alias}.meta_id IS NULL";
+		}
+
+		$sql = "SELECT p.ID FROM {$wpdb->posts} p\n"
+			. implode( "\n", $joins ) . "\n"
+			. "WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql}) AND " . implode( ' AND ', $wheres ) . "\n"
+			. $wpdb->prepare( 'ORDER BY p.post_date DESC LIMIT %d', (int) $limit );
+
+		return array_map( 'intval', $wpdb->get_col( $sql ) );
 	}
 }

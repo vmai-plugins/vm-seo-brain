@@ -38,6 +38,25 @@ class VMSB_Video_Agent {
 			return new WP_Error( 'ai_fail', 'Could not generate video pack.' );
 		}
 
+		// OmniRoute Integration: Generate real video if configured
+		$omni_url = VMSB_Settings::get( 'omniroute_url' );
+		$omni_key = VMSB_Settings::get( 'omniroute_key' );
+		if ( $omni_url && $omni_key ) {
+			$this->log->info( 'video', "Pushing video generation to OmniRoute for post #{$post_id}." );
+			$omni_res = wp_remote_post( untrailingslashit($omni_url) . '/v1/videos/generations', array(
+				'timeout' => 300,
+				'headers' => array( 'Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $omni_key ),
+				'body'    => wp_json_encode( array(
+					'prompt' => $data['shorts_script'],
+					'model'  => VMSB_Settings::get( 'omniroute_video_model', 'luma-ray' ),
+				) )
+			) );
+			if ( ! is_wp_error($omni_res) && wp_remote_retrieve_response_code($omni_res) === 200 ) {
+				$omni_data = json_decode( wp_remote_retrieve_body($omni_res), true );
+				$data['real_video_url'] = $omni_data['data'][0]['url'] ?? '';
+			}
+		}
+
 		update_post_meta( $post_id, '_vmsb_video_pack', $data );
 		$this->log->info( 'video', "Video Production Pack generated for post #{$post_id}." );
 

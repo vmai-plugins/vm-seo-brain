@@ -14,7 +14,14 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'VMSB_VERSION', '1.5.0' );
+// Read from the header comment above instead of a second hand-typed literal -
+// WordPress itself must parse "Version:" as a static comment (it can't read
+// a PHP constant), so that comment can't be removed, but nothing says the
+// constant used everywhere else in the code (cache-busting, outbound
+// User-Agent strings) has to be a second copy that can drift from it.
+// get_file_data() is defined in wp-includes/functions.php, loaded before
+// any plugin, so it's always available here.
+define( 'VMSB_VERSION', get_file_data( __FILE__, array( 'Version' => 'Version' ) )['Version'] );
 define( 'VMSB_FILE', __FILE__ );
 define( 'VMSB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'VMSB_URL', plugin_dir_url( __FILE__ ) );
@@ -53,10 +60,39 @@ spl_autoload_register(
  */
 final class VMSB_Install {
 
-	const DB_VERSION = '1.13.0'; // 1.13.0: vmsb_links - the internal link graph, stored instead of recomputed
+	// 1.14.0: vmsb_plan geo_city/geo_state/geo_service - the service x city coverage matrix
+	// 1.14.1: Added geo_cell index to vmsb_plan CREATE TABLE and ensure single_activate()
+	// calls ensure_indexes() to cover fresh installs. Bumped version to backfill on existing
+	// 1.14.0 installs that missed the index.
+	const DB_VERSION = '1.14.1';
 
-	public static function activate() {
+	/**
+	 * Main plugin activation handler (supports single and multisite network activation).
+	 */
+	public static function activate( $network_wide = false ) {
+		if ( is_multisite() && $network_wide ) {
+			global $wpdb;
+			$blog_ids = $wpdb->get_col( "SELECT blog_id FROM {$wpdb->blogs}" );
+			foreach ( $blog_ids as $blog_id ) {
+				switch_to_blog( (int) $blog_id );
+				self::single_activate();
+				restore_current_blog();
+			}
+		} else {
+			self::single_activate();
+		}
+	}
+
+	/**
+	 * Single blog activation routine.
+	 */
+	public static function single_activate() {
 		self::tables();
+		// A fresh activation writes the current DB_VERSION immediately, so
+		// maybe_upgrade() never fires for it. Any key dbDelta failed to create
+		// would then be missing for the life of the site - run the same check
+		// here. It is a no-op once the indexes exist.
+		self::ensure_indexes();
 		update_option( 'vmsb_db_version', self::DB_VERSION );
 		if ( ! get_option( 'vmsb_installed_at' ) ) {
 			update_option( 'vmsb_installed_at', time() );
@@ -65,9 +101,46 @@ final class VMSB_Install {
 		flush_rewrite_rules();
 	}
 
-	public static function deactivate() {
+	/**
+	 * Main plugin deactivation handler.
+	 */
+	public static function deactivate( $network_wide = false ) {
+		if ( is_multisite() && $network_wide ) {
+			global $wpdb;
+			$blog_ids = $wpdb->get_col( "SELECT blog_id FROM {$wpdb->blogs}" );
+			foreach ( $blog_ids as $blog_id ) {
+				switch_to_blog( (int) $blog_id );
+				self::single_deactivate();
+				restore_current_blog();
+			}
+		} else {
+			self::single_deactivate();
+		}
+	}
+
+	/**
+	 * Single blog deactivation routine.
+	 */
+	public static function single_deactivate() {
 		VMSB_Scheduler::unschedule();
 		flush_rewrite_rules();
+	}
+
+	/**
+	 * Auto-provision tables when a new blog is created in a multisite network.
+	 */
+	public static function on_new_blog( $blog_or_site_id ) {
+		if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		if ( is_plugin_active_for_network( plugin_basename( VMSB_FILE ) ) ) {
+			$blog_id = is_object( $blog_or_site_id ) ? (int) $blog_or_site_id->blog_id : (int) $blog_or_site_id;
+			if ( $blog_id > 0 ) {
+				switch_to_blog( $blog_id );
+				self::single_activate();
+				restore_current_blog();
+			}
+		}
 	}
 
 	public static function maybe_upgrade() {
@@ -104,6 +177,10 @@ final class VMSB_Install {
 			$wpdb->prefix . 'vmsb_plan' => array(
 				'primary_keyword' => '(primary_keyword)',
 				'status_priority' => '(status, priority)',
+				// The coverage matrix reads one row per service x city; without
+				// this it degrades into a full scan of the plan table on every
+				// dashboard render.
+				'geo_cell'        => '(geo_service, geo_city)',
 			),
 		);
 
@@ -186,6 +263,9 @@ final class VMSB_Install {
 			content_language VARCHAR(10) NULL,
 			agent_task VARCHAR(64) NULL,
 			editor_note TEXT NULL,
+			geo_city VARCHAR(96) NULL,
+			geo_state VARCHAR(96) NULL,
+			geo_service VARCHAR(191) NULL,
 			is_pillar TINYINT(1) NOT NULL DEFAULT 0,
 			content_type VARCHAR(32) NOT NULL DEFAULT 'blog',
 			brief LONGTEXT NULL,
@@ -204,7 +284,8 @@ final class VMSB_Install {
 			KEY status (status),
 			KEY priority (priority),
 			KEY primary_keyword (primary_keyword),
-			KEY status_priority (status, priority)
+			KEY status_priority (status, priority),
+			KEY geo_cell (geo_service, geo_city)
 		) {$charset};";
 		// primary_keyword: the dedupe lookup run for every discovery
 		// candidate, previously a full table scan.
@@ -494,6 +575,8 @@ final class VMSB_Install {
 
 register_activation_hook( __FILE__, array( 'VMSB_Install', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'VMSB_Install', 'deactivate' ) );
+add_action( 'wpmu_new_blog', array( 'VMSB_Install', 'on_new_blog' ) );
+add_action( 'wp_initialize_site', array( 'VMSB_Install', 'on_new_blog' ) );
 
 /**
  * Boot.

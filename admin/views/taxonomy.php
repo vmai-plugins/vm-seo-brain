@@ -10,19 +10,23 @@ usort( $tags, fn($a, $b) => $b->count <=> $a->count );
 
 $fixer = new VMSB_Fixer();
 $issues = $fixer->open_issues( 100, '', '', 'missing_term_description,empty_archive,thin_tag,duplicate_term' );
+
+$vmsb_is_nested = defined( 'VMSB_NESTED' ) && VMSB_NESTED;
 ?>
-	<header class="vmsb-head">
-		<div>
-			<p class="vmsb-eyebrow">Topical Organization</p>
-			<h1>Taxonomy Lab</h1>
-			<p class="vmsb-sub">Optimizing categories and tags to maximize crawl budget and topical authority.</p>
-		</div>
-		<div class="vmsb-head-actions">
-			<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="taxonomy-audit">Run Audit</button>
-			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="taxonomy-propose">Propose AI Structure</button>
-		</div>
-	</header>
-	<span class="wp-header-end"></span>
+	<?php if ( ! $vmsb_is_nested ) : ?>
+		<header class="vmsb-head">
+			<div>
+				<p class="vmsb-eyebrow">Topical Organization</p>
+				<h1>Taxonomy Lab</h1>
+				<p class="vmsb-sub">Optimizing categories and tags to maximize crawl budget and topical authority.</p>
+			</div>
+			<div class="vmsb-head-actions">
+				<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="taxonomy-audit">Run Audit</button>
+				<button class="vmsb-btn vmsb-btn-gold" data-vmsb="taxonomy-propose">Propose AI Structure</button>
+			</div>
+		</header>
+		<span class="wp-header-end"></span>
+	<?php endif; ?>
 
 
 	<div class="vmsb-grid" style="grid-template-columns: 1fr 1fr; margin-bottom:30px;">

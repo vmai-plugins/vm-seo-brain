@@ -3,18 +3,21 @@ defined( 'ABSPATH' ) || exit;
 
 $logger = new VMSB_Logger();
 $logs   = $logger->recent( 150 );
+$vmsb_is_nested = defined( 'VMSB_NESTED' ) && VMSB_NESTED;
 ?>
-	<header class="vmsb-head">
-		<div>
-			<p class="vmsb-eyebrow">Operations</p>
-			<h1>Logs</h1>
-			<p class="vmsb-sub">Operational history of the sentient brain.</p>
-		</div>
-		<div class="vmsb-head-actions">
-			<button class="vmsb-btn vmsb-btn-ghost" onclick="window.location.reload()">Refresh</button>
-		</div>
-	</header>
-	<span class="wp-header-end"></span>
+	<?php if ( ! $vmsb_is_nested ) : ?>
+		<header class="vmsb-head">
+			<div>
+				<p class="vmsb-eyebrow">Operations</p>
+				<h1>Logs</h1>
+				<p class="vmsb-sub">Operational history of the sentient brain.</p>
+			</div>
+			<div class="vmsb-head-actions">
+				<button class="vmsb-btn vmsb-btn-ghost" onclick="window.location.reload()">Refresh</button>
+			</div>
+		</header>
+		<span class="wp-header-end"></span>
+	<?php endif; ?>
 
 	<div class="vmsb-table-wrap">
 		<table class="vmsb-table vmsb-table-full">

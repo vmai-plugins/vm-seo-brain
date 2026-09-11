@@ -10,19 +10,22 @@ defined( 'ABSPATH' ) || exit;
 
 global $wpdb;
 $vmsb_actions = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vmsb_actions ORDER BY created_at DESC LIMIT 50" );
+$vmsb_is_nested = defined( 'VMSB_NESTED' ) && VMSB_NESTED;
 ?>
 
-	<header class="vmsb-head">
-		<div>
-			<p class="vmsb-eyebrow">Autonomous Integrity Control</p>
-			<h1>Observability & Rollback</h1>
-			<p class="vmsb-sub">Understand exactly why the Brain acted, and undo any change with one click.</p>
-		</div>
-		<div class="vmsb-head-actions">
-			<button class="vmsb-btn vmsb-btn-ghost" onclick="if(confirm('Undo last 5 actions?')) VMSB.api('rollback-recent', {count:5}).then(()=>location.reload())">Rollback Last 5</button>
-		</div>
-	</header>
-	<span class="wp-header-end"></span>
+	<?php if ( ! $vmsb_is_nested ) : ?>
+		<header class="vmsb-head">
+			<div>
+				<p class="vmsb-eyebrow">Autonomous Integrity Control</p>
+				<h1>Observability & Rollback</h1>
+				<p class="vmsb-sub">Understand exactly why the Brain acted, and undo any change with one click.</p>
+			</div>
+			<div class="vmsb-head-actions">
+				<button class="vmsb-btn vmsb-btn-ghost" onclick="if(confirm('Undo last 5 actions?')) VMSB.api('rollback-recent', {count:5}).then(()=>location.reload())">Rollback Last 5</button>
+			</div>
+		</header>
+		<span class="wp-header-end"></span>
+	<?php endif; ?>
 
 	<div class="vmsb-table-wrap" style="margin-top:30px;">
 		<table class="vmsb-table vmsb-table-full">

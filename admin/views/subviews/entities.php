@@ -6,7 +6,15 @@ defined( 'ABSPATH' ) || exit;
  */
 
 global $wpdb;
-$vmsb_audited = $wpdb->get_results("SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_vmsb_entity_audit' LIMIT 50");
+// The post_id list has to come from raw SQL (there's no "which posts have
+// this meta key" WP API) but the value itself must go through
+// get_post_meta(), not a hand-rolled decode of the raw column: it's stored
+// via update_post_meta() with a PHP array, which WordPress serializes with
+// maybe_serialize() (native serialize()), not JSON. json_decode() on a
+// serialized string always returns NULL, so every row here was silently
+// skipped by the `is_array($audit)` guard below no matter how much real
+// audit data existed - the tab rendered its table headers and nothing else.
+$vmsb_audited = $wpdb->get_results("SELECT DISTINCT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_vmsb_entity_audit' LIMIT 50");
 
 ?>
 <div class="vmsb-grid" style="grid-template-columns: 1fr; gap:30px;">
@@ -33,7 +41,7 @@ $vmsb_audited = $wpdb->get_results("SELECT post_id, meta_value FROM {$wpdb->post
 					</thead>
 					<tbody>
 						<?php foreach ($vmsb_audited as $row) :
-							$audit = json_decode($row->meta_value, true);
+							$audit = get_post_meta( $row->post_id, '_vmsb_entity_audit', true );
 							if ( ! is_array($audit) ) continue;
 
 							$post_title = get_the_title($row->post_id);

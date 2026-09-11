@@ -139,6 +139,26 @@
 		if ( route === 'schema-faq' )    { return data.added ? data.added + ' FAQ pairs added.' : ( data.skipped || 'No change.' ); }
 		if ( route === 'schema-graph' )  { return data.linked_peers ? data.linked_peers + ' peers linked.' : ( data.skipped || 'No change.' ); }
 		if ( route === 'global-expand' ) { return data.queued + ' localised pages queued for: ' + ( data.locations || [] ).join( ', ' ); }
+		if ( route === 'plan-dedupe' ) {
+			var t = data.totals || {};
+			if ( data.dry_run ) {
+				if ( ! t.removable ) { return 'No duplicate topics found — the queue is clean.'; }
+				return 'Found ' + t.removable + ' duplicate rows across ' + t.groups + ' topics.\n' +
+					'The plan would go from ' + t.rows_scanned + ' to ' + ( t.rows_scanned - t.removable ) + ' rows.\n' +
+					'Nothing has been changed. Worst offenders:\n  ' +
+					( data.worst || [] ).slice( 0, 8 ).map( function ( g ) {
+						return g.keyword + ' — keeping 1, removing ' + g.removes;
+					} ).join( '\n  ' ) +
+					'\n\nUse "Merge Duplicates" to apply this.';
+			}
+			return 'Merged: removed ' + data.removed + ' duplicate rows across ' + t.groups + ' topics. Reload to see the updated queue.';
+		}
+		if ( route === 'geo-save-map' ) { return 'Map saved: ' + data.states + ' states, ' + data.cities + ' cities. Reload to see the matrix.'; }
+		if ( route === 'geo-expand' ) {
+			if ( ! data.queued ) { return 'Nothing queued — every cell matching that filter is already covered.'; }
+			return data.queued + ' location page(s) queued as suggestions:\n  ' +
+				( data.items || [] ).map( function ( i ) { return i.title; } ).join( '\n  ' );
+		}
 		if ( route === 'health-check' ) {
 			const checks = Object.values( data.checks || data );
 			const ok = checks.filter( c => c.ok ).length;
@@ -174,7 +194,7 @@
 	}
 
 	function reloadIfNeeded( route ) {
-		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert', 'license-verify', 'cluster-architect', 'battle-roadmap', 'growth-scan', 'growth-suggestion-approve', 'growth-suggestion-reject', 'agents-run-strategist', 'opportunity-scan', 'evaluate-pivot', 'action-rollback', 'video-to-blog', 'task-retry', 'task-cancel', 'execute-opportunity', 'graph-sync', 'retry-critique' ];
+		const routes = [ 'scan', 'god-fix', 'god-fix-90', 'dismiss', 'bulk-issue-action', 'import-topics', 'pull-bulk-topics', 'improve-post', 'keyword-dismiss', 'keyword-merge-cluster', 'ctr-start', 'plan', 'research', 'silo-map', 'silo-push-gaps', 'produce', 'rebuild-index', 'measure-outcomes', 'competitor-add', 'competitor-remove', 'competitor-scan', 'backlink-discover', 'backlink-discover-recent', 'backlink-shield', 'programmatic-build', 'roi-scan', 'ctr-conclude', 'news-scout', 'traffic-forecast', 'global-expand', 'health-check', 'market-assess', 'tasks-process', 'health-reset', 'niche-plan', 'clear-rejected', 'replan-rejected', 'approve-all', 'bulk-action', 'taxonomy-audit', 'taxonomy-propose', 'pending-approve', 'pending-reject', 'revert', 'license-verify', 'cluster-architect', 'battle-roadmap', 'growth-scan', 'growth-suggestion-approve', 'growth-suggestion-reject', 'agents-run-strategist', 'opportunity-scan', 'evaluate-pivot', 'action-rollback', 'video-to-blog', 'task-retry', 'task-cancel', 'execute-opportunity', 'graph-sync', 'retry-critique', 'geo-save-map', 'geo-expand', 'plan-dedupe' ];
 		if ( routes.indexOf( route ) !== -1 ) {
 			const msg = ( route === 'import-topics' || route === 'pull-bulk-topics' ) ? '&vmsb_msg=import_done' : ( route === 'license-verify' ? '&vmsb_msg=license_active' : '' );
 			setTimeout( () => {
@@ -826,8 +846,17 @@
 		tabsBar.find( '.vmsb-tab' ).removeClass( 'is-active' );
 		tab.addClass( 'is-active' );
 
-		tabsBar.siblings( '.vmsb-panel' ).removeClass( 'is-active' )
+		const shownPanel = tabsBar.siblings( '.vmsb-panel' ).removeClass( 'is-active' )
 			.filter( `[data-panel="${name}"]` ).addClass( 'is-active' );
+
+		// A panel just went from display:none to visible. Anything inside it
+		// that measured its own size on page load (the D3 knowledge-graph
+		// visualizer, in particular) measured 0x0 at that point regardless
+		// of what it'll actually be once shown - trigger a custom event so
+		// that kind of content can (re-)measure and (re-)initialize now that
+		// it has real dimensions, instead of only ever working after a
+		// manual refresh click.
+		shownPanel.trigger( 'vmsb:shown' );
 	} );
 
 	// AI Model Syncing
@@ -1281,6 +1310,219 @@
 
 		load( true );
 	} )();
+
+	/* ------------------------------------------------------------ setup & onboarding wizard */
+	( function wizardController() {
+		const wizardForm = $( '#vmsb-wizard-form' );
+		if ( ! wizardForm.length ) { return; }
+
+		const steps = $( '.vmsb-wizard-step' );
+		const nodes = $( '.vmsb-step-node' );
+
+		function goToStep( stepNum ) {
+			steps.removeClass( 'is-active' ).filter( `[data-step="${stepNum}"]` ).addClass( 'is-active' );
+			nodes.each( function() {
+				const nodeStep = parseInt( $( this ).data( 'step' ), 10 );
+				$( this ).toggleClass( 'is-active', nodeStep === stepNum );
+				$( this ).toggleClass( 'is-completed', nodeStep < stepNum );
+			} );
+
+			// Update summary in step 4
+			if ( stepNum === 4 ) {
+				const selProvider = $( 'input[name="wizard_ai_primary"]:checked' ).val() || 'gemini';
+				const bizName = $( '#wizard_biz_name' ).val() || 'Your Website';
+				const autonomy = $( 'input[name="wizard_autonomy_mode"]:checked' ).val() === 'autopilot' ? '⚡ Full Autopilot' : '🛡️ Assisted Mode';
+
+				const providerNames = {
+					gemini: 'Google Gemini',
+					openai: 'OpenAI (GPT-4o)',
+					openrouter: 'OpenRouter',
+					aipuffer: 'AI Puffer',
+					ollama: 'Ollama (Local)'
+				};
+
+				$( '#summary-ai-provider' ).text( providerNames[ selProvider ] || selProvider );
+				$( '#summary-biz-name' ).text( bizName );
+				$( '#summary-autonomy' ).text( autonomy );
+			}
+
+			window.scrollTo( { top: 0, behavior: 'smooth' } );
+		}
+
+		// Step Next / Prev Navigation
+		$( document ).on( 'click', '.vmsb-step-next', function() {
+			const nextStep = parseInt( $( this ).data( 'next' ), 10 );
+			// Basic validation
+			if ( nextStep === 2 ) {
+				const key = $( '#wizard_api_key' ).val().trim();
+				const provider = $( 'input[name="wizard_ai_primary"]:checked' ).val();
+				if ( provider !== 'ollama' && ! key ) {
+					alert( 'Please enter an API Key for your selected AI provider.' );
+					$( '#wizard_api_key' ).focus();
+					return;
+				}
+			}
+			if ( nextStep === 3 ) {
+				if ( ! $( '#wizard_biz_name' ).val().trim() || ! $( '#wizard_biz_type' ).val().trim() ) {
+					alert( 'Please fill in your Business Name and Niche/Type.' );
+					return;
+				}
+			}
+			goToStep( nextStep );
+		} );
+
+		$( document ).on( 'click', '.vmsb-step-prev', function() {
+			const prevStep = parseInt( $( this ).data( 'prev' ), 10 );
+			goToStep( prevStep );
+		} );
+
+		// Provider Radio Card Selection
+		$( document ).on( 'click', '.vmsb-provider-card', function() {
+			$( '.vmsb-provider-card' ).removeClass( 'is-selected' );
+			$( this ).addClass( 'is-selected' );
+			const provider = $( this ).find( 'input[type="radio"]' ).val();
+
+			const hints = {
+				gemini: 'Get your free Gemini API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>.',
+				openai: 'Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI Platform</a>.',
+				openrouter: 'Get your API key from <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a>.',
+				aipuffer: 'Enter your AI Puffer API key or bot token.',
+				ollama: 'Enter your local Ollama URL (e.g. http://localhost:11434).'
+			};
+
+			const defaultModels = {
+				gemini: 'gemini-1.5-flash',
+				openai: 'gpt-4o-mini',
+				openrouter: 'anthropic/claude-3.5-sonnet',
+				aipuffer: '',
+				ollama: 'llama3.1'
+			};
+
+			$( '#wizard-key-hint' ).html( hints[ provider ] || '' );
+			$( '#wizard_model' ).val( defaultModels[ provider ] || '' );
+			$( '#vmsb-wizard-test-result' ).prop( 'hidden', true );
+		} );
+
+		// Autonomy Radio Card Selection
+		$( document ).on( 'click', '.vmsb-autonomy-card', function() {
+			$( '.vmsb-autonomy-card' ).removeClass( 'is-selected' );
+			$( this ).addClass( 'is-selected' );
+		} );
+
+		// Step 1: Live Connection Tester
+		$( document ).on( 'click', '#vmsb-wizard-test-ai', async function() {
+			const btn = $( this );
+			const provider = $( 'input[name="wizard_ai_primary"]:checked' ).val() || 'gemini';
+			const key = $( '#wizard_api_key' ).val().trim();
+			const resBox = $( '#vmsb-wizard-test-result' );
+
+			btn.prop( 'disabled', true ).text( 'Testing…' );
+			resBox.prop( 'hidden', false ).removeClass( 'is-ok is-err' ).text( 'Pinging ' + provider + '…' );
+
+			try {
+				const data = await call( 'test-provider', { provider: provider, key: key } );
+				if ( data.ok ) {
+					resBox.addClass( 'is-ok' ).text( '✅ Connection Successful: ' + data.message );
+				} else {
+					resBox.addClass( 'is-err' ).text( '❌ Connection Failed: ' + data.message );
+				}
+			} catch ( err ) {
+				resBox.addClass( 'is-err' ).text( '❌ Test error: ' + err.message );
+			} finally {
+				btn.prop( 'disabled', false ).text( '⚡ Test Connection' );
+			}
+		} );
+
+		// Step 4: Launch SEO Brain & Calibration
+		$( document ).on( 'click', '#vmsb-wizard-launch-btn', async function() {
+			const launchBtn = $( this );
+			launchBtn.prop( 'disabled', true ).text( 'Calibrating…' );
+			$( '#vmsb-launch-actions' ).hide();
+			$( '#vmsb-calibration-box' ).prop( 'hidden', false );
+
+			const payload = {
+				ai_primary:     $( 'input[name="wizard_ai_primary"]:checked' ).val() || 'gemini',
+				api_key:        $( '#wizard_api_key' ).val().trim(),
+				model:          $( '#wizard_model' ).val().trim(),
+				business_name:  $( '#wizard_biz_name' ).val().trim(),
+				business_type:  $( '#wizard_biz_type' ).val().trim(),
+				description:    $( '#wizard_biz_desc' ).val().trim(),
+				services:       $( '#wizard_services' ).val().trim(),
+				audience:       $( '#wizard_audience' ).val().trim(),
+				tone:           $( '#wizard_tone' ).val(),
+				autonomy_mode:  $( 'input[name="wizard_autonomy_mode"]:checked' ).val() || 'assisted'
+			};
+
+			// Step 1 Animation
+			setTimeout( () => {
+				$( '#cal-step-1' ).addClass( 'is-done' ).html( '✔ Configuration & AI model credentials saved.' );
+			}, 600 );
+
+			try {
+				await call( 'wizard-save', payload );
+
+				// Step 2 Animation
+				setTimeout( () => {
+					$( '#cal-step-2' ).addClass( 'is-done' ).html( '✔ Internal Link graph & PageRank index mapped.' );
+				}, 1300 );
+
+				// Step 3 Animation
+				setTimeout( () => {
+					$( '#cal-step-3' ).addClass( 'is-done' ).html( '✔ Business DNA & Topical Silos synthesized.' );
+				}, 2000 );
+
+				// Step 4 Animation & Trigger initial discovery
+				setTimeout( async () => {
+					try { call( 'opportunity-scan', {} ); } catch(e){}
+					$( '#cal-step-4' ).addClass( 'is-done' ).html( '✔ Initial keyword gap scan dispatched.' );
+
+					setTimeout( () => {
+						$( '#vmsb-calibration-box' ).slideUp( 300 );
+						$( '#vmsb-calibration-success' ).prop( 'hidden', false ).fadeIn( 400 );
+					}, 700 );
+				}, 2800 );
+
+			} catch ( err ) {
+				alert( 'Setup save error: ' + err.message );
+				launchBtn.prop( 'disabled', false ).text( '🚀 Retry Launch' );
+				$( '#vmsb-launch-actions' ).show();
+				$( '#vmsb-calibration-box' ).prop( 'hidden', true );
+			}
+		} );
+	} )();
+
+	/* ------------------------------------------------------------ theme toggle & command hotkey */
+	$( document ).on( 'click', '#vmsb-theme-toggle', function() {
+		const body = $( 'body' );
+		const isLite = body.hasClass( 'vmsb-mode-lite' );
+		const newMode = isLite ? 'dark' : 'lite';
+
+		body.toggleClass( 'vmsb-mode-lite', ! isLite );
+		body.toggleClass( 'vmsb-mode-dark', isLite );
+		$( this ).text( isLite ? '☀️' : '🌙' );
+
+		try {
+			localStorage.setItem( 'vmsb_theme_mode', newMode );
+		} catch(e) {}
+	} );
+
+	// Command Palette Trigger & Ctrl+K / Cmd+K
+	$( document ).on( 'click', '#vmsb-open-commander', function() {
+		const trigger = $( '#vmsb-commander-trigger' );
+		if ( trigger.length ) {
+			trigger.click();
+		} else {
+			const popup = $( '#vmsb-commander-popup' );
+			if ( popup.length ) popup.fadeIn( 300 ).css( 'display', 'flex' );
+		}
+	} );
+
+	$( document ).on( 'keydown', function( e ) {
+		if ( ( e.metaKey || e.ctrlKey ) && e.key === 'k' ) {
+			e.preventDefault();
+			$( '#vmsb-open-commander' ).click();
+		}
+	} );
 
 	// Expose for inline usage
 	VMSB.call = call;

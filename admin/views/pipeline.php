@@ -137,6 +137,117 @@ if ( ! $vmsb_is_nested ) {
 
 	<!-- TAB 1: PRODUCTION QUEUE -->
 	<div class="vmsb-panel is-active" data-panel="queue">
+
+		<?php
+		/*
+		 * Capacity and preflight, above the queue itself.
+		 *
+		 * The table below has always been able to list what is queued. What no
+		 * screen could say was whether any of it would ever be written, or why
+		 * a finished article came out as a draft again. Both questions are
+		 * answered here, before the list, because they change what the list
+		 * means.
+		 */
+		$vmsb_cap = VMSB_Pipeline::capacity();
+		$vmsb_pre = VMSB_Pipeline::preflight();
+		$vmsb_next = VMSB_Pipeline::up_next( 9 );
+		?>
+
+		<div class="vmsb-grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); margin-bottom:22px;">
+
+			<article class="vmsb-card" style="border-left:3px solid <?php echo $vmsb_cap['actual_7d'] ? 'var(--good)' : 'var(--crit)'; ?>;">
+				<span class="vmsb-status-label">Actually shipping</span>
+				<div class="vmsb-figure">
+					<span class="vmsb-number" style="color:<?php echo $vmsb_cap['actual_7d'] ? 'var(--good)' : 'var(--crit)'; ?>;"><?php echo esc_html( number_format_i18n( $vmsb_cap['actual_daily'], 2 ) ); ?></span>
+					<span class="vmsb-of">posts/day</span>
+				</div>
+				<p class="vmsb-note" style="margin:8px 0 0;">
+					Configured cap is <?php echo (int) $vmsb_cap['per_day_cap']; ?>/day. <?php echo (int) $vmsb_cap['actual_7d']; ?> published in the last 7 days.
+				</p>
+			</article>
+
+			<article class="vmsb-card">
+				<span class="vmsb-status-label">Queue depth</span>
+				<div class="vmsb-figure">
+					<span class="vmsb-number"><?php echo esc_html( number_format_i18n( $vmsb_cap['queued'] ) ); ?></span>
+					<span class="vmsb-of">waiting</span>
+				</div>
+				<p class="vmsb-note" style="margin:8px 0 0;">
+					<?php echo esc_html( $vmsb_cap['drain_label'] ); ?> at the configured cap &mdash;
+					<strong style="color:var(--high);"><?php echo esc_html( $vmsb_cap['real_drain'] ); ?></strong> at the rate actually observed.
+				</p>
+			</article>
+
+			<article class="vmsb-card" style="border-left:3px solid <?php echo $vmsb_pre['will_publish'] ? 'var(--good)' : 'var(--high)'; ?>;">
+				<span class="vmsb-status-label">Next article will</span>
+				<div class="vmsb-figure">
+					<span class="vmsb-number" style="font-size:30px; color:<?php echo $vmsb_pre['will_publish'] ? 'var(--good)' : 'var(--high)'; ?>;">
+						<?php echo $vmsb_pre['will_publish'] ? 'Publish' : 'Draft'; ?>
+					</span>
+				</div>
+				<p class="vmsb-note" style="margin:8px 0 0;"><?php echo esc_html( $vmsb_pre['summary'] ); ?></p>
+			</article>
+
+		</div>
+
+		<div class="vmsb-grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); margin-bottom:24px;">
+
+			<!-- preflight -->
+			<article class="vmsb-card">
+				<h2 style="font-family:var(--serif); margin:0 0 4px; font-size:19px;">Publish preflight</h2>
+				<p class="vmsb-note" style="margin:0 0 14px;">Every gate between a finished article and the live site.</p>
+				<table class="vmsb-table vmsb-table-narrow" style="min-width:0;">
+					<tbody>
+					<?php foreach ( $vmsb_pre['gates'] as $vmsb_g ) : ?>
+						<tr>
+							<td style="width:22px; vertical-align:top; padding-right:0;">
+								<span style="color:<?php echo $vmsb_g['pass'] ? 'var(--good)' : 'var(--high)'; ?>; font-size:14px;"><?php echo $vmsb_g['pass'] ? '&#9679;' : '&#9675;'; ?></span>
+							</td>
+							<td>
+								<strong style="font-size:13.5px;"><?php echo esc_html( $vmsb_g['name'] ); ?></strong>
+								<p class="vmsb-note" style="margin:2px 0 0; font-size:12.5px; line-height:1.5;"><?php echo esc_html( $vmsb_g['detail'] ); ?></p>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-settings' ) ); ?>" class="vmsb-btn vmsb-btn-ghost" style="margin-top:14px; align-self:flex-start;">Change these settings</a>
+			</article>
+
+			<!-- forecast -->
+			<article class="vmsb-card">
+				<h2 style="font-family:var(--serif); margin:0 0 4px; font-size:19px;">Up next</h2>
+				<p class="vmsb-note" style="margin:0 0 14px;">
+					The order the runner will actually take, at <?php echo (int) $vmsb_cap['per_day_cap']; ?> a day.
+				</p>
+				<?php if ( ! $vmsb_next ) : ?>
+					<p class="vmsb-note" style="margin:0;">Nothing approved is waiting. Approve topics to fill the queue.</p>
+				<?php else : ?>
+					<div style="display:flex; flex-direction:column; gap:7px;">
+						<?php
+						$vmsb_last_day = 0;
+						foreach ( $vmsb_next as $vmsb_n ) :
+							$vmsb_new_day = $vmsb_n['day'] !== $vmsb_last_day;
+							$vmsb_last_day = $vmsb_n['day'];
+							?>
+							<div style="display:grid; grid-template-columns:52px 1fr; gap:11px; align-items:baseline;">
+								<span style="font-family:var(--mono); font-size:11px; color:<?php echo $vmsb_new_day ? 'var(--gold)' : 'transparent'; ?>;">
+									day&nbsp;<?php echo (int) $vmsb_n['day']; ?>
+								</span>
+								<span style="font-size:13px; line-height:1.45;">
+									<?php echo esc_html( wp_trim_words( $vmsb_n['title'], 11 ) ); ?>
+									<?php if ( 'writing' === $vmsb_n['status'] ) : ?>
+										<span class="vmsb-tag vmsb-tag-gold" style="margin-left:6px;">writing now</span>
+									<?php endif; ?>
+								</span>
+							</div>
+						<?php endforeach; ?>
+					</div>
+				<?php endif; ?>
+			</article>
+
+		</div>
+
 		<?php
 		// The funnel below is the shape of the pipeline. Every stage gets its
 		// own chip whether or not it has rows in it, because "Writing: 0" is

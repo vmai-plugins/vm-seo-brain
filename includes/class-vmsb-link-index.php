@@ -156,6 +156,17 @@ class VMSB_Link_Index {
 	}
 
 	/**
+	 * Run a batch scan across the site's content to populate/update the link graph.
+	 *
+	 * @param int $limit Number of posts to scan.
+	 * @return array{scanned:int,links:int,remaining:int}
+	 */
+	public static function index_all( $limit = 60 ) {
+		return self::scan_batch( $limit );
+	}
+
+
+	/**
 	 * Throw the index away and start again. Used after a permalink structure
 	 * change, when every stored target_id is suspect.
 	 */

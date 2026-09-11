@@ -144,7 +144,8 @@ class VMSB_Action_Engine {
 				'reason'      => "Semantic Consolidation of # " . implode(', #', $duplicate_ids)
 			) );
 
-			// Mark duplicates as draft or trashed in a real scenario
+			// Draft the duplicates now that their content has been merged
+			// into the primary post above - this runs for real, not a stub.
 			foreach ( $duplicate_ids as $id ) {
 				wp_update_post( array( 'ID' => $id, 'post_status' => 'draft' ) );
 			}

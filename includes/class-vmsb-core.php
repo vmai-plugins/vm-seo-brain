@@ -64,6 +64,8 @@ final class VMSB_Core {
 		'aipuffer'      => 'VMSB_AIPuffer',
 		'webhooks'      => 'VMSB_Webhooks',
 		'growth_engine' => 'VMSB_Growth_Engine',
+		'citability'    => 'VMSB_Citability',
+		'llms_txt'      => 'VMSB_LLMS_Txt',
 	);
 
 	/** @var array<string,object> Resolved instances. */
@@ -78,6 +80,7 @@ final class VMSB_Core {
 		// and everything else in the map waits until something asks for it.
 		new VMSB_Scheduler();
 		new VMSB_REST();
+		new VMSB_LLMS_Txt();
 		VMSB_Link_Index::boot();
 
 		foreach ( array( 'indexing', 'webhooks', 'backlinks' ) as $eager ) {

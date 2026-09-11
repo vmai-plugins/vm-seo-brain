@@ -77,7 +77,12 @@ class VMSB_CTR {
 			return new WP_Error( 'vmsb_ctr', 'A test is already running on this post.' );
 		}
 
-		$post    = get_post( $post_id );
+		// Caller-supplied id via the 'ctr-start' REST route.
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return new WP_Error( 'vmsb_ctr', 'That post no longer exists.' );
+		}
+
 		$rm      = new VMSB_RankMath();
 
 		$current_title = $rm->get_title( $post_id ) ?: $post->post_title;

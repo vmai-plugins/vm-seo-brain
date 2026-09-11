@@ -46,6 +46,14 @@ $vmsb_hijacks        = $vmsb_thief->recent_hijacks( 10 );
 					<a href="<?php echo esc_url( admin_url('admin.php?page=vmsb-plans') ); ?>" class="vmsb-btn vmsb-btn-gold vmsb-btn-sm">Unlock Competitor Intelligence</a>
 				<?php endif; ?>
 			</div>
+			<p class="vmsb-note" style="margin-top:8px;">
+				Velocity is a real sitemap count when the competitor's sitemap is reachable, falling back to an AI estimate otherwise.
+				<?php if ( VMSB_External_Data::semrush_configured() ) : ?>
+					Overlap and gaps use real SEMrush ranking data where the competitor has verified data for a query, falling back to the AI's reasoned estimate otherwise.
+				<?php else : ?>
+					Overlap and gaps are the AI's reasoned estimate of a competitor's likely coverage - connect a SEMrush key in Settings for verified ranking data instead.
+				<?php endif; ?>
+			</p>
 
 			<div class="vmsb-grid" style="margin-top:20px;">
 				<div class="vmsb-card vmsb-card-wide" style="grid-column: span 2;">
@@ -254,7 +262,7 @@ $vmsb_hijacks        = $vmsb_thief->recent_hijacks( 10 );
 							<label>Base Keyword</label>
 							<input type="text" name="base_keyword" placeholder="best plumber">
 							<label>Values <small>(one per line)</small></label>
-							<textarea name="values" data-list rows="4" placeholder="Indore&#10;Bhopal&#10;Pune"></textarea>
+							<textarea name="values" data-list rows="4" placeholder="One value per line&#10;e.g. a city, region, or product"></textarea>
 							<button class="vmsb-btn vmsb-btn-gold vmsb-btn-block" data-vmsb="programmatic-build" data-vmsb-form="vmsb-pseo-form">Build Dominance Set</button>
 						</div>
 					<?php else : ?>

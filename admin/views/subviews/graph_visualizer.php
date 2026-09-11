@@ -38,12 +38,20 @@ defined( 'ABSPATH' ) || exit;
 jQuery(function($) {
 	const container = d3.select("#vmsb-graph-container");
 	const svg = d3.select("#vmsb-graph-svg");
-	const width = container.node().clientWidth;
-	const height = container.node().clientHeight;
 
 	let simulation;
+	let initialized = false;
 
 	async function initGraph() {
+		// Measured fresh on every call, not once at script load. This
+		// subview lives inside a tab that starts display:none (it's not
+		// the default-active tab in Intelligence Lab) - clientWidth/Height
+		// on a hidden element are always 0 per the DOM spec, so measuring
+		// once up front baked a permanent 0x0 into every simulation this
+		// ran, collapsing every node to the container's corner.
+		const width = container.node().clientWidth;
+		const height = container.node().clientHeight;
+
 		$("#vmsb-graph-loading").show();
 		svg.selectAll("*").remove();
 
@@ -135,7 +143,27 @@ jQuery(function($) {
 			.on("end", dragended);
 	}
 
-	initGraph();
+	// If this subview happens to already be visible on load (nested
+	// somewhere that isn't tab-gated), initialize immediately. Otherwise
+	// wait for the tab-switch event below - initializing now would just
+	// measure a hidden 0x0 container.
+	if ( container.node().clientWidth > 0 ) {
+		initGraph();
+		initialized = true;
+	}
+
+	// Fires whenever any tab panel becomes active (admin.js, jQuery custom
+	// event - bound via jQuery's own .on(), not addEventListener, since
+	// .trigger() below only notifies jQuery-registered handlers). Only
+	// acts the first time - subsequent tab revisits reuse the already-
+	// correct render; "Refresh View" stays the manual way to re-fetch.
+	$( container.node() ).closest( '.vmsb-panel' ).on( 'vmsb:shown', function () {
+		if ( ! initialized ) {
+			initialized = true;
+			initGraph();
+		}
+	} );
+
 	$("#vmsb-refresh-graph").on("click", initGraph);
 });
 </script>

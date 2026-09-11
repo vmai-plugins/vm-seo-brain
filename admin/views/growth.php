@@ -21,24 +21,33 @@ $vmsb_pivot        = $vmsb_brain_engine->recall('intelligence', 'current_strateg
 $vmsb_growth_engine = new VMSB_Growth_Engine();
 $vmsb_suggestions   = $vmsb_growth_engine->pending( 50 );
 
+$vmsb_is_nested = defined( 'VMSB_NESTED' ) && VMSB_NESTED;
 ?>
-	<header class="vmsb-head">
-		<div>
-			<p class="vmsb-eyebrow">Strategic Discovery</p>
-			<h1>Growth Center</h1>
-			<p class="vmsb-sub">Identifying and planning your path to SEO dominance.</p>
-		</div>
-		<div class="vmsb-head-actions">
-			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="opportunity-scan">Discovery Scan</button>
-		</div>
-	</header>
-	<span class="wp-header-end"></span>
+	<?php if ( ! $vmsb_is_nested ) : ?>
+		<header class="vmsb-head">
+			<div>
+				<p class="vmsb-eyebrow">Strategic Discovery</p>
+				<h1>Growth Center</h1>
+				<p class="vmsb-sub">Identifying and planning your path to SEO dominance.</p>
+			</div>
+			<div class="vmsb-head-actions">
+				<button class="vmsb-btn vmsb-btn-gold" data-vmsb="opportunity-scan">Discovery Scan</button>
+			</div>
+		</header>
+		<span class="wp-header-end"></span>
+	<?php endif; ?>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">
 		<button class="vmsb-tab is-active" data-tab="opportunities">🎯 Opportunities (<?php echo count($vmsb_ops); ?>)</button>
 		<button class="vmsb-tab" data-tab="suggestions">💡 Suggestions (<?php echo count($vmsb_suggestions); ?>)</button>
 		<button class="vmsb-tab" data-tab="strategy">🧠 Strategic Pivot</button>
 		<button class="vmsb-tab" data-tab="roadmap">🗺️ Roadmap</button>
+		<button class="vmsb-tab" data-tab="geo">📍 Local Coverage<?php
+			$vmsb_geo_cov = class_exists( 'VMSB_Geo' ) ? VMSB_Geo::coverage() : array( 'totals' => array( 'total' => 0, 'missing' => 0 ) );
+			if ( $vmsb_geo_cov['totals']['total'] ) {
+				echo ' (' . (int) $vmsb_geo_cov['totals']['missing'] . ' open)';
+			}
+		?></button>
 	</div>
 
 	<!-- OPPORTUNITIES -->
@@ -75,7 +84,17 @@ $vmsb_suggestions   = $vmsb_growth_engine->pending( 50 );
 									<p class="vmsb-note" style="margin:5px 0 0;"><?php echo esc_html($op['recommended']); ?></p>
 								</td>
 								<td class="vmsb-row-actions">
-									<button class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="execute-opportunity" data-body='<?php echo wp_json_encode($op); ?>'>Execute</button>
+									<?php if ( empty( $op['object_id'] ) ) : ?>
+										<?php // execute-opportunity only ever acts on an existing post
+										// (see class-vmsb-rest.php's execute_opportunity() docblock) -
+										// this opportunity type recommends writing something new
+										// instead, so it needs the content-planning action, not the
+										// surgical-fixer one. Every "Execute" click on one of these
+										// used to fail with "no target post to act on" no matter what. ?>
+										<button class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="plan" data-body='{"keyword":<?php echo wp_json_encode( (string) $op['target'] ); ?>,"count":1}' data-confirm="Plan a new article targeting this keyword?">Plan Article</button>
+									<?php else : ?>
+										<button class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="execute-opportunity" data-body='<?php echo wp_json_encode($op); ?>'>Execute</button>
+									<?php endif; ?>
 								</td>
 							</tr>
 						<?php endforeach; endif; ?>
@@ -205,6 +224,110 @@ $vmsb_suggestions   = $vmsb_growth_engine->pending( 50 );
 					</tbody>
 				</table>
 			</div>
+		</article>
+	</div>
+
+	<!-- LOCAL COVERAGE -->
+	<div class="vmsb-panel" data-panel="geo">
+		<?php
+		$vmsb_geo_services = $vmsb_geo_cov['services'] ?? array();
+		$vmsb_geo_cities   = $vmsb_geo_cov['cities'] ?? array();
+		$vmsb_geo_cells    = $vmsb_geo_cov['cells'] ?? array();
+		$vmsb_geo_totals   = $vmsb_geo_cov['totals'];
+		$vmsb_geo_map_text = '';
+		if ( class_exists( 'VMSB_Geo' ) ) {
+			foreach ( VMSB_Geo::map() as $vmsb_st => $vmsb_ct ) {
+				$vmsb_geo_map_text .= $vmsb_st . ': ' . implode( ', ', $vmsb_ct ) . "\n";
+			}
+		}
+		?>
+
+		<article class="vmsb-card vmsb-card-wide">
+			<div class="vmsb-flex-space" style="margin-bottom:20px;">
+				<div>
+					<h2 style="font-family:var(--serif);">Service &times; City Coverage</h2>
+					<p class="vmsb-note">Every combination of a service you offer and a city you serve. Fill the gaps deliberately &mdash; each cell can only ever become one page.</p>
+				</div>
+				<?php if ( $vmsb_geo_totals['total'] ) : ?>
+					<div style="text-align:right;">
+						<span class="vmsb-tag vmsb-tag-good"><?php echo (int) $vmsb_geo_totals['published']; ?> live</span>
+						<span class="vmsb-tag"><?php echo (int) $vmsb_geo_totals['queued']; ?> queued</span>
+						<span class="vmsb-tag vmsb-tag-warn"><?php echo (int) $vmsb_geo_totals['missing']; ?> open</span>
+					</div>
+				<?php endif; ?>
+			</div>
+
+			<div id="vmsb-geo-map-form" class="vmsb-stack-form" style="max-width:100%; margin-bottom:26px;">
+				<label>State and city map <small>(one state per line &mdash; <code>State: City, City</code>)</small></label>
+				<textarea name="map" rows="5" placeholder="Uttar Pradesh: Noida, Ghaziabad, Lucknow&#10;Delhi: New Delhi, Dwarka"><?php echo esc_textarea( $vmsb_geo_map_text ); ?></textarea>
+				<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="geo-save-map" data-vmsb-form="vmsb-geo-map-form">Save Map</button>
+			</div>
+
+			<?php if ( ! $vmsb_geo_services ) : ?>
+				<p class="vmsb-note">No services defined yet. Add them to your business profile in <a href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-settings' ) ); ?>">Settings</a> &mdash; they form the rows of this matrix.</p>
+			<?php elseif ( ! $vmsb_geo_cities ) : ?>
+				<p class="vmsb-note">Add your states and cities above to build the matrix.</p>
+			<?php else : ?>
+				<div class="vmsb-table-wrap" style="overflow-x:auto;">
+					<table class="vmsb-table vmsb-table-full">
+						<thead>
+							<tr>
+								<th style="min-width:190px;">Service</th>
+								<?php foreach ( $vmsb_geo_cities as $vmsb_c ) : ?>
+									<th style="text-align:center; white-space:nowrap;" title="<?php echo esc_attr( $vmsb_c['state'] ); ?>"><?php echo esc_html( $vmsb_c['city'] ); ?></th>
+								<?php endforeach; ?>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $vmsb_geo_services as $vmsb_s ) : ?>
+								<tr>
+									<td><strong><?php echo esc_html( $vmsb_s ); ?></strong></td>
+									<?php foreach ( $vmsb_geo_cities as $vmsb_c ) :
+										$vmsb_cell = $vmsb_geo_cells[ VMSB_Geo::uid( $vmsb_s, $vmsb_c['city'] ) ] ?? array( 'status' => 'missing', 'post_id' => 0 );
+										$vmsb_mark = array( 'published' => '&#9679;', 'queued' => '&#9673;', 'missing' => '&#9675;' );
+										$vmsb_tone = array( 'published' => 'var(--good)', 'queued' => 'var(--gold)', 'missing' => 'var(--line)' );
+									?>
+										<td style="text-align:center;" title="<?php echo esc_attr( $vmsb_s . ' in ' . $vmsb_c['city'] . ' - ' . $vmsb_cell['status'] ); ?>">
+											<?php if ( 'published' === $vmsb_cell['status'] && $vmsb_cell['post_id'] ) : ?>
+												<a href="<?php echo esc_url( get_edit_post_link( $vmsb_cell['post_id'] ) ); ?>" style="color:<?php echo $vmsb_tone['published']; ?>; font-size:15px; text-decoration:none;"><?php echo $vmsb_mark['published']; ?></a>
+											<?php else : ?>
+												<span style="color:<?php echo $vmsb_tone[ $vmsb_cell['status'] ]; ?>; font-size:15px;"><?php echo $vmsb_mark[ $vmsb_cell['status'] ]; ?></span>
+											<?php endif; ?>
+										</td>
+									<?php endforeach; ?>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+				<p class="vmsb-note" style="margin-top:12px;">
+					<span style="color:var(--good);">&#9679;</span> published &nbsp;
+					<span style="color:var(--gold);">&#9673;</span> queued &nbsp;
+					<span style="color:var(--line);">&#9675;</span> not covered
+				</p>
+
+				<div id="vmsb-geo-expand-form" class="vmsb-stack-form" style="max-width:100%; margin-top:24px; padding-top:22px; border-top:1px solid var(--line);">
+					<h3 style="margin:0 0 4px;">Fill the gaps</h3>
+					<p class="vmsb-note">New pages arrive as suggestions for your approval, never straight into production.</p>
+					<label>Service</label>
+					<select name="service">
+						<option value="">All services</option>
+						<?php foreach ( $vmsb_geo_services as $vmsb_s ) : ?>
+							<option value="<?php echo esc_attr( $vmsb_s ); ?>"><?php echo esc_html( $vmsb_s ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<label>State</label>
+					<select name="state">
+						<option value="">All states</option>
+						<?php foreach ( VMSB_Geo::states() as $vmsb_st ) : ?>
+							<option value="<?php echo esc_attr( $vmsb_st ); ?>"><?php echo esc_html( $vmsb_st ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<label>How many <small>(max <?php echo (int) VMSB_Geo::MAX_PER_RUN; ?> per run)</small></label>
+					<input type="number" name="limit" value="10" min="1" max="<?php echo (int) VMSB_Geo::MAX_PER_RUN; ?>">
+					<button class="vmsb-btn vmsb-btn-gold" data-vmsb="geo-expand" data-vmsb-form="vmsb-geo-expand-form">Queue Location Pages</button>
+				</div>
+			<?php endif; ?>
 		</article>
 	</div>
 

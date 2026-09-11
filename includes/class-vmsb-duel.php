@@ -3,7 +3,13 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Competitive Content Duel.
- * Compares current post against top-ranking competitors and fixes gaps.
+ *
+ * Asks the model to reason about what top-ranking competitors for this
+ * keyword are likely doing better, then fixes the gaps it names - there is
+ * no SERP scrape or competitor page fetch behind this (see the comment in
+ * duel() below). Treat "gaps" as an AI-reasoned hypothesis grounded in the
+ * Brain's own knowledge graph and market intelligence, not a measured
+ * comparison against the competitor's actual content.
  */
 class VMSB_Duel {
 

@@ -58,14 +58,28 @@ class VMSB_Health {
 
 		// Cron actually firing - if the last daily/weekly run is stale, God
 		// Mode looks idle even though it's "enabled".
-		$last_daily = (int) get_option( 'vmsb_last_daily_run', 0 );
-		$stale      = $last_daily && ( time() - $last_daily ) > 2 * DAY_IN_SECONDS;
+		$last_daily   = (int) get_option( 'vmsb_last_daily_run', 0 );
+		$stale        = $last_daily && ( time() - $last_daily ) > 2 * DAY_IN_SECONDS;
+		$cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
+
+		$cron_detail = '';
+		if ( $last_daily > 0 ) {
+			$cron_detail = sprintf( 'Last ran %s.', human_time_diff( $last_daily ) . ' ago' );
+			if ( $stale ) {
+				$cron_detail .= $cron_disabled
+					? ' Stale: System cron (/wp-cron.php) appears inactive.'
+					: ' Stale: Site needs traffic or a real server cron setup.';
+			}
+		} else {
+			$cron_detail = $cron_disabled
+				? 'Awaiting system cron (/wp-cron.php).'
+				: 'Has not run yet - WP-Cron needs site visits or a system cron job.';
+		}
+
 		$checks['cron'] = array(
 			'label'  => 'Autonomous cycle',
 			'ok'     => ! $stale && $last_daily > 0,
-			'detail' => $last_daily
-				? sprintf( 'Last ran %s.', human_time_diff( $last_daily ) . ' ago' )
-				: 'Has not run yet - WP-Cron may need a visit trigger or a real cron trigger.',
+			'detail' => $cron_detail,
 		);
 
 		// Vector index freshness.
@@ -138,12 +152,30 @@ class VMSB_Health {
 		// AI Link Genius Pro Integration
 		if ( class_exists( 'AILG_Core' ) ) {
 			global $wpdb;
-			$broken_links = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ailg_broken_links WHERE status = 'broken'" );
-			$pending_links = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ailg_suggestions WHERE status = 'pending'" );
+			$broken_links  = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ailg_broken_links WHERE status = 'broken'" );
+			$pending_links = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ailg_suggestions WHERE status = 'pending'" );
+
+			// 'ok' answers "is this component working", not "is the site's
+			// content perfect" - which is the question every other check on
+			// this screen answers (Google: connected? AI: responding? cron:
+			// scheduled?). Keying it off the broken-link count instead meant a
+			// fully operational integration reported itself as FAILED, and
+			// because overall_ok() returns false if any single check is falsy,
+			// two broken links anywhere on the site pinned the plugin's entire
+			// health status to unhealthy until a human chased down every one.
+			// Broken links are a content finding, raised by a component that
+			// is working exactly as intended - they belong in the detail line,
+			// and they are already reported through the Fixer/Issues screen.
+			// A NULL from get_var(), by contrast, means the table is missing:
+			// that is a genuine component failure.
+			$tables_ok = ( null !== $broken_links && null !== $pending_links );
+
 			$checks['link_genius'] = array(
 				'label'  => 'AI Link Genius Pro',
-				'ok'     => $broken_links === 0,
-				'detail' => "Active. {$pending_links} pending suggestions. " . ( $broken_links > 0 ? "{$broken_links} broken links detected!" : "Internal linking is healthy." ),
+				'ok'     => $tables_ok,
+				'detail' => $tables_ok
+					? "Active. " . (int) $pending_links . " pending suggestions. " . ( (int) $broken_links > 0 ? (int) $broken_links . " broken links to review." : "Internal linking is healthy." )
+					: 'Installed, but its tables are missing - try deactivating and reactivating AI Link Genius Pro.',
 			);
 		}
 
@@ -191,10 +223,17 @@ class VMSB_Health {
 	public static function record_failure() {
 		$f = (int) get_option( 'vmsb_consecutive_failures', 0 ) + 1;
 		update_option( 'vmsb_consecutive_failures', $f );
-		if ( $f >= 5 ) {
-			VMSB_Settings::update( array( 'god_mode' => 0 ) );
-			( new VMSB_Logger() )->error( 'health', 'Circuit Breaker triggered: God Mode disabled due to 5 consecutive failures.' );
+
+		if ( $f < 5 ) {
+			return;
 		}
+
+		if ( ! (int) VMSB_Settings::get( 'god_mode' ) ) {
+			return;
+		}
+
+		VMSB_Settings::update( array( 'god_mode' => 0 ) );
+		( new VMSB_Logger() )->error( 'health', 'Circuit Breaker triggered: God Mode disabled after ' . $f . ' consecutive failures.' );
 	}
 
 	public static function reset_failures() {

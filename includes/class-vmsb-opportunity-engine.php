@@ -86,13 +86,22 @@ class VMSB_Opportunity_Engine {
 		$found = array();
 
 		foreach ( $striking as $kw ) {
+			$position = (float) $kw->position;
+			// Closer to position 4 is a genuinely easier, higher-payoff
+			// climb to Top 3 than closer to position 20 - was a flat 75
+			// regardless of whether this was position 5 or position 19.
+			$impact = round( max( 40, 100 - ( $position * 3 ) ) );
+			// More impressions is more evidence this keyword is real,
+			// steady demand rather than a one-off blip.
+			$confidence = min( 0.95, 0.6 + ( min( (int) $kw->impressions, 2000 ) / 2000 ) * 0.35 );
+
 			$found[] = array(
 				'type'           => 'UPDATE_CONTENT',
 				'target'         => get_the_title($kw->post_id),
 				'object_id'      => $kw->post_id,
-				'reason'         => "Striking distance: Position {$kw->position} for keyword '{$kw->keyword}'.",
-				'impact'         => 75,
-				'confidence'     => 0.8,
+				'reason'         => "Striking distance: Position {$kw->position} for keyword '{$kw->keyword}' ({$kw->impressions} impressions).",
+				'impact'         => $impact,
+				'confidence'     => round( $confidence, 2 ),
 				'business_value' => 1.2,
 				'effort'         => 1.0,
 				'recommended'    => 'Deep refresh to reclaim Top 3.'
@@ -104,32 +113,77 @@ class VMSB_Opportunity_Engine {
 	private function scan_decay() {
 		$lifecycle = new VMSB_Lifecycle();
 		$report = $lifecycle->audit_all_assets();
+		$google  = new VMSB_Google();
 		$found = array();
 
-		// Priority 1: Decaying (Losing Clicks)
+		// Priority 1: Decaying (Losing Clicks). Every one of these used to
+		// get impact=85 flat, whether the underlying drop was 31% or 90% -
+		// audit_all_assets() only returns post IDs bucketed by stage, not
+		// the magnitude that put them there, so re-check the real current-
+		// vs-previous ratio directly (bounded to the same 5-candidate slice
+		// as before, so this can't become an unbounded per-post API loop).
 		foreach ( array_slice($report['decaying'] ?? array(), 0, 5) as $id ) {
+			$drop_pct = null;
+			$url = get_permalink( $id );
+			if ( $url && $google->is_connected() ) {
+				$now  = $google->gsc_page_metrics( $url, 28, 0 );
+				$prev = $google->gsc_page_metrics( $url, 28, 29 );
+				if ( ! is_wp_error( $now ) && ! is_wp_error( $prev ) && (int) $prev['clicks'] > 0 ) {
+					$drop_pct = round( ( 1 - ( $now['clicks'] / $prev['clicks'] ) ) * 100 );
+				}
+			}
+
+			if ( null !== $drop_pct ) {
+				$impact     = round( min( 95, max( 55, 40 + $drop_pct ) ) );
+				$confidence = 0.9;
+				$reason     = "Click decay: -{$drop_pct}% vs. the prior 28-day window.";
+			} else {
+				// Couldn't re-verify the real ratio (GSC unreachable, or
+				// this run) - proceed on the classifier's bucket alone but
+				// say so honestly rather than presenting a guess as measured.
+				$impact     = 70;
+				$confidence = 0.6;
+				$reason     = 'Flagged as decaying by the lifecycle classifier; exact drop % unavailable this run.';
+			}
+
 			$found[] = array(
 				'type'           => 'REFRESH_DECAYING_CONTENT',
 				'target'         => get_the_title($id),
 				'object_id'      => $id,
-				'reason'         => "Significant click decay detected (>30% drop).",
-				'impact'         => 85,
-				'confidence'     => 0.9,
+				'reason'         => $reason,
+				'impact'         => $impact,
+				'confidence'     => $confidence,
 				'business_value' => 1.1,
 				'effort'         => 0.8,
 				'recommended'    => 'Inject fresh intelligence to stop the slide.'
 			);
 		}
 
-		// Priority 2: Underperforming (Low CTR)
+		// Priority 2: Underperforming (Low CTR). Same reasoning: re-check
+		// the real current CTR/impressions for these specific candidates
+		// instead of a flat impact regardless of how far under 1% they are.
 		foreach ( array_slice($report['underperforming'] ?? array(), 0, 5) as $id ) {
+			$url = get_permalink( $id );
+			$metrics = ( $url && $google->is_connected() ) ? $google->gsc_page_metrics( $url, 28, 0 ) : null;
+
+			if ( $metrics && ! is_wp_error( $metrics ) && $metrics['impressions'] > 0 ) {
+				$ctr_pct    = round( $metrics['ctr'] * 100, 2 );
+				$impact     = round( min( 90, max( 50, 60 + ( ( 500 + $metrics['impressions'] ) / 100 ) ) ) );
+				$confidence = 0.85;
+				$reason     = "High reach ({$metrics['impressions']} impressions) but {$ctr_pct}% click-through rate.";
+			} else {
+				$impact     = 65;
+				$confidence = 0.6;
+				$reason     = 'Flagged as low-CTR by the lifecycle classifier; exact numbers unavailable this run.';
+			}
+
 			$found[] = array(
 				'type'           => 'IMPROVE_CTR',
 				'target'         => get_the_title($id),
 				'object_id'      => $id,
-				'reason'         => "High reach but <1% click-through rate.",
-				'impact'         => 70,
-				'confidence'     => 0.8,
+				'reason'         => $reason,
+				'impact'         => $impact,
+				'confidence'     => $confidence,
 				'business_value' => 1.0,
 				'effort'         => 0.4,
 				'recommended'    => 'Run a surgical CTR title/meta experiment.'
@@ -152,13 +206,19 @@ class VMSB_Opportunity_Engine {
 
 			// If sessions are high but conversions are 0
 			if ( $data['sessions'] > 100 && $data['conversions'] === 0 ) {
+				// More sessions converting to zero is a bigger, more
+				// confidently-real leak than one just over the 100
+				// threshold - was a flat 85/0.75 either way.
+				$impact     = round( min( 95, 70 + ( min( $data['sessions'], 2000 ) / 100 ) ) );
+				$confidence = min( 0.9, 0.65 + ( min( $data['sessions'], 1000 ) / 1000 ) * 0.25 );
+
 				$found[] = array(
 					'type'           => 'ADD_SENTIENT_CTA',
 					'target'         => get_the_title($post_id),
 					'object_id'      => $post_id,
 					'reason'         => "High traffic ({$data['sessions']} sessions) but 0 conversions.",
-					'impact'         => 85,
-					'confidence'     => 0.75,
+					'impact'         => $impact,
+					'confidence'     => round( $confidence, 2 ),
 					'business_value' => 2.0, // High ROI potential
 					'effort'         => 0.5, // Quick fix
 					'recommended'    => 'Inject a surgical CTA matched to search intent.'
@@ -212,12 +272,18 @@ class VMSB_Opportunity_Engine {
 			$post_ids = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->prefix}vmsb_keywords WHERE keyword = %s", $dupe->keyword ) );
 			if ( count($post_ids) < 2 ) continue;
 
+			// 2 pages splitting a query's authority is a real but modest
+			// problem; 5+ pages fighting over the same query is much worse
+			// - was a flat 80 either way.
+			$competing_count = count( $post_ids );
+			$impact = round( min( 95, 65 + ( ( $competing_count - 2 ) * 10 ) ) );
+
 			$found[] = array(
 				'type'           => 'CONSOLIDATE_CONTENT',
 				'target'         => $dupe->keyword,
 				'object_id'      => $post_ids[0], // Primary post candidate
-				'reason'         => "Cannibalization detected: Multiple pages competing for '{$dupe->keyword}'.",
-				'impact'         => 80,
+				'reason'         => "Cannibalization detected: {$competing_count} pages competing for '{$dupe->keyword}'.",
+				'impact'         => $impact,
 				'confidence'     => 0.85,
 				'business_value' => 1.3,
 				'effort'         => 2.5,
@@ -251,13 +317,21 @@ class VMSB_Opportunity_Engine {
 			}
 
 			if ( ! empty($missing_features) ) {
+				// Missing one of three trust signals is a smaller gap than
+				// missing all of them - was a flat 85 either way. Real
+				// fetched-page blueprints (see VMSB_SERP) also carry more
+				// weight than the AI-estimate fallback.
+				$missing_count = count( $missing_features );
+				$impact        = round( min( 92, 65 + ( $missing_count * 10 ) ) );
+				$confidence    = ( 'fetched_pages' === ( $blueprint['source'] ?? '' ) ) ? 0.9 : 0.7;
+
 				$found[] = array(
 					'type'           => 'ADD_TACTICAL_FEATURES',
 					'target'         => $post->post_title,
 					'object_id'      => $kw->post_id,
 					'reason'         => "Tactical Deficit: Top 3 results use features we lack: " . implode(', ', $missing_features),
-					'impact'         => 85,
-					'confidence'     => 0.9,
+					'impact'         => $impact,
+					'confidence'     => $confidence,
 					'business_value' => 1.2,
 					'effort'         => 1.0,
 					'recommended'    => "Inject " . implode(' and ', $missing_features) . " to reclaim competitive parity.",

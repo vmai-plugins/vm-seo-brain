@@ -289,10 +289,33 @@ class VMSB_AI_Router {
 		VMSB_Health::record_failure(); // Circuit Breaker
 		$this->log->error( 'ai', 'Every provider in the chain failed.', $errors );
 
-		$primary = VMSB_Settings::get('ai_primary');
-		$error_detail = isset($errors[$primary]) ? $errors[$primary] : 'Unknown error';
+		// Report what was actually attempted, with the reason each one gave.
+		//
+		// This used to read $errors[ ai_primary ] no matter which providers had
+		// run. On a single-provider call - which is exactly what the per-provider
+		// "Test" button in Settings issues, via $args['provider'] - the primary
+		// is usually not in $errors at all, so the message named a provider that
+		// was never contacted and reported "Unknown error" for it. Testing
+		// Gemini produced "Primary provider (aipuffer) reported: Unknown error",
+		// discarding the real Gemini failure and pointing the operator at the
+		// wrong credential entirely.
+		if ( empty( $errors ) ) {
+			return $this->fail( 'Connection Failed. No AI provider was available to try - check the Primary Intelligence and Resilience Chain settings.' );
+		}
 
-		return $this->fail( "Connection Failed. Primary provider ({$primary}) reported: {$error_detail}. Ensure your API keys are correct and you have saved settings." );
+		$parts = array();
+		foreach ( $errors as $failed_provider => $failed_reason ) {
+			$parts[] = $failed_provider . ': ' . $failed_reason;
+		}
+
+		$detail = implode( ' | ', $parts );
+
+		if ( 1 === count( $errors ) ) {
+			$only = array_key_first( $errors );
+			return $this->fail( "Connection Failed. {$only} reported: {$errors[ $only ]}" );
+		}
+
+		return $this->fail( "Connection Failed. Every provider tried failed - {$detail}" );
 	}
 
 	private function get_chain( $args ) {
@@ -305,11 +328,24 @@ class VMSB_AI_Router {
 		$fallbacks  = (array) VMSB_Settings::get( 'ai_fallbacks' );
 		$full_chain = array_merge( array( $primary ), $fallbacks );
 
-		// Advanced 2026 Routing: Efficiency-First
+		// Advanced 2026 Routing: Efficiency-First.
+		//
+		// The Gemini tiers used to pin hardcoded model IDs here -
+		// 'gemini-1.5-flash' for cheap, 'gemini-2.0-flash' for premium - which
+		// silently overrode whatever the admin had configured. Model IDs are
+		// perishable: Google retired gemini-2.0-flash and started answering
+		// with "This model models/gemini-2.0-flash is no longer available...
+		// use models/gemini-3.6-flash". So an operator who had already
+		// corrected gemini_model in Settings to a live model still had every
+		// cheap and premium call forced onto the dead one, with no setting
+		// anywhere that could fix it. The configured model is the only Gemini
+		// ID known to be valid for this account, so use it.
+		$gemini_model = VMSB_Settings::get( 'gemini_model' );
+
 		if ( 'cheap' === $complexity ) {
 			// Fast, high-throughput models for simple audits
-			if ( VMSB_Settings::get( 'gemini_key' ) ) {
-				$full_chain = array_merge( array( array( 'gemini', 'gemini-1.5-flash' ) ), $full_chain );
+			if ( VMSB_Settings::get( 'gemini_key' ) && $gemini_model ) {
+				$full_chain = array_merge( array( array( 'gemini', $gemini_model ) ), $full_chain );
 			} elseif ( VMSB_Settings::get( 'openai_key' ) ) {
 				$full_chain = array_merge( array( array( 'openai', 'gpt-4o-mini' ) ), $full_chain );
 			}
@@ -318,9 +354,9 @@ class VMSB_AI_Router {
 		if ( 'premium' === $complexity ) {
 			// Deep reasoning models for long-form content
 			if ( VMSB_Settings::get( 'openrouter_key' ) ) {
-				$full_chain = array_merge( array( array( 'openrouter', 'anthropic/claude-3.5-sonnet' ) ), $full_chain );
-			} elseif ( VMSB_Settings::get( 'gemini_key' ) ) {
-				$full_chain = array_merge( array( array( 'gemini', 'gemini-2.0-flash' ) ), $full_chain );
+				$full_chain = array_merge( array( array( 'openrouter', VMSB_Settings::get( 'openrouter_model' ) ) ), $full_chain );
+			} elseif ( VMSB_Settings::get( 'gemini_key' ) && $gemini_model ) {
+				$full_chain = array_merge( array( array( 'gemini', $gemini_model ) ), $full_chain );
 			}
 		}
 
@@ -678,11 +714,25 @@ class VMSB_AI_Router {
 		$namespaces = array( 'aipkit/v1', 'mwai/v1', 'wpaicg/v1', 'aipuffer/v1' );
 		$last_error = 'Unknown error';
 
+		$direct_error = '';
+
 		if ( $is_local ) {
 			// 100% Compatibility: Try Direct Class Bridge first to bypass REST/HTTP issues.
 			$direct = $this->call_aipkit_direct( $prompt, $args, $bot_id );
 			if ( $direct && ! empty($direct['ok']) ) {
 				return $direct;
+			}
+
+			// Keep the direct bridge's reason. It talks to AI Power's own classes,
+			// so when it fails it reports the actual upstream cause - "Google API
+			// Error (HTTP 404): Model 'nvidia/openai/gpt-oss-20b' not found",
+			// "quota exceeded", an expired key. That was being thrown away: the
+			// code fell through to REST probing and returned whatever the last
+			// namespace said, which for a working AI Power install is always
+			// "No route was found", so the operator was told to fix their REST
+			// API when the real problem was a misconfigured model on the bot.
+			if ( is_array( $direct ) && ! empty( $direct['error'] ) ) {
+				$direct_error = $direct['error'];
 			}
 
 			// Early diagnostic: If in local mode, we must have a compatible bridge plugin.
@@ -750,12 +800,12 @@ class VMSB_AI_Router {
 					$rel_suffix = '/generate';
 					$url = rtrim( $ns_url, '/' ) . $rel_suffix;
 					$request_body = array(
-						'provider' => strtolower($args['provider'] ?: 'openai'),
-						'model'    => $args['forced_model'] ?: 'gpt-4o-mini',
+						'provider' => strtolower( ! empty( $args['provider'] ) ? $args['provider'] : 'openai' ),
+						'model'    => ! empty( $args['forced_model'] ) ? $args['forced_model'] : 'gpt-4o-mini',
 						'messages' => $this->messages( $prompt, $args ),
 						'ai_params'=> array(
-							'temperature' => $args['temperature'],
-							'max_completion_tokens' => $args['max_tokens']
+							'temperature' => $args['temperature'] ?? 0.7,
+							'max_completion_tokens' => $args['max_tokens'] ?? 2000,
 						),
 						'aipkit_api_key' => $key
 					);
@@ -778,7 +828,7 @@ class VMSB_AI_Router {
 				}
 			}
 
-			if ( $is_local ) {
+			if ( $is_local && class_exists( 'WP_REST_Request' ) && function_exists( 'rest_do_request' ) ) {
 				// For local, use the internal path. Built directly from the known
 				// namespace + suffix rather than reverse-parsing $url - stripping
 				// "wp-json/" out of $url silently produced a bogus route whenever
@@ -797,6 +847,7 @@ class VMSB_AI_Router {
 				$request->set_param( 'aipkit_api_key', $key );
 				$request->set_param( 'message', $prompt );
 				$request->set_param( 'bot_id', $bot_id );
+
 
 				$response = rest_do_request( $request );
 				if ( ! is_wp_error( $response ) && ! $response->is_error() ) {
@@ -822,6 +873,14 @@ class VMSB_AI_Router {
 				return $this->extract_aipuffer_reply( $res['data'], $args['forced_model'] ?? 'aipuffer' );
 			}
 			$last_error = $res['error'] . ' (' . $url . ')';
+		}
+
+		// The direct bridge's error outranks anything the REST probing produced.
+		// A local AI Power install answers the direct call authoritatively; the
+		// namespace loop after it is only a compatibility fallback, and its
+		// "no route" result says nothing about why the real call failed.
+		if ( '' !== $direct_error ) {
+			return $this->fail( 'AI Puffer (direct bridge): ' . $direct_error );
 		}
 
 		if ( strpos( $last_error, 'No route was found' ) !== false ) {
@@ -1026,6 +1085,34 @@ class VMSB_AI_Router {
 		return $text ? $this->ok( $text, $model, $usage ) : $this->fail( 'Ollama returned nothing.' );
 	}
 
+	/**
+	 * OmniRoute (self-hosted AI gateway, https://github.com/diegosouzapw/OmniRoute)
+	 * exposes an OpenAI-compatible /v1/chat/completions endpoint, so this is the
+	 * same request/response shape as call_openai() - only the base URL, key and
+	 * default model differ. Already used for images/video (see
+	 * VMSB_Image_Engine::from_omniroute(), VMSB_Video_Agent::generate_pack());
+	 * this adds it as a selectable text provider too.
+	 */
+	private function call_omniroute( $prompt, $args ) {
+		$url = VMSB_Settings::omniroute_base();
+		$key = VMSB_Settings::get( 'omniroute_key' );
+		if ( ! $url || ! $key ) {
+			return $this->fail( 'OmniRoute is not configured.' );
+		}
+		$model = isset( $args['forced_model'] ) ? $args['forced_model'] : VMSB_Settings::get( 'omniroute_text_model', 'auto' );
+		$body = array(
+			'model'       => $model,
+			'messages'    => $this->messages( $prompt, $args ),
+			'temperature' => (float) $args['temperature'],
+			'max_tokens'  => (int) $args['max_tokens'],
+		);
+		if ( $args['json'] ) {
+			$body['response_format'] = array( 'type' => 'json_object' );
+		}
+		$res = $this->post( $url . '/v1/chat/completions', $body, array( 'Authorization' => 'Bearer ' . $key ) );
+		return $this->from_openai_shape( $res, $model );
+	}
+
 	/* ---------------------------------------------------------------- plumbing */
 
 	private function messages( $prompt, $args ) {
@@ -1045,8 +1132,16 @@ class VMSB_AI_Router {
 			'body'       => wp_json_encode( $body ),
 		);
 
-		// Intelligence: Auto-disable SSL verify for .local or placeholder sites
-		if ( VMSB_Settings::get( 'insecure_ssl' ) || strpos($url, '.local') !== false || strpos($url, 'your-aipuffer-host') !== false ) {
+		// SSL verification is skipped only via the explicit admin toggle now.
+		// A ".local" substring match used to also silently disable it - but
+		// ".local" is a real, valid TLD used for actual production
+		// hostnames on some networks (mDNS/Bonjour), not just self-signed
+		// dev boxes, so that match could turn off certificate validation on
+		// a real endpoint with no warning to the admin. The placeholder
+		// check is kept: 'your-aipuffer-host' is a specific string this
+		// plugin's own default ships, not something a real URL could
+		// contain by accident.
+		if ( VMSB_Settings::get( 'insecure_ssl' ) || strpos($url, 'your-aipuffer-host') !== false ) {
 			$args['sslverify'] = false;
 		}
 

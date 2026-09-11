@@ -151,7 +151,13 @@ class VMSB_Task_Runner {
 		if ( $rows ) {
 			$ids = wp_list_pluck( $rows, 'id' );
 			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'running', ran_at = %s WHERE id IN ({$placeholders})", $now, $ids ) );
+			// prepare() only spreads an array into individual placeholder
+			// values when that array is the SOLE argument after the query -
+			// mixing a direct scalar ($now) with an array ($ids) here meant
+			// $ids was passed as one positional value instead of one per id,
+			// so the placeholder count (1 + count($ids)) never matched the
+			// argument count (2) for any batch with more than one row.
+			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'running', ran_at = %s WHERE id IN ({$placeholders})", array_merge( array( $now ), $ids ) ) );
 		}
 
 		$wpdb->query( 'COMMIT' );
@@ -160,6 +166,18 @@ class VMSB_Task_Runner {
 
 		$log = new VMSB_Logger();
 		$ran = 0;
+		// Populated below with one array( id, task, ok, message ) entry per
+		// task actually attempted - this used to be declared, returned as
+		// 'results', and never once written to, so every caller reading it
+		// (the WP-CLI `wp vmsb run` command in particular) got an
+		// eternally-empty array. Its own foreach then iterated the WRONG
+		// level entirely - over process()'s wrapper array( 'ran' =>...,
+		// 'results' =>... ) itself rather than this list - producing
+		// "Undefined array key" warnings on every run (int/array values
+		// have no 'ok'/'task' keys) and, whenever the batch-lock's
+		// 'skipped' string got iterated too, a fatal "Cannot access offset
+		// of type string on string". 1,480+ warnings and 16 fatals logged
+		// in production from this single bug.
 		$results = array();
 		$start_time = time();
 
@@ -215,6 +233,7 @@ class VMSB_Task_Runner {
 				if ( is_wp_error($res) ) {
 					self::handle_failure( $row, $res->get_error_message() );
 					self::log_event( $row->id, 'Execution failed', $res->get_error_message() );
+					$results[] = array( 'id' => $row->id, 'task' => $row->task_type, 'ok' => false, 'message' => $res->get_error_message() );
 				} else {
 					$wpdb->update( $table, array(
 						'status'   => 'done',
@@ -228,11 +247,13 @@ class VMSB_Task_Runner {
 					), array( 'id' => $row->id ) );
 					$log->info( 'task_runner', "Task Success: {$row->task_type} (#{$row->id})." );
 					self::log_event( $row->id, 'Task completed', 'Operation successful.' );
+					$results[] = array( 'id' => $row->id, 'task' => $row->task_type, 'ok' => true, 'message' => 'Operation successful.' );
 				}
 			} catch ( \Throwable $e ) {
 				self::handle_failure( $row, $e->getMessage() );
 				$log->error( 'task_runner', "Task Exception in {$row->task_type}: " . $e->getMessage() );
 				self::log_event( $row->id, 'Execution exception', $e->getMessage() );
+				$results[] = array( 'id' => $row->id, 'task' => $row->task_type, 'ok' => false, 'message' => $e->getMessage() );
 			}
 
 			$longest = max( $longest, time() - $task_started );
@@ -452,7 +473,22 @@ class VMSB_Task_Runner {
 			case 'link_rebalance':   return ( new VMSB_Link_Flow() )->rebalance();
 			case 'content_duel':     return ( new VMSB_Duel() )->duel_random();
 			case 'self_heal':        return ( new VMSB_Healer() )->heal_losses();
-			case 'auto_fix_queue':   return ( new VMSB_Fixer() )->god_fix( 10 );
+			case 'auto_fix_queue':
+				// Re-check the kill switch at execution time, not just when the
+				// scheduler queued this at 03:00. God Mode can be turned off
+				// between those two moments - by hand, or by the health circuit
+				// breaker, which disables it precisely because the AI chain has
+				// started failing. Without this the breaker was advisory only:
+				// the already-queued pass still ran, letting an unreliable AI
+				// make unattended edits to live posts, which is the exact thing
+				// the breaker exists to stop. god_fix() itself is deliberately
+				// left ungated - the REST route behind the manual "Run God Fix"
+				// button is an explicit human action and must still work with
+				// God Mode off.
+				if ( ! (int) VMSB_Settings::get( 'god_mode' ) ) {
+					return array( 'fixed' => 0, 'skipped' => true, 'message' => 'God Mode is off - skipping the queued fix pass.' );
+				}
+				return ( new VMSB_Fixer() )->god_fix( 10 );
 			case 'monitor_decay':    return ( new VMSB_Decay() )->monitor( 10 );
 			case 'news_scout':       return ( new VMSB_News() )->scout( 5 );
 			case 'social_recycle':   return ( new VMSB_Social_Recycler() )->process_recent( 5 );

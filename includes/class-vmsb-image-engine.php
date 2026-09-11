@@ -66,6 +66,12 @@ class VMSB_Image_Engine {
 
 		$prompt = $this->build_prompt( $subject, $meta );
 		$chain  = (array) VMSB_Settings::get( 'image_chain' );
+
+		// 2026 Optimization: OmniRoute takes priority for Elite/Self-Hosted setups
+		if ( VMSB_Settings::get( 'omniroute_url' ) && ! in_array( 'omniroute', $chain, true ) ) {
+			array_unshift( $chain, 'omniroute' );
+		}
+
 		$errors = array();
 
 		foreach ( $chain as $provider ) {
@@ -395,8 +401,63 @@ class VMSB_Image_Engine {
 	}
 
 	/**
+	 * OmniRoute (self-hosted images + video) - see call_aipkit_image_direct()
+	 * below for the actual AI Power/AIPKit direct bridge; this docblock was
+	 * previously attached here instead, describing the wrong method.
+	 */
+	private function from_omniroute( $prompt, $subject, $meta ) {
+		$url = VMSB_Settings::omniroute_base();
+		$key = VMSB_Settings::get( 'omniroute_key' );
+
+		if ( ! $url || ! $key ) {
+			return new WP_Error( 'vmsb_omniroute', 'OmniRoute is not configured.' );
+		}
+
+		$model = VMSB_Settings::get( 'omniroute_image_model', 'flux' );
+		$size  = (int) VMSB_Settings::get( 'image_width', 1200 ) . 'x' . (int) VMSB_Settings::get( 'image_height', 675 );
+
+		$body = array(
+			'prompt'          => $prompt,
+			'model'           => $model,
+			'size'            => $size,
+			'response_format' => 'b64_json',
+		);
+
+		$res = wp_remote_post( $url . '/v1/images/generations', array(
+			'timeout' => 120,
+			'headers' => array(
+				'Content-Type'  => 'application/json',
+				'Authorization' => 'Bearer ' . $key,
+			),
+			'body' => wp_json_encode( $body ),
+		) );
+
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+
+		$code = wp_remote_retrieve_response_code( $res );
+		$data = json_decode( wp_remote_retrieve_body( $res ), true );
+
+		if ( $code !== 200 ) {
+			return new WP_Error( 'vmsb_omniroute', $data['error']['message'] ?? 'HTTP ' . $code );
+		}
+
+		if ( ! empty( $data['data'][0]['b64_json'] ) ) {
+			return base64_decode( $data['data'][0]['b64_json'] );
+		}
+
+		if ( ! empty( $data['data'][0]['url'] ) ) {
+			return $this->fetch_bytes( $data['data'][0]['url'] );
+		}
+
+		return new WP_Error( 'vmsb_omniroute', 'No image data in OmniRoute response.' );
+	}
+
+	/**
 	 * Direct Zero-Distance Bridge for AI Power / AIPKit (Images).
-	 * Bypasses HTTP/REST for 100% compatibility when on the same server.
+	 * Bypasses HTTP/REST for 100% compatibility when on the same server -
+	 * signature verified against the installed AIPKit_Image_Manager.
 	 */
 	private function call_aipkit_image_direct( $prompt, $provider, $model, $size ) {
 		if ( ! class_exists('\WPAICG\Images\AIPKit_Image_Manager') ) return null;
@@ -491,6 +552,96 @@ class VMSB_Image_Engine {
 	/**
 	 * Write bytes into the media library with SEO-clean naming and alt text.
 	 */
+	/**
+	 * Resize to the configured dimensions and re-encode at a sane weight.
+	 *
+	 * Deliberately conservative in three ways. It never upscales - enlarging a
+	 * small render just adds bytes to a soft image. It keeps PNG as PNG when
+	 * the source has transparency, because flattening an alpha channel onto
+	 * white is a visible, unrecoverable change. And it returns null rather
+	 * than an error whenever anything is unavailable or the result comes out
+	 * larger than the original, so the caller simply keeps the bytes it had.
+	 *
+	 * @return array{bytes:string,mime:string}|null
+	 */
+	private function optimise( $bytes, $mime ) {
+		if ( ! function_exists( 'wp_get_image_editor' ) ) {
+			return null;
+		}
+
+		$max_w   = max( 320, (int) VMSB_Settings::get( 'image_width', 1200 ) );
+		$max_h   = max( 320, (int) VMSB_Settings::get( 'image_height', 675 ) );
+		$quality = min( 100, max( 40, (int) VMSB_Settings::get( 'image_quality', 82 ) ) );
+
+		// wp_get_image_editor() needs a file, not a string.
+		$tmp = wp_tempnam( 'vmsb-img' );
+		if ( ! $tmp || false === file_put_contents( $tmp, $bytes ) ) {
+			return null;
+		}
+
+		$editor = wp_get_image_editor( $tmp );
+		if ( is_wp_error( $editor ) ) {
+			@unlink( $tmp );
+			return null;
+		}
+
+		$size = $editor->get_size();
+		$editor->set_quality( $quality );
+
+		// Only shrink, and only when the source actually exceeds the target.
+		if ( ! empty( $size['width'] ) && ! empty( $size['height'] )
+			&& ( $size['width'] > $max_w || $size['height'] > $max_h ) ) {
+			$editor->resize( $max_w, $max_h, false ); // false = fit inside, keep aspect
+		}
+
+		// A PNG carrying transparency stays a PNG. Anything else becomes JPEG,
+		// which is universally supported and far lighter for the photographic
+		// output these models produce. WebP is deliberately not forced: support
+		// depends on the host's GD/Imagick build, and a silent failure here
+		// would cost the image entirely.
+		$target = ( 'image/png' === $mime && $this->has_alpha( $bytes ) ) ? 'image/png' : 'image/jpeg';
+
+		$saved = $editor->save( null, $target );
+		@unlink( $tmp );
+
+		if ( is_wp_error( $saved ) || empty( $saved['path'] ) || ! file_exists( $saved['path'] ) ) {
+			return null;
+		}
+
+		$out = file_get_contents( $saved['path'] );
+		@unlink( $saved['path'] );
+
+		if ( false === $out || '' === $out || strlen( $out ) >= strlen( $bytes ) ) {
+			return null; // no saving to be had - keep the original
+		}
+
+		return array(
+			'bytes' => $out,
+			'mime'  => ! empty( $saved['mime-type'] ) ? $saved['mime-type'] : $target,
+		);
+	}
+
+	/**
+	 * Does this PNG use its alpha channel?
+	 *
+	 * Byte 25 of the IHDR chunk is the colour type; 4 (greyscale+alpha) and 6
+	 * (RGB+alpha) carry transparency, and 3 (palette) may via a tRNS chunk.
+	 * Read from the header rather than by decoding the whole image, which for
+	 * a 3 MB render is a needless allocation just to answer a yes/no.
+	 */
+	private function has_alpha( $bytes ) {
+		if ( strlen( $bytes ) < 26 || "\x89PNG" !== substr( $bytes, 0, 4 ) ) {
+			return false;
+		}
+
+		$colour_type = ord( $bytes[25] );
+		if ( in_array( $colour_type, array( 4, 6 ), true ) ) {
+			return true;
+		}
+
+		return 3 === $colour_type && false !== strpos( substr( $bytes, 0, 4096 ), 'tRNS' );
+	}
+
 	private function sideload( $bytes, $subject, $meta, $provider ) {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/media.php';
@@ -514,6 +665,29 @@ class VMSB_Image_Engine {
 		}
 		$mime = $info['mime'];
 		$ext  = $mime_ext_map[ $mime ];
+
+		// Nothing optimised these bytes before now: whatever the provider
+		// returned went into the library as-is. That matters more here than in
+		// a normal media upload, because these are machine-generated at volume
+		// - image models answer at their own native size and format, commonly
+		// a 1024x1024 or 1792x1024 PNG weighing 1.5-3 MB, and a PNG of a
+		// photographic scene is several times the size of the same image as
+		// JPEG or WebP. Published three posts a day with a featured image and
+		// inline images each, that is the plugin steadily filling the media
+		// library with oversized files and dragging down the LCP of the very
+		// pages it exists to rank.
+		//
+		// wp_get_image_editor() uses whichever backend the host actually has
+		// (Imagick, then GD) and returns WP_Error when neither can help, so a
+		// host without image support degrades to the original bytes rather
+		// than failing the upload.
+		$optimised = $this->optimise( $bytes, $mime );
+		if ( $optimised ) {
+			$bytes = $optimised['bytes'];
+			$mime  = $optimised['mime'];
+			$ext   = $mime_ext_map[ $mime ] ?? $ext;
+		}
+
 		$filename = mb_substr($clean_slug, 0, 50) . '-' . wp_rand( 100, 999 ) . '.' . $ext;
 
 		$upload = wp_upload_bits( $filename, null, $bytes );

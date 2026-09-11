@@ -2,9 +2,8 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Production Bucket — VM SEO Brain X.
- *
- * Jobs: Queue Management, Content Factory, Task Execution, Approvals.
+ * Content Engine Hub — VM SEO Brain.
+ * Unifies Editorial Pipeline, Topic Discovery & Gaps, Approvals, Queue, and Agent Fleet.
  */
 
 $vmsb_content_engine = new VMSB_Content();
@@ -12,179 +11,128 @@ $vmsb_fleet          = VMSB_Strategist::fleet_status();
 
 global $wpdb;
 
-// Only tasks a human can still act on. This used to select every row in
-// the table with no status filter, so the "Work Queue" listed 50 finished
-// jobs while the tab counted only genuinely queued ones - the tab read
-// "Work Queue (0)" above a table of 50 rows, each with a Cancel button
-// that would have hard-deleted a completed history record.
+// Pending counts
+$vmsb_queue_count = (int) $wpdb->get_var(
+	"SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_tasks WHERE status IN ('queued', 'running', 'retrying')"
+);
+$vmsb_failed_count = (int) $wpdb->get_var(
+	"SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_tasks WHERE status = 'failed'"
+);
+$vmsb_pending_count = (int) $wpdb->get_var(
+	"SELECT COUNT(*) FROM {$wpdb->prefix}vmsb_plan WHERE status IN ('planned', 'approved', 'writing')"
+);
+$vmsb_approvals_count = $vmsb_content_engine->pending_reviews_count();
+$vmsb_approvals       = $vmsb_content_engine->pending_reviews( 50 );
+
+// Tasks list
 $vmsb_queue = $wpdb->get_results(
 	"SELECT * FROM {$wpdb->prefix}vmsb_tasks
 	 WHERE status IN ('queued', 'running', 'retrying', 'failed')
-	 ORDER BY FIELD(status, 'failed', 'running', 'retrying', 'queued'), score DESC, queued_at DESC
+	 ORDER BY FIELD(status, 'running', 'retrying', 'queued', 'failed'), score DESC, queued_at DESC
 	 LIMIT 50"
 );
-$vmsb_queue_count = count( $vmsb_queue );
 
-// Finished work, shown separately so it can't be mistaken for a backlog.
-$vmsb_recent_done = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}vmsb_tasks
-	 WHERE status = 'done' ORDER BY id DESC LIMIT 15"
-);
-
-$vmsb_pending_posts = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}vmsb_plan WHERE status IN ('planned', 'approved', 'writing') ORDER BY priority DESC");
-
-// Drafted rewrites waiting on a human yes/no. The Approvals tab below used
-// to be a hardcoded "No actions currently require approval" message that
-// said the same thing whether or not anything was actually waiting - this
-// is the same source the Issues screen already reviews from.
-$vmsb_approvals = $vmsb_content_engine->pending_reviews( 50 );
-
+// Active Tab determination
+$active_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'pipeline';
+if ( ! in_array( $active_tab, array( 'pipeline', 'discovery', 'approvals', 'queue', 'agents' ), true ) ) {
+	$active_tab = 'pipeline';
+}
 ?>
+
+<div class="vmsb-content-hub">
 	<header class="vmsb-head">
 		<div>
-			<p class="vmsb-eyebrow">Editorial & Background Work</p>
-			<h1>Production Hub</h1>
-			<p class="vmsb-sub">Managing the mass production of authority and technical improvements.</p>
+			<p class="vmsb-eyebrow">Autonomous Publishing & Editorial</p>
+			<h1>Content Engine</h1>
+			<p class="vmsb-sub">Discover keyword gaps, schedule authority content, and monitor automated writing pipelines.</p>
 		</div>
 		<div class="vmsb-head-actions">
-			<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="tasks-process">Process Queue Now</button>
-			<button class="vmsb-btn vmsb-btn-gold" data-vmsb="approve-all" data-confirm="Approve all planned posts?">Approve All Posts</button>
+			<button type="button" class="vmsb-btn vmsb-btn-ghost" data-vmsb="plan" data-body='{"count":5}'>⚡ Plan 5 Topics</button>
+			<button type="button" class="vmsb-btn vmsb-btn-ghost" data-vmsb="pull-sheet">Sync Sheet</button>
+			<button type="button" class="vmsb-btn vmsb-btn-gold" data-vmsb="tasks-process" data-body='{"limit":3}'>Run Production Batch</button>
 		</div>
 	</header>
 	<span class="wp-header-end"></span>
 
-	<div class="vmsb-tabs" style="margin-top:30px;">
-		<button class="vmsb-tab is-active" data-tab="queue">⚙️ Work Queue (<?php echo (int)$vmsb_queue_count; ?>)</button>
-		<button class="vmsb-tab" data-tab="content">🏭 Content Factory (<?php echo count($vmsb_pending_posts); ?>)</button>
-		<button class="vmsb-tab" data-tab="approvals">✅ Approvals (<?php echo count($vmsb_approvals); ?>)</button>
+	<!-- NAVIGATION TABS -->
+	<div class="vmsb-tabs" style="margin-top: 24px;">
+		<button type="button" class="vmsb-tab <?php echo $active_tab === 'pipeline' ? 'is-active' : ''; ?>" data-tab="pipeline">
+			📝 Editorial Pipeline (<?php echo (int) $vmsb_pending_count; ?>)
+		</button>
+		<button type="button" class="vmsb-tab <?php echo $active_tab === 'discovery' ? 'is-active' : ''; ?>" data-tab="discovery">
+			💡 Topic Discovery & Gaps
+		</button>
+		<button type="button" class="vmsb-tab <?php echo $active_tab === 'approvals' ? 'is-active' : ''; ?>" data-tab="approvals">
+			✅ Approvals & Reviews <?php if ( $vmsb_approvals_count > 0 ) : ?><span class="vmsb-badge" style="background:var(--gold); color:#000; padding:2px 6px; border-radius:10px; font-size:10px; margin-left:4px; font-weight:800;"><?php echo (int) $vmsb_approvals_count; ?></span><?php endif; ?>
+		</button>
+		<button type="button" class="vmsb-tab <?php echo $active_tab === 'queue' ? 'is-active' : ''; ?>" data-tab="queue">
+			⚙️ Work Queue (<?php echo (int) $vmsb_queue_count; ?>)
+		</button>
+		<button type="button" class="vmsb-tab <?php echo $active_tab === 'agents' ? 'is-active' : ''; ?>" data-tab="agents">
+			🤖 Agent Fleet
+		</button>
 	</div>
 
-	<!-- WORK QUEUE -->
-	<div class="vmsb-panel is-active" data-panel="queue">
-		<article class="vmsb-card vmsb-card-wide">
-			<div class="vmsb-flex-space" style="margin-bottom:20px;">
-				<h2 style="font-family:var(--serif);">Autonomous Task Queue</h2>
-				<div style="display:flex; gap:10px;">
-					<span class="vmsb-tag vmsb-tag-gold"><?php echo (int)$vmsb_fleet['running']; ?> Running</span>
-					<span class="vmsb-tag"><?php echo (int)$vmsb_fleet['queued']; ?> Queued</span>
-				</div>
-			</div>
-
-			<div class="vmsb-table-wrap">
-				<table class="vmsb-table vmsb-table-full">
-					<thead>
-						<tr>
-							<th>Priority</th>
-							<th>Task Type</th>
-							<th>Reason / Target</th>
-							<th>Status</th>
-							<th>Progress / Attempts</th>
-							<th>Actions</th>
-						</tr>
-					</thead>
-					<tbody>
-						<?php if ( empty($vmsb_queue) ) : ?>
-							<tr><td colspan="6" class="vmsb-note">Nothing waiting or failed. Strategist will queue more work during the next cycle.</td></tr>
-						<?php else :
-							foreach ( $vmsb_queue as $task ) :
-						?>
-							<tr class="status-<?php echo esc_attr($task->status); ?>">
-								<td><span class="vmsb-tag vmsb-tag-gold" style="font-weight:800;"><?php echo (float)$task->score; ?></span></td>
-								<td><strong><?php echo esc_html(VMSB_Strategist::agent_label($task->task_type)); ?></strong></td>
-								<td>
-									<p style="font-size:13px; margin:0;"><?php echo esc_html($task->reason); ?></p>
-								</td>
-								<td>
-									<span class="vmsb-tag <?php echo $task->status === 'done' ? 'vmsb-tag-good' : ($task->status === 'failed' ? 'vmsb-tag-crit' : 'vmsb-tag-blue'); ?>">
-										<?php echo esc_html(strtoupper($task->status)); ?>
-									</span>
-								</td>
-								<td>
-									<?php if ($task->status === 'running') : ?>
-										<div class="vmsb-bar" style="width:60px; height:6px;"><span class="vmsb-bar-fill-animate" style="width:75%; background:var(--gold);"></span></div>
-									<?php else : ?>
-										<span class="vmsb-note"><?php echo (int)(isset($task->attempts) ? $task->attempts : 0); ?> / <?php echo (int)(isset($task->max_attempts) ? $task->max_attempts : 3); ?></span>
-									<?php endif; ?>
-								</td>
-								<td class="vmsb-row-actions">
-									<button class="vmsb-mini-btn" data-vmsb-task-view="<?php echo (int)$task->id; ?>">View</button>
-									<?php if ( in_array( $task->status, array( 'failed', 'retrying' ), true ) ) : ?>
-										<button class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="task-retry" data-id="<?php echo (int)$task->id; ?>">Retry</button>
-									<?php endif; ?>
-									<button class="vmsb-mini-btn" data-vmsb="task-cancel" data-id="<?php echo (int)$task->id; ?>">Cancel</button>
-								</td>
-							</tr>
-						<?php endforeach; endif; ?>
-					</tbody>
-				</table>
-			</div>
-		</article>
-
-		<?php if ( $vmsb_recent_done ) : ?>
-		<article class="vmsb-card vmsb-card-wide" style="margin-top:24px;">
-			<div class="vmsb-flex-space" style="margin-bottom:16px;">
-				<h2 style="font-family:var(--serif); font-size:18px;">Recently Completed</h2>
-				<span class="vmsb-note">Last <?php echo count($vmsb_recent_done); ?> finished tasks — history, not a backlog.</span>
-			</div>
-			<div class="vmsb-table-wrap">
-				<table class="vmsb-table vmsb-table-full">
-					<thead><tr><th>Task Type</th><th>Reason / Target</th><th>Attempts</th><th></th></tr></thead>
-					<tbody>
-						<?php foreach ( $vmsb_recent_done as $vmsb_done_task ) : ?>
-							<tr>
-								<td><strong><?php echo esc_html(VMSB_Strategist::agent_label($vmsb_done_task->task_type)); ?></strong></td>
-								<td><p style="font-size:13px; margin:0;"><?php echo esc_html($vmsb_done_task->reason); ?></p></td>
-								<td><span class="vmsb-note"><?php echo (int)(isset($vmsb_done_task->attempts) ? $vmsb_done_task->attempts : 0); ?></span></td>
-								<td class="vmsb-row-actions">
-									<button class="vmsb-mini-btn" data-vmsb-task-view="<?php echo (int)$vmsb_done_task->id; ?>">View</button>
-								</td>
-							</tr>
-						<?php endforeach; ?>
-					</tbody>
-				</table>
-			</div>
-		</article>
-		<?php endif; ?>
-	</div>
-
-	<!-- CONTENT FACTORY -->
-	<div class="vmsb-panel" data-panel="content">
+	<!-- TAB 1: EDITORIAL PIPELINE -->
+	<div class="vmsb-panel <?php echo $active_tab === 'pipeline' ? 'is-active' : ''; ?>" data-panel="pipeline">
 		<?php
-		if (!defined('VMSB_NESTED')) define('VMSB_NESTED', true);
+		if ( ! defined( 'VMSB_NESTED' ) ) define( 'VMSB_NESTED', true );
 		include VMSB_DIR . 'admin/views/pipeline.php';
 		?>
 	</div>
 
-	<!-- APPROVALS -->
-	<div class="vmsb-panel" data-panel="approvals">
+	<!-- TAB 2: TOPIC DISCOVERY & GAPS -->
+	<div class="vmsb-panel <?php echo $active_tab === 'discovery' ? 'is-active' : ''; ?>" data-panel="discovery">
+		<?php include VMSB_DIR . 'admin/views/growth.php'; ?>
+	</div>
+
+	<!-- TAB 3: APPROVALS & REVIEWS -->
+	<div class="vmsb-panel <?php echo $active_tab === 'approvals' ? 'is-active' : ''; ?>" data-panel="approvals">
 		<article class="vmsb-card vmsb-card-wide">
-			<h2 style="font-family:var(--serif); margin-bottom:6px;">Awaiting Human Approval</h2>
-			<p class="vmsb-note" style="margin-bottom:20px;">Rewrites the Brain has drafted against live pages. Nothing here is published until you approve it.</p>
+			<div class="vmsb-flex-space" style="margin-bottom: 20px;">
+				<div>
+					<h2 style="font-family: var(--serif); margin: 0 0 4px;">Articles Awaiting Review</h2>
+					<p class="vmsb-note" style="margin: 0;">Drafted content and suggested revisions parked for your sign-off.</p>
+				</div>
+				<?php if ( ! empty( $vmsb_approvals ) ) : ?>
+					<button type="button" class="vmsb-btn vmsb-btn-gold vmsb-btn-sm" data-vmsb="approve-all">Approve All Pending</button>
+				<?php endif; ?>
+			</div>
 
 			<?php if ( empty( $vmsb_approvals ) ) : ?>
-				<div class="vmsb-empty" style="padding:60px 0; text-align:center;">
-					<p class="vmsb-note">No actions currently require approval.</p>
+				<div class="vmsb-empty-state">
+					<div class="vmsb-empty-icon">🎉</div>
+					<h3 class="vmsb-empty-title">All Caught Up!</h3>
+					<p class="vmsb-empty-desc">No drafts or rewrites are currently waiting for approval. New pieces produced in Assisted Mode will appear here.</p>
 				</div>
 			<?php else : ?>
 				<div class="vmsb-table-wrap">
 					<table class="vmsb-table vmsb-table-full">
-						<thead><tr><th>Page</th><th>Why it was rewritten</th><th class="vmsb-row-actions">Actions</th></tr></thead>
+						<thead>
+							<tr>
+								<th>Article / Topic</th>
+								<th>Primary Keyword</th>
+								<th>Proposed Changes / Summary</th>
+								<th>Quality Score</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
 						<tbody>
-							<?php foreach ( $vmsb_approvals as $vmsb_ap ) : ?>
+							<?php foreach ( $vmsb_approvals as $app ) :
+								$post_id = (int) $app['post_id'];
+								$score = (int) get_post_meta( $post_id, '_vmsb_quality_score', true ) ?: 85;
+							?>
 								<tr>
 									<td>
-										<strong><?php echo esc_html( $vmsb_ap['title'] ); ?></strong>
-										<div style="margin-top:4px;">
-											<a href="<?php echo esc_url( $vmsb_ap['edit_url'] ); ?>" class="vmsb-note">Edit</a>
-											<span class="vmsb-note"> · </span>
-											<a href="<?php echo esc_url( $vmsb_ap['view_url'] ); ?>" class="vmsb-note" target="_blank" rel="noopener">View live</a>
-										</div>
+										<strong><?php echo esc_html( $app['title'] ); ?></strong>
+										<br><a href="<?php echo esc_url( get_edit_post_link( $post_id ) ); ?>" target="_blank" class="vmsb-link" style="font-size: 11px;">Edit in WordPress ↗</a>
 									</td>
-									<td><p class="vmsb-note" style="max-width:420px; margin:0;"><?php echo esc_html( $vmsb_ap['reason'] ?: 'No reason recorded.' ); ?></p></td>
+									<td><span class="vmsb-tag"><?php echo esc_html( $app['primary_keyword'] ); ?></span></td>
+									<td><p class="vmsb-note" style="margin: 0; max-width: 320px;"><?php echo esc_html( $app['summary'] ?? 'Full article drafted and ready for review.' ); ?></p></td>
+									<td><span class="vmsb-tag vmsb-tag-good">Score: <?php echo (int) $score; ?>/100</span></td>
 									<td class="vmsb-row-actions">
-										<button class="vmsb-mini-btn" data-vmsb-pending-view="<?php echo (int) $vmsb_ap['post_id']; ?>">Preview draft</button>
-										<button class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="pending-approve" data-body='{"post_id":<?php echo (int) $vmsb_ap['post_id']; ?>}' data-confirm="Publish this drafted rewrite to the live page?">Approve</button>
-										<button class="vmsb-mini-btn" data-vmsb="pending-reject" data-body='{"post_id":<?php echo (int) $vmsb_ap['post_id']; ?>}' data-confirm="Discard this draft? The issue will reopen.">Reject</button>
+										<button type="button" class="vmsb-mini-btn vmsb-btn-gold" data-vmsb="pending-approve" data-body='{"post_id":<?php echo (int) $post_id; ?>}'>Approve & Publish</button>
+										<button type="button" class="vmsb-mini-btn" data-vmsb="pending-reject" data-body='{"post_id":<?php echo (int) $post_id; ?>}'>Reject</button>
 									</td>
 								</tr>
 							<?php endforeach; ?>
@@ -195,17 +143,72 @@ $vmsb_approvals = $vmsb_content_engine->pending_reviews( 50 );
 		</article>
 	</div>
 
-	<div id="vmsb-output" class="vmsb-output" hidden></div>
+	<!-- TAB 4: WORK QUEUE -->
+	<div class="vmsb-panel <?php echo $active_tab === 'queue' ? 'is-active' : ''; ?>" data-panel="queue">
+		<article class="vmsb-card vmsb-card-wide">
+			<div class="vmsb-flex-space" style="margin-bottom: 20px;">
+				<div>
+					<h2 style="font-family: var(--serif); margin: 0 0 4px;">Background Task Queue</h2>
+					<p class="vmsb-note" style="margin: 0;">Autonomous jobs scheduled across the strategist, writers, indexers, and healers.</p>
+				</div>
+				<button type="button" class="vmsb-btn vmsb-btn-ghost vmsb-btn-sm" data-vmsb="tasks-process" data-body='{"limit":5}'>Drain Queue Now</button>
+			</div>
 
-<style>
-.status-running { background: rgba(201, 162, 39, 0.03); }
-.vmsb-bar-fill-animate {
-	display: block; height: 100%;
-	animation: vmsb-progress-pulse 2s infinite;
-}
-@keyframes vmsb-progress-pulse {
-	0% { opacity: 0.6; }
-	50% { opacity: 1; }
-	100% { opacity: 0.6; }
-}
-</style>
+			<?php if ( empty( $vmsb_queue ) ) : ?>
+				<div class="vmsb-empty-state">
+					<div class="vmsb-empty-icon">☕</div>
+					<h3 class="vmsb-empty-title">Queue is Quiet</h3>
+					<p class="vmsb-empty-desc">No tasks are currently running or waiting in the background. The scheduler will automatically enqueue the next batch.</p>
+				</div>
+			<?php else : ?>
+				<div class="vmsb-table-wrap">
+					<table class="vmsb-table vmsb-table-full">
+						<thead>
+							<tr>
+								<th>Task</th>
+								<th>Priority Score</th>
+								<th>Status</th>
+								<th>Reason / Context</th>
+								<th>Queued</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $vmsb_queue as $t ) : ?>
+								<tr>
+									<td><strong><?php echo esc_html( VMSB_Strategist::agent_label( $t->task_type ) ); ?></strong></td>
+									<td><span class="vmsb-tag vmsb-tag-gold"><?php echo round( (float) $t->score, 1 ); ?></span></td>
+									<td>
+										<?php if ( $t->status === 'running' ) : ?>
+											<span class="vmsb-tag vmsb-tag-good">● Running</span>
+										<?php elseif ( $t->status === 'failed' ) : ?>
+											<span class="vmsb-tag vmsb-tag-crit">Failed (<?php echo (int) $t->attempts; ?>)</span>
+										<?php else : ?>
+											<span class="vmsb-tag">Queued</span>
+										<?php endif; ?>
+									</td>
+									<td><p class="vmsb-note" style="margin: 0; max-width: 280px;"><?php echo esc_html( $t->reason ); ?></p></td>
+									<td><span class="vmsb-note"><?php echo esc_html( human_time_diff( strtotime( $t->queued_at ) ) ); ?> ago</span></td>
+									<td class="vmsb-row-actions">
+										<?php if ( $t->status === 'failed' ) : ?>
+											<button type="button" class="vmsb-mini-btn" data-vmsb="task-retry" data-id="<?php echo (int) $t->id; ?>">Retry</button>
+										<?php else : ?>
+											<button type="button" class="vmsb-mini-btn" data-vmsb="task-cancel" data-id="<?php echo (int) $t->id; ?>">Cancel</button>
+										<?php endif; ?>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+			<?php endif; ?>
+		</article>
+	</div>
+
+	<!-- TAB 5: AGENT FLEET -->
+	<div class="vmsb-panel <?php echo $active_tab === 'agents' ? 'is-active' : ''; ?>" data-panel="agents">
+		<?php include VMSB_DIR . 'admin/views/agents.php'; ?>
+	</div>
+
+	<div id="vmsb-output" class="vmsb-output" hidden></div>
+</div>

@@ -6,11 +6,22 @@ $google  = new VMSB_Google();
 $brain   = new VMSB_Brain();
 $profile = $brain->profile();
 $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
+
+$active_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'identity';
+if ( ! in_array( $active_tab, array( 'identity', 'ai-images', 'google', 'autonomy', 'license', 'appearance', 'webhooks' ), true ) ) {
+	$active_tab = 'identity';
+}
 ?>
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Configuration</p>
 			<h1>Settings</h1>
+			<p class="vmsb-sub">Manage API connections, Business DNA, Google Cloud integrations, and autonomy guardrails.</p>
+		</div>
+		<div class="vmsb-head-actions">
+			<a href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-wizard' ) ); ?>" class="vmsb-btn vmsb-btn-ghost">
+				⚡ Launch Setup Wizard
+			</a>
 		</div>
 	</header>
 	<span class="wp-header-end"></span>
@@ -36,12 +47,13 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 
 	<div class="vmsb-settings-layout">
 		<aside class="vmsb-settings-nav">
-			<button class="vmsb-nav-item is-active" data-tab="identity">🏢 Business DNA</button>
-			<button class="vmsb-nav-item" data-tab="ai-images">🤖 AI & Visuals</button>
-			<button class="vmsb-nav-item" data-tab="google">🌐 Google Cloud</button>
-			<button class="vmsb-nav-item" data-tab="autonomy">⚡ God Mode</button>
-			<button class="vmsb-nav-item" data-tab="appearance">🎨 Appearance</button>
-			<button class="vmsb-nav-item" data-tab="webhooks">🔌 Webhooks</button>
+			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'identity' ? 'is-active' : ''; ?>" data-tab="identity">🏢 Business DNA</button>
+			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'ai-images' ? 'is-active' : ''; ?>" data-tab="ai-images">🤖 AI & Visuals</button>
+			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'google' ? 'is-active' : ''; ?>" data-tab="google">🌐 Google Cloud</button>
+			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'autonomy' ? 'is-active' : ''; ?>" data-tab="autonomy">⚡ God Mode</button>
+			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'license' ? 'is-active' : ''; ?>" data-tab="license">💳 License & Plans</button>
+			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'appearance' ? 'is-active' : ''; ?>" data-tab="appearance">🎨 Appearance</button>
+			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'webhooks' ? 'is-active' : ''; ?>" data-tab="webhooks">🔌 Webhooks</button>
 		</aside>
 
 		<div class="vmsb-settings-panels">
@@ -49,7 +61,7 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 				<?php wp_nonce_field( 'vmsb_save_settings', 'vmsb_settings_nonce' ); ?>
 
 				<!-- IDENTITY PANEL -->
-				<section class="vmsb-panel is-active" data-panel="identity">
+				<section class="vmsb-panel <?php echo $active_tab === 'identity' ? 'is-active' : ''; ?>" data-panel="identity">
 					<section class="vmsb-fieldset">
 						<h2>Business Identity</h2>
 						<p class="vmsb-note">The brain anchors all content generation to these core definitions.</p>
@@ -68,7 +80,7 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 				</section>
 
 				<!-- AI & IMAGES PANEL -->
-				<section class="vmsb-panel" data-panel="ai-images">
+				<section class="vmsb-panel <?php echo $active_tab === 'ai-images' ? 'is-active' : ''; ?>" data-panel="ai-images">
 					<section class="vmsb-fieldset">
 						<div class="vmsb-fieldset-head">
 							<h2>AI Intelligence Chain</h2>
@@ -94,14 +106,21 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 						<div class="vmsb-form-grid">
 							<label>Primary Intelligence
 								<select name="<?php echo esc_attr( $field( 'ai_primary' ) ); ?>">
-									<?php foreach ( array( 'aipuffer' => 'AI Puffer', 'openrouter' => 'OpenRouter', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'ollama' => 'Ollama' ) as $k => $label ) : ?>
+									<?php foreach ( array( 'aipuffer' => 'AI Puffer', 'openrouter' => 'OpenRouter', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'ollama' => 'Ollama', 'omniroute' => 'OmniRoute' ) as $k => $label ) : ?>
 										<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $s['ai_primary'], $k ); ?>><?php echo esc_html( $label ); ?></option>
 									<?php endforeach; ?>
 								</select>
 							</label>
 							<label class="vmsb-full">Resilience Chain (Fallbacks)
 								<span class="vmsb-checks">
-									<?php foreach ( array( 'openrouter', 'gemini', 'openai', 'ollama' ) as $k ) : ?>
+									<?php
+								// aipuffer belongs here too. It was selectable as
+								// Primary but absent from the fallback list, so a
+								// site running any other provider as primary had no
+								// way to fall back to AI Puffer - on this install
+								// the single most reliable provider configured.
+								foreach ( array( 'aipuffer', 'openrouter', 'gemini', 'openai', 'ollama', 'omniroute' ) as $k ) :
+								?>
 										<label><input type="checkbox" name="<?php echo esc_attr( $field( 'ai_fallbacks' ) ); ?>[]" value="<?php echo esc_attr( $k ); ?>" <?php checked( in_array( $k, (array) $s['ai_fallbacks'], true ) ); ?>> <?php echo esc_html( ucfirst($k) ); ?></label>
 									<?php endforeach; ?>
 								</span>
@@ -209,8 +228,13 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 								</span>
 							</label>
 							<label>House Photography Style<input type="text" name="<?php echo esc_attr( $field( 'image_style' ) ); ?>" value="<?php echo esc_attr( $s['image_style'] ); ?>" placeholder="Professional 35mm photography, soft lighting"></label>
+							<label>Image Width<input type="number" name="<?php echo esc_attr( $field( 'image_width' ) ); ?>" value="<?php echo esc_attr( $s['image_width'] ); ?>" min="0"></label>
+							<label>Image Height<input type="number" name="<?php echo esc_attr( $field( 'image_height' ) ); ?>" value="<?php echo esc_attr( $s['image_height'] ); ?>" min="0"></label>
 
 							<label>Pexels Key<input type="password" name="<?php echo esc_attr( $field( 'pexels_key' ) ); ?>" value="<?php echo esc_attr( $s['pexels_key'] ); ?>" autocomplete="new-password"></label>
+
+							<label>Pollinations URL<input type="url" name="<?php echo esc_attr( $field( 'pollinations_url' ) ); ?>" value="<?php echo esc_attr( $s['pollinations_url'] ); ?>"></label>
+							<label>Pollinations Model<input type="text" name="<?php echo esc_attr( $field( 'pollinations_model' ) ); ?>" value="<?php echo esc_attr( $s['pollinations_model'] ); ?>"></label>
 
 							<label>Hugging Face Key<input type="password" name="<?php echo esc_attr( $field( 'huggingface_key' ) ); ?>" value="<?php echo esc_attr( $s['huggingface_key'] ); ?>" autocomplete="new-password"></label>
 							<label>Hugging Face Model<input type="text" name="<?php echo esc_attr( $field( 'huggingface_model' ) ); ?>" value="<?php echo esc_attr( $s['huggingface_model'] ); ?>"></label>
@@ -219,8 +243,26 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<label>Cloudflare API Token<input type="password" name="<?php echo esc_attr( $field( 'cloudflare_api_token' ) ); ?>" value="<?php echo esc_attr( $s['cloudflare_api_token'] ); ?>" autocomplete="new-password"></label>
 							<label>Cloudflare Model<input type="text" name="<?php echo esc_attr( $field( 'cloudflare_model' ) ); ?>" value="<?php echo esc_attr( $s['cloudflare_model'] ); ?>"></label>
 
-							<label>Google Imagen Key<input type="password" name="<?php echo esc_attr( $field( 'gemini_key' ) ); ?>" value="<?php echo esc_attr( $s['gemini_key'] ); ?>" autocomplete="new-password">
-								<small class="vmsb-note">Shared with Gemini AI. Uses Imagen 3.</small>
+							<?php
+							/*
+							 * Display only - deliberately NO name attribute.
+							 *
+							 * This was a second <input name="vmsb[gemini_key]">,
+							 * identical to the real Gemini Key field in the AI
+							 * section above. Two inputs sharing one name means the
+							 * browser posts both and PHP keeps only the LAST, so
+							 * this box silently overwrote whatever was typed up
+							 * there. Since it rendered the mask for an
+							 * already-stored key, every save sent the mask - which
+							 * the save handler correctly skips as "field left
+							 * untouched". The result: typing a Gemini key into the
+							 * Gemini Key field did nothing at all, with the form
+							 * still reporting "saved".
+							 */
+							?>
+							<label>Google Imagen Key
+								<input type="password" value="<?php echo esc_attr( $s['gemini_key'] ); ?>" autocomplete="new-password" readonly disabled>
+								<small class="vmsb-note">Shared with Gemini AI - set it in the <strong>Gemini Key</strong> field under Intelligence Routing above. Uses Imagen 3.</small>
 							</label>
 							<label>Google Imagen Model<input type="text" name="<?php echo esc_attr( $field( 'google_imagen_model' ) ); ?>" value="<?php echo esc_attr( $s['google_imagen_model'] ); ?>" placeholder="imagen-3|imagen-3-nano"></label>
 
@@ -230,14 +272,71 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<label>AI Puffer Image Provider<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_image_provider' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_image_provider'] ); ?>" placeholder="openai|google|azure|replicate"></label>
 							<label>AI Puffer Image Model<input type="text" name="<?php echo esc_attr( $field( 'aipuffer_image_model' ) ); ?>" value="<?php echo esc_attr( $s['aipuffer_image_model'] ); ?>"></label>
 
-							<label class="vmsb-full">ComfyUI URL<input type="url" name="<?php echo esc_attr( $field( 'comfy_url' ) ); ?>" value="<?php echo esc_attr( $s['comfy_url'] ); ?>"></label>
-							<label class="vmsb-full">ComfyUI Workflow (JSON)<textarea name="<?php echo esc_attr( $field( 'comfy_workflow' ) ); ?>" rows="5"><?php echo esc_textarea( $s['comfy_workflow'] ); ?></textarea></label>
+							<label class="vmsb-full">ComfyUI URL<input type="url" name="<?php echo esc_attr( $field( 'comfy_url' ) ); ?>" value="<?php echo esc_attr( $s['comfy_url'] ); ?>" disabled placeholder="Not yet connected in this build - see note below"></label>
+							<label class="vmsb-full">ComfyUI Workflow (JSON)<textarea name="<?php echo esc_attr( $field( 'comfy_workflow' ) ); ?>" rows="5" disabled><?php echo esc_textarea( $s['comfy_workflow'] ); ?></textarea></label>
+							<p class="vmsb-note vmsb-full" style="margin:-10px 0 10px;">ComfyUI isn't wired up in the image-generation chain yet - these fields save but nothing reads them. Disabled to avoid the false impression that filling them in turns it on.</p>
+						</div>
+					</section>
+
+					<section class="vmsb-fieldset" style="margin-top:40px;">
+						<h2>OmniRoute (self-hosted images + video)</h2>
+						<p class="vmsb-note" style="margin-bottom:15px;">A self-hosted <a href="https://github.com/diegosouzapw/OmniRoute" target="_blank" rel="noopener">OmniRoute</a> instance. When a URL is set here, it automatically takes priority over the Generation Chain above for image generation - no checkbox needed. It can also be selected as a text provider above (Primary Intelligence / Resilience Chain) since it exposes an OpenAI-compatible chat endpoint.</p>
+						<div class="vmsb-form-grid">
+							<label class="vmsb-full">OmniRoute URL<input type="url" name="<?php echo esc_attr( $field( 'omniroute_url' ) ); ?>" value="<?php echo esc_attr( $s['omniroute_url'] ); ?>" placeholder="https://your-omniroute-host.example.com"></label>
+							<label>OmniRoute API Key<input type="password" name="<?php echo esc_attr( $field( 'omniroute_key' ) ); ?>" value="<?php echo esc_attr( $s['omniroute_key'] ); ?>" autocomplete="new-password"></label>
+							<?php
+							// Live model list pulled from the instance itself. A gateway
+							// fronts hundreds of upstream models and the exact ids are
+							// specific to how that instance is provisioned - "flux" is a
+							// family, not an id, and sending it produces a model-not-found
+							// at generation time with nothing pointing at the cause.
+							$vmsb_omni_all = VMSB_Model_Sync::get_models( 'omniroute' );
+							$vmsb_omni_img = get_option( 'vmsb_models_omniroute_image', array() );
+							?>
+							<label>Text Model
+								<div class="vmsb-input-group">
+									<input type="text" name="<?php echo esc_attr( $field( 'omniroute_text_model' ) ); ?>" value="<?php echo esc_attr( $s['omniroute_text_model'] ); ?>" id="vmsb-omniroute-text-model" placeholder="auto">
+									<button type="button" class="vmsb-mini-btn vmsb-sync-models" data-provider="omniroute">Sync</button>
+									<button type="button" class="vmsb-mini-btn vmsb-test-provider" data-provider="omniroute">Test</button>
+								</div>
+								<select class="vmsb-model-selector" data-target="vmsb-omniroute-text-model" style="<?php echo empty( $vmsb_omni_all ) ? 'display:none;' : ''; ?> margin-top:4px;">
+									<option value="">Select a model...</option>
+									<option value="auto" <?php selected( $s['omniroute_text_model'], 'auto' ); ?>>auto — let OmniRoute route it</option>
+									<?php foreach ( $vmsb_omni_all as $vmsb_m ) : ?>
+										<option value="<?php echo esc_attr( $vmsb_m['id'] ); ?>" <?php selected( $s['omniroute_text_model'], $vmsb_m['id'] ); ?>><?php echo esc_html( $vmsb_m['name'] ); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</label>
+
+							<label>Image Model
+								<input type="text" name="<?php echo esc_attr( $field( 'omniroute_image_model' ) ); ?>" value="<?php echo esc_attr( $s['omniroute_image_model'] ); ?>" id="vmsb-omniroute-image-model" placeholder="e.g. black-forest-labs/flux.1-schnell">
+								<?php if ( $vmsb_omni_img ) : ?>
+									<select class="vmsb-model-selector" data-target="vmsb-omniroute-image-model" style="margin-top:4px;">
+										<option value="">Select an image model...</option>
+										<?php foreach ( $vmsb_omni_img as $vmsb_m ) : ?>
+											<option value="<?php echo esc_attr( $vmsb_m['id'] ); ?>" <?php selected( $s['omniroute_image_model'], $vmsb_m['id'] ); ?>><?php echo esc_html( $vmsb_m['id'] ); ?></option>
+										<?php endforeach; ?>
+									</select>
+									<?php
+									$vmsb_img_ids = wp_list_pluck( $vmsb_omni_img, 'id' );
+									if ( $s['omniroute_image_model'] && ! in_array( $s['omniroute_image_model'], $vmsb_img_ids, true ) ) :
+										?>
+										<small class="vmsb-note" style="color:var(--high); display:block; margin-top:4px;">
+											&#9888; &ldquo;<?php echo esc_html( $s['omniroute_image_model'] ); ?>&rdquo; is not one of the <?php echo count( $vmsb_img_ids ); ?> image models on your instance. Image generation will fail until you pick one above.
+										</small>
+									<?php endif; ?>
+								<?php else : ?>
+									<small class="vmsb-note">Press <strong>Sync</strong> above to load the image models available on your instance.</small>
+								<?php endif; ?>
+							</label>
+
+							<label>Video Model<input type="text" name="<?php echo esc_attr( $field( 'omniroute_video_model' ) ); ?>" value="<?php echo esc_attr( $s['omniroute_video_model'] ); ?>" placeholder="luma-ray"></label>
 						</div>
 					</section>
 				</section>
 
 				<!-- GOOGLE PANEL -->
-				<section class="vmsb-panel" data-panel="google">
+				<section class="vmsb-panel <?php echo $active_tab === 'google' ? 'is-active' : ''; ?>" data-panel="google">
 					<section class="vmsb-fieldset">
 						<h2>Google Cloud Connectivity</h2>
 						<?php if ( $google->is_connected() ) : ?>
@@ -251,6 +350,8 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<label>GSC Property<input type="text" name="<?php echo esc_attr( $field( 'gsc_property' ) ); ?>" value="<?php echo esc_attr( $s['gsc_property'] ); ?>" placeholder="sc-domain:example.com"></label>
 							<label>GA4 ID<input type="text" name="<?php echo esc_attr( $field( 'ga4_property_id' ) ); ?>" value="<?php echo esc_attr( $s['ga4_property_id'] ); ?>"></label>
 							<label>Planning Sheet ID<input type="text" name="<?php echo esc_attr( $field( 'sheet_id' ) ); ?>" value="<?php echo esc_attr( $s['sheet_id'] ); ?>"></label>
+							<label>Planning Sheet Tab<input type="text" name="<?php echo esc_attr( $field( 'sheet_tab' ) ); ?>" value="<?php echo esc_attr( $s['sheet_tab'] ); ?>" placeholder="Pipeline"></label>
+							<label>Bulk Topics Tab<input type="text" name="<?php echo esc_attr( $field( 'bulk_topics_tab' ) ); ?>" value="<?php echo esc_attr( $s['bulk_topics_tab'] ); ?>" placeholder="Bulk Topics"></label>
 						</div>
 						<?php if ( $s['google_client_id'] ) : ?>
 							<a class="vmsb-btn vmsb-btn-gold" style="margin-top:20px;" href="<?php echo esc_url( $google->consent_url() ); ?>"><?php echo $google->is_connected() ? 'Refresh Connection' : 'Authorize Google Access'; ?></a>
@@ -259,7 +360,7 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 				</section>
 
 				<!-- AUTONOMY PANEL -->
-				<section class="vmsb-panel" data-panel="autonomy">
+				<section class="vmsb-panel <?php echo $active_tab === 'autonomy' ? 'is-active' : ''; ?>" data-panel="autonomy">
 					<section class="vmsb-fieldset">
 						<h2>Autonomous God Mode</h2>
 						<p class="vmsb-note">When active, the Brain handles technical debt and content production nightly.</p>
@@ -273,6 +374,35 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<label>Max Auto-Fixes / Day<input type="number" name="<?php echo esc_attr( $field( 'max_god_fixes_day' ) ); ?>" value="<?php echo esc_attr( $s['max_god_fixes_day'] ); ?>" min="0"></label>
 							<label>Treat Content As Stale After (Days)<input type="number" name="<?php echo esc_attr( $field( 'staleness_threshold_days' ) ); ?>" value="<?php echo esc_attr( $s['staleness_threshold_days'] ); ?>" min="0"></label>
 							<label class="vmsb-check"><input type="checkbox" name="<?php echo esc_attr( $field( 'auto_growth_mode' ) ); ?>" value="1" <?php checked( $s['auto_growth_mode'], 1 ); ?>> Auto Growth Mode: scan for new topic suggestions on a daily cadence (still requires your approval before anything gets written)</label>
+							<label class="vmsb-full">God Mode Fix Categories
+								<span class="vmsb-note" style="display:block; margin-bottom:8px;">Which kinds of issues God Mode is allowed to fix automatically. Was DB-only until now - every install ran with the same fixed set with no way to narrow it.</span>
+								<span class="vmsb-checks">
+									<?php
+									/*
+									 * These must stay in step with the families in
+									 * VMSB_Fixer::rule_in_scope(). 'content' and
+									 * 'technical' were live there - with working
+									 * handlers behind them - but missing from this
+									 * list, so no operator could ever switch them
+									 * on. Anything they cover simply never got
+									 * fixed. 'technical' carries the
+									 * accidental-noindex repair, which matters
+									 * more than the rest of this list combined.
+									 */
+									foreach ( array(
+										'meta'           => 'Meta (titles/descriptions)',
+										'alt'            => 'Image Alt Text',
+										'schema'         => 'Structured Data',
+										'internal_links' => 'Internal Linking',
+										'taxonomy'       => 'Taxonomy',
+										'technical'      => 'Technical (noindex, sitemap, site visibility)',
+										'content'        => 'Content rewrites (uses AI, respects Require Review)',
+									) as $vmsb_gk => $vmsb_glabel ) :
+									?>
+										<label><input type="checkbox" name="<?php echo esc_attr( $field( 'god_mode_scope' ) ); ?>[]" value="<?php echo esc_attr( $vmsb_gk ); ?>" <?php checked( in_array( $vmsb_gk, (array) $s['god_mode_scope'], true ) ); ?>> <?php echo esc_html( $vmsb_glabel ); ?></label>
+									<?php endforeach; ?>
+								</span>
+							</label>
 						</div>
 
 						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
@@ -308,6 +438,15 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<div class="vmsb-form-grid">
 								<label>What counts as a conversion?<input type="text" name="<?php echo esc_attr( $field( 'conversion_goal' ) ); ?>" value="<?php echo esc_attr( $s['conversion_goal'] ); ?>" placeholder="e.g. a booking enquiry"></label>
 								<label>CTA Style<input type="text" name="<?php echo esc_attr( $field( 'cta_style' ) ); ?>" value="<?php echo esc_attr( $s['cta_style'] ); ?>"></label>
+								<label>Average CPC ($)<input type="number" step="0.01" name="<?php echo esc_attr( $field( 'avg_cpc' ) ); ?>" value="<?php echo esc_attr( $s['avg_cpc'] ); ?>" min="0">
+									<small class="vmsb-note">Used to value organic traffic in the Boardroom report. The $1.85 default is a generic benchmark - correct it to what a click is actually worth in your market.</small>
+								</label>
+								<label>Default Order Value ($)<input type="number" step="0.01" name="<?php echo esc_attr( $field( 'default_aov' ) ); ?>" value="<?php echo esc_attr( $s['default_aov'] ); ?>" min="0">
+									<small class="vmsb-note">Fallback used for pages with no measured GA4 revenue yet.</small>
+								</label>
+								<label>Default Conversion Rate (%)<input type="number" step="0.1" name="<?php echo esc_attr( $field( 'default_conversion_rate' ) ); ?>" value="<?php echo esc_attr( $s['default_conversion_rate'] ); ?>" min="0" max="100">
+									<small class="vmsb-note">Assumed conversion rate for revenue-opportunity scoring absent real data.</small>
+								</label>
 							</div>
 						</div>
 
@@ -371,6 +510,19 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 							<div class="vmsb-form-grid" style="margin-top:20px;">
 								<label>Programmatic Pages / Day<input type="number" name="<?php echo esc_attr( $field( 'programmatic_daily_cap' ) ); ?>" value="<?php echo esc_attr( $s['programmatic_daily_cap'] ); ?>" min="0"></label>
 							</div>
+
+							<?php
+							// Backlink Outreach above stayed permanently inert even when
+							// checked "on": is_enabled() also requires a from-name and a
+							// valid from-email, and neither had a field anywhere, only a
+							// default of empty string - so the toggle could never
+							// actually turn the feature on, only look like it did.
+							?>
+							<div class="vmsb-form-grid" style="margin-top:20px;">
+								<label>Outreach From Name<input type="text" name="<?php echo esc_attr( $field( 'outreach_from_name' ) ); ?>" value="<?php echo esc_attr( $s['outreach_from_name'] ); ?>" placeholder="Required for Backlink Outreach to actually send"></label>
+								<label>Outreach From Email<input type="email" name="<?php echo esc_attr( $field( 'outreach_from_email' ) ); ?>" value="<?php echo esc_attr( $s['outreach_from_email'] ); ?>" placeholder="you@yourdomain.com"></label>
+								<label>Outreach Tone<input type="text" name="<?php echo esc_attr( $field( 'outreach_tone' ) ); ?>" value="<?php echo esc_attr( $s['outreach_tone'] ); ?>" placeholder="brief, human, no hype"></label>
+							</div>
 						</div>
 
 						<div style="margin-top: 30px; padding: 25px; background: rgba(0,0,0,0.03); border-radius: 12px; border: 1px solid var(--line);">
@@ -394,8 +546,49 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 					</section>
 				</section>
 
+				<!-- LICENSE & PLANS PANEL -->
+				<section class="vmsb-panel <?php echo $active_tab === 'license' ? 'is-active' : ''; ?>" data-panel="license">
+					<?php
+					$current_plan = VMSB_License::plan();
+					$checkout_base = 'https://vmstudio.digital/checkout/';
+					$site_url = urlencode( home_url() );
+					?>
+					<section class="vmsb-fieldset">
+						<h2>License & Subscription Plans</h2>
+						<p class="vmsb-note">Current Active Tier: <strong style="color:var(--gold); text-transform:uppercase;"><?php echo esc_html($current_plan); ?></strong></p>
+
+						<div class="vmsb-plans-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 20px;">
+							<div class="vmsb-card <?php echo 'free' === $current_plan ? 'is-active' : ''; ?>" style="padding: 24px; border-radius: 14px; position: relative;">
+								<?php if('free' === $current_plan): ?><span class="vmsb-tag vmsb-tag-gold" style="position: absolute; top: 12px; right: 12px;">ACTIVE PLAN</span><?php endif; ?>
+								<h3 style="margin: 0; font-family: var(--serif); font-size: 20px;">Starter</h3>
+								<div style="font-size: 28px; font-weight: 800; margin: 12px 0; color: var(--gold);">FREE <span style="font-size: 13px; color: var(--muted); font-weight: normal;">/ forever</span></div>
+								<ul style="list-style: none; margin: 16px 0; padding: 0; font-size: 13px; line-height: 1.8; color: var(--text);">
+									<li>✓ 3 Posts per day</li>
+									<li>✓ 100 Keywords tracking</li>
+									<li>✓ Basic Technical Fixes</li>
+								</ul>
+							</div>
+
+							<div class="vmsb-card <?php echo 'pro' === $current_plan ? 'is-active' : ''; ?>" style="padding: 24px; border-radius: 14px; position: relative;">
+								<?php if('pro' === $current_plan): ?><span class="vmsb-tag vmsb-tag-gold" style="position: absolute; top: 12px; right: 12px;">ACTIVE PLAN</span><?php endif; ?>
+								<h3 style="margin: 0; font-family: var(--serif); font-size: 20px;">Pro Authority</h3>
+								<div style="font-size: 28px; font-weight: 800; margin: 12px 0; color: var(--gold);">₹2,499 <span style="font-size: 13px; color: var(--muted); font-weight: normal;">/ month</span></div>
+								<ul style="list-style: none; margin: 16px 0; padding: 0; font-size: 13px; line-height: 1.8; color: var(--text);">
+									<li>✓ 15 Posts per day</li>
+									<li>✓ 1,000 Keywords tracking</li>
+									<li>✓ Trend Scout 2026 RSS</li>
+									<li>✓ Competitor Hijacking (Thief)</li>
+								</ul>
+								<a href="<?php echo $checkout_base; ?>?plan=pro&product=vm-seo-brain&site=<?php echo $site_url; ?>" target="_blank" class="vmsb-btn vmsb-btn-gold vmsb-btn-sm" style="margin-top: 10px; text-align: center;">
+									<?php echo 'pro' === $current_plan ? 'Active' : 'Upgrade to Pro →'; ?>
+								</a>
+							</div>
+						</div>
+					</section>
+				</section>
+
 				<!-- APPEARANCE PANEL -->
-				<section class="vmsb-panel" data-panel="appearance">
+				<section class="vmsb-panel <?php echo $active_tab === 'appearance' ? 'is-active' : ''; ?>" data-panel="appearance">
 					<section class="vmsb-fieldset">
 						<h2>UI Appearance</h2>
 						<div class="vmsb-form-grid">
@@ -409,12 +602,15 @@ $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 								<small class="vmsb-note">The site-wide default every generated piece writes in. Content Plan's Bulk Import can override this per batch.</small>
 							</label>
 							<label>Country Target<input type="text" name="<?php echo esc_attr( $field( 'country' ) ); ?>" value="<?php echo esc_attr( $s['country'] ); ?>"></label>
+							<label>Currency<input type="text" name="<?php echo esc_attr( $field( 'currency' ) ); ?>" value="<?php echo esc_attr( $s['currency'] ); ?>" placeholder="USD">
+								<small class="vmsb-note">Used when generated content quotes prices. Defaulted to INR before this field existed - check it matches your business.</small>
+							</label>
 						</div>
 					</section>
 				</section>
 
 				<!-- WEBHOOKS PANEL -->
-				<section class="vmsb-panel" data-panel="webhooks">
+				<section class="vmsb-panel <?php echo $active_tab === 'webhooks' ? 'is-active' : ''; ?>" data-panel="webhooks">
 					<section class="vmsb-fieldset">
 						<h2>Outbound Webhooks</h2>
 						<p class="vmsb-note">Notify an external tool (Zapier, Make, a custom script) when the brain publishes, holds, or fails a piece of content — instead of it having to poll the REST API.</p>

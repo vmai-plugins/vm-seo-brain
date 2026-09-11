@@ -140,7 +140,16 @@ if ( ! $this->google->is_connected() ) {
     }
 
     // Cached version of GSC query to reduce API calls and stay within quota.
-    $transient_key = 'vmsb_gsc_query_' . md5( wp_json_encode( array( 'query' ) . 90 . 1000 ) );
+    // array('query') . 90 . 1000 tried to string-concatenate an array
+    // literal with the . operator, which PHP can't do - it silently casts
+    // the array to the literal string "Array" (throwing "Array to string
+    // conversion") and hashes the same meaningless "Array901000" every
+    // time instead of a real representation of the query's own
+    // parameters. Harmless only by accident here (this call always passes
+    // the same hardcoded dimensions/days/rows, so the broken key was at
+    // least consistent) - now hashes what the key is actually meant to
+    // capture: the real arguments passed to gsc_query() below.
+    $transient_key = 'vmsb_gsc_query_' . md5( wp_json_encode( array( array( 'query' ), 90, 1000 ) ) );
     $cached_rows   = get_transient( $transient_key );
     if ( false !== $cached_rows ) {
         $rows = $cached_rows;
@@ -157,11 +166,27 @@ if ( ! $this->google->is_connected() ) {
     return $this->process_gsc_rows( $rows, 'gsc' );
 	}
 
-	private function process_gsc_rows( $rows, $source ) {
+	/**
+	 * One individual prepared INSERT...ON DUPLICATE KEY per row - called
+	 * from pull_search_console() directly inside the daily cron callback
+	 * (not through VMSB_Task_Runner, so it has none of that system's
+	 * budget protection), against a source that can be 1,000-10,000 rows.
+	 * $budget bounds total wall-clock time the way VMSB_Fixer::scan()
+	 * already does elsewhere; whatever's left over is picked up by the next
+	 * sync since gsc_query()'s own 12h cache means this isn't re-fetching
+	 * work it already did.
+	 */
+	private function process_gsc_rows( $rows, $source, $budget = 30 ) {
 		$titles = array();
 		$count  = 0;
+		$deadline = time() + (int) $budget;
 
 		foreach ( $rows as $row ) {
+			if ( time() >= $deadline ) {
+				$this->log->warn( 'keywords', "GSC sync stopped at its {$budget}s budget after {$count} keywords; the rest resumes on the next sync." );
+				break;
+			}
+
 			$keyword = isset( $row['keys'][0] ) ? $row['keys'][0] : '';
 			if ( ! $keyword ) {
 				continue;
@@ -258,10 +283,21 @@ if ( ! $this->google->is_connected() ) {
 		$profile = $this->brain->profile();
 		$context = $custom_seed ? "Niche Expansion: {$custom_seed}" : "Business Profile: " . wp_json_encode($profile);
 
+		// The service area comes from the business profile, never from a
+		// hardcoded region. This line used to read "cities in Madhya Pradesh"
+		// literally, on every install: a site serving Noida - or London, or
+		// anywhere else - had every keyword-universe run told to bias toward
+		// a state it has no presence in, and the resulting keywords flowed
+		// straight into the content plan as real work.
+		$locations = trim( (string) VMSB_Settings::get( 'primary_locations' ) );
+		$geo_line  = $locations
+			? "Include location modifiers for the areas this business actually serves: {$locations}. Use nearby cities and regions around those areas where a local search would realistically happen.\n"
+			: "Do not add location modifiers - this business has no service area configured, so treat every keyword as national or global.\n";
+
 		$prompt = "Produce a keyword universe for this niche expansion.\n"
 			. "NICHE: {$context}\n"
 			. "Cover the full funnel: informational, commercial investigation, transactional, and navigational.\n"
-			. "Include location modifiers for cities in Madhya Pradesh if relevant.\n"
+			. $geo_line
 			. "For each keyword, estimate the Global Search Volume (monthly) and identify likely SERP Features (e.g. Featured Snippet, People Also Ask, Video).\n"
 			. "Do not include keywords the business cannot credibly rank for or serve.\n\n"
 			. 'Return JSON: {"keywords":[{"keyword":"","intent":"informational|commercial|transactional|navigational","funnel":"top|middle|bottom","cluster":"","est_difficulty":0,"est_volume":0,"serp_features":[]}]}';

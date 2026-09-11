@@ -419,7 +419,21 @@ class VMSB_Content {
 		$pushed_count = 0;
 		$author = wp_get_current_user()->user_login;
 
+		// $force's update branch below is one Google Sheets API call per
+		// already-synced row, serially - an admin clicking "force re-sync"
+		// on a plan with hundreds of rows already in the sheet used to fire
+		// hundreds of sequential external calls with nothing bounding total
+		// time, risking a PHP max_execution_time fatal on a REST request a
+		// human is actively waiting on. Whatever's left over next time
+		// still has sheet_row correctly marking what's already pushed.
+		$deadline = time() + 30;
+		$stopped_early = false;
+
 		foreach ( $rows as $row ) {
+			if ( $force && time() >= $deadline ) {
+				$stopped_early = true;
+				break;
+			}
 			$values = array(
 				$row->row_uid,         // UID
 				$row->status,          // Status
@@ -463,14 +477,33 @@ class VMSB_Content {
 			}
 		}
 
+		if ( $stopped_early ) {
+			$this->log->warn( 'content', "Force re-sync stopped at its 30s budget after {$pushed_count} rows; run it again to continue from where it left off." );
+		}
 		$this->log->info( 'content', $pushed_count . ' rows synchronized with the plan sheet.' );
 		return $pushed_count;
 	}
 
 	/**
-	 * Read the Sheet back. Human edits win: status changes, retitles, kills.
+	 * The closed vocabulary every read path in the pipeline pattern-matches
+	 * on literally (due_items(), the bulk actions, produce()'s state
+	 * machine, the pipeline-feed stage counts). Mirrors the list REST's
+	 * pipeline_feed() already uses as the source of truth.
 	 */
-	public function pull_from_sheet() {
+	const KNOWN_PLAN_STATUSES = array( 'planned', 'suggested', 'approved', 'writing', 'drafted', 'published', 'failed', 'rejected' );
+
+	/**
+	 * Read the Sheet back. Human edits win: status changes, retitles, kills.
+	 *
+	 * Runs directly inside the hourly cron callback (VMSB_Scheduler::
+	 * run_hourly()), not through VMSB_Task_Runner - so it doesn't get that
+	 * system's budget/retry/resume protections for free. A content sheet up
+	 * near the 2000-row cap this reads meant up to 2000 individual
+	 * synchronous $wpdb->update() calls with nothing bounding total time
+	 * before the same cron tick moved on to actually publishing content.
+	 * The remainder just picks up on the next hourly run.
+	 */
+	public function pull_from_sheet( $budget = 30 ) {
 		if ( ! $this->google->is_connected() ) {
 			return 0;
 		}
@@ -482,23 +515,43 @@ class VMSB_Content {
 
 		global $wpdb;
 		$n = 0;
+		$deadline = time() + (int) $budget;
 		foreach ( $rows as $row ) {
+			if ( time() >= $deadline ) {
+				$this->log->warn( 'content', "Sheet pull stopped at its {$budget}s budget after updating {$n} rows; the rest resumes next hour." );
+				break;
+			}
+
 			$uid = isset( $row[0] ) ? trim( $row[0] ) : '';
 			if ( ! $uid ) {
 				continue;
 			}
-			$updated = $wpdb->update(
-				$this->table(),
-				array(
-					'status'          => isset( $row[1] ) ? sanitize_key( $row[1] ) : 'planned',
-					'scheduled_for'   => isset( $row[2] ) && $row[2] ? gmdate( 'Y-m-d H:i:s', strtotime( $row[2] ) ) : null,
-					'title'           => isset( $row[3] ) ? sanitize_text_field( $row[3] ) : '',
-					'primary_keyword' => isset( $row[4] ) ? sanitize_text_field( $row[4] ) : '',
-					'brief'           => isset( $row[10] ) ? wp_kses_post( $row[10] ) : '',
-					'updated_at'      => current_time( 'mysql', true ),
-				),
-				array( 'row_uid' => $uid )
+
+			$data = array(
+				'scheduled_for'   => isset( $row[2] ) && $row[2] ? gmdate( 'Y-m-d H:i:s', strtotime( $row[2] ) ) : null,
+				'title'           => isset( $row[3] ) ? sanitize_text_field( $row[3] ) : '',
+				'primary_keyword' => isset( $row[4] ) ? sanitize_text_field( $row[4] ) : '',
+				'brief'           => isset( $row[10] ) ? wp_kses_post( $row[10] ) : '',
+				'updated_at'      => current_time( 'mysql', true ),
 			);
+
+			// A human typo or non-standard word here (e.g. "Done", "In
+			// Review") used to be written straight through with only
+			// sanitize_key() - every status-based query in this pipeline
+			// pattern-matches on the exact known tokens, so that row simply
+			// vanished from every queue and report, permanently, with no
+			// error anywhere. Only accept a status that the rest of the
+			// pipeline actually understands; leave the existing value alone
+			// (still update every other field from the sheet) and log the
+			// anomaly so it's visible instead of silently orphaning the row.
+			$status = isset( $row[1] ) ? sanitize_key( $row[1] ) : '';
+			if ( in_array( $status, self::KNOWN_PLAN_STATUSES, true ) ) {
+				$data['status'] = $status;
+			} elseif ( '' !== $status ) {
+				$this->log->warn( 'content', "Sheet row {$uid} has an unrecognized status \"{$status}\" - status left unchanged, every other field still synced." );
+			}
+
+			$updated = $wpdb->update( $this->table(), $data, array( 'row_uid' => $uid ) );
 			$n += (int) $updated;
 		}
 		return $n;
@@ -557,14 +610,18 @@ class VMSB_Content {
 		}
 
 		$item = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id = %d", (int) $plan_id ) );
+		if ( ! $item ) {
+			return new WP_Error( 'vmsb_plan_not_found', 'Content plan item not found.' );
+		}
 
 		// Both columns are nullable and are NULL on every plan row that was
 		// not created by the sheet importer, so this fired a deprecation on
 		// each production run under PHP 8.1+ and will be a TypeError once
 		// that deprecation is promoted.
-		$secondary     = (array) json_decode( (string) $item->secondary_keywords, true );
-		$links         = (array) json_decode( (string) $item->internal_links, true );
+		$secondary     = (array) json_decode( (string) ( $item->secondary_keywords ?? '' ), true );
+		$links         = (array) json_decode( (string) ( $item->internal_links ?? '' ), true );
 		$agent_context = isset( $args['agent_context'] ) ? $args['agent_context'] : '';
+
 
 		$link_context = array();
 		foreach ( $links as $hint ) {
@@ -874,6 +931,14 @@ class VMSB_Content {
 			wp_set_post_tags( $post_id, array_slice( (array) $data['suggested_tags'], 0, 6 ) );
 		}
 
+		// Geographic pages carry a guaranteed city tag and service category,
+		// applied after the model's own suggestions so the controlled terms
+		// cannot be lost to whatever it happened to return. Runs last and
+		// appends, so a non-geo post is untouched.
+		if ( class_exists( 'VMSB_Geo' ) ) {
+			VMSB_Geo::apply_taxonomy( $post_id, $item );
+		}
+
 		// Rank Math meta.
 		$this->rankmath->apply(
 			$post_id,
@@ -1017,8 +1082,6 @@ class VMSB_Content {
 			}
 		}
 
-		( new VMSB_Keywords() )->mark( $item->primary_keyword, 'published', $post_id );
-
 		if ( 'publish' === $status ) {
 			// The drip counter was already incremented by claim_publish_slot()
 			// above, before the post was created - counting it here as well
@@ -1076,6 +1139,11 @@ class VMSB_Content {
 		$data = $this->ai->generate_json(
 			"TITLE: {$post->post_title}\nFOCUS KEYWORD: {$keyword}\n\nCURRENT CONTENT:\n{$post->post_content}\n\nTASK: {$instruction}\n\n"
 			. "Keep every accurate fact and every existing internal link. Return the complete revised article, not a diff.\n\n"
+			// Same guard as produce()'s main content generator and
+			// god_fix_90() - a Hindi-script focus keyword can still pull an
+			// otherwise-English rewrite toward Hindi prose.
+			. "LANGUAGE: Write in English throughout, even if the focus keyword above is in Hindi or another script - use the keyword and other "
+			. "Hindi words/proper nouns naturally within the English text, but do not translate the article or write full paragraphs in Hindi.\n\n"
 			// CURRENT CONTENT above already contains real Gutenberg block
 			// comments (<!-- wp:heading {"level":2} --> and similar) and
 			// existing internal links (<a href="...">) that the model is
@@ -1134,6 +1202,25 @@ class VMSB_Content {
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * True total of posts pending review - NOT count(pending_reviews($limit)),
+	 * which silently freezes at whatever $limit was once the real backlog
+	 * exceeds it. The Production Hub "Approvals" tab badge used exactly
+	 * that pattern (count() over a posts_per_page=50 result), so a site
+	 * with 51+ genuinely pending reviews would show "50" forever.
+	 */
+	public function pending_reviews_count() {
+		$query = new WP_Query( array(
+			'post_type'      => 'any',
+			'post_status'    => 'any',
+			'posts_per_page' => 1,
+			'fields'         => 'ids',
+			'no_found_rows'  => false,
+			'meta_key'       => '_vmsb_pending_revision',
+		) );
+		return (int) $query->found_posts;
 	}
 
 	/**
@@ -1679,8 +1766,21 @@ class VMSB_Content {
 
 		switch ( $action ) {
 			case 'bulk-approve':
-				$now = current_time( 'mysql', true );
-				$count = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', scheduled_for = %s, updated_at = %s WHERE id IN (" . implode( ',', $ids ) . ") AND status = 'planned'", $now, $now ) );
+				// 'suggested' belongs here as much as 'planned'. The pipeline
+				// table renders the Approve button for BOTH states
+				// (admin.js: status === 'planned' || status === 'suggested'),
+				// but this filter accepted only 'planned' - so every Approve
+				// click on a suggested row matched zero rows, updated nothing,
+				// and reported success anyway.
+				//
+				// That is not an edge case: rows enter as 'suggested' from the
+				// growth engine and niche planner, and this install currently
+				// holds 25 suggested rows and zero planned ones, so the button
+				// was visible on 25 topics and worked on none of them. Exactly
+				// the same status-filter mismatch documented on 'bulk-produce'
+				// below; the fix was never carried across to this case.
+				$now   = current_time( 'mysql', true );
+				$count = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', scheduled_for = %s, updated_at = %s WHERE id IN (" . implode( ',', $ids ) . ") AND status IN ('planned', 'suggested')", $now, $now ) );
 				break;
 
 			case 'bulk-delete':
@@ -1688,10 +1788,33 @@ class VMSB_Content {
 				break;
 
 			case 'bulk-produce':
-				// Mark for immediate production by boosting priority and approving
+				// Mark for immediate production by boosting priority and approving.
+				// The status filter used to omit 'approved' - so selecting rows
+				// that were already approved (the overwhelmingly common case:
+				// most of a real backlog sits in 'approved' waiting its turn,
+				// and "Write Selected Now" exists specifically to jump that
+				// queue) matched zero rows and silently did nothing, with no
+				// error surfaced anywhere. It already sets status = 'approved'
+				// unconditionally below, so re-approving an already-approved
+				// row is a harmless no-op - the whole point was always to let
+				// this work from any pre-production state, not just two of them.
 				$now = current_time( 'mysql', true );
-				$count = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', priority = 30, scheduled_for = %s WHERE id IN (" . implode( ',', $ids ) . ") AND status IN ('planned', 'rejected')", $now ) );
+				$count = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', priority = 30, scheduled_for = %s WHERE id IN (" . implode( ',', $ids ) . ") AND status IN ('planned', 'approved', 'rejected')", $now ) );
 				break;
+		}
+
+		// A bulk action that matched nothing is not a success. Every one of the
+		// status-filter mismatches in this method surfaced to the operator as a
+		// cheerful "0 items" - or nothing at all - which is why the broken
+		// Approve went unnoticed: the UI gave the same response for "approved
+		// them" and "silently refused every row you picked".
+		if ( 0 === (int) $count ) {
+			return array(
+				'success' => false,
+				'count'   => 0,
+				'action'  => $action,
+				'error'   => 'Nothing changed - none of the selected rows were in a state this action accepts. They may have already been actioned.',
+			);
 		}
 
 		return array( 'success' => true, 'count' => (int) $count, 'action' => $action );

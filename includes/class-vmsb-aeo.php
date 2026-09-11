@@ -188,17 +188,7 @@ class VMSB_AEO {
 	 * under 70.
 	 */
 	public function sweep( $limit = 5 ) {
-		global $wpdb;
-		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
-		$types_sql  = "'" . implode( "','", array_map( 'esc_sql', $safe_types ) ) . "'";
-
-		$ids = $wpdb->get_col( $wpdb->prepare(
-			"SELECT p.ID FROM {$wpdb->posts} p
-			 LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_vmsb_aeo_audit'
-			 WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql}) AND m.meta_id IS NULL
-			 ORDER BY p.post_date DESC LIMIT %d",
-			(int) $limit
-		) );
+		$ids = VMSB_Settings::posts_missing_meta( '_vmsb_aeo_audit', $limit );
 
 		$done = 0;
 		foreach ( $ids as $id ) {

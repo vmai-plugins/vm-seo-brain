@@ -142,22 +142,30 @@ class VMSB_Google {
 
 	/**
 	 * @param array $dimensions e.g. array('query') or array('page','query')
+	 * @param int   $offset_days Shifts the whole window further into the past
+	 *                           by this many days - e.g. days=7, offset_days=8
+	 *                           queries the 7-day window starting 8 days before
+	 *                           the normal anchor, for a "previous period"
+	 *                           comparison against days=7, offset_days=0.
 	 */
-	public function gsc_query( array $dimensions = array( 'query' ), $days = 28, $rows = 2000, array $filters = array(), $start_row = 0 ) {
+	public function gsc_query( array $dimensions = array( 'query' ), $days = 28, $rows = 2000, array $filters = array(), $start_row = 0, $offset_days = 0 ) {
 		$property = VMSB_Settings::get( 'gsc_property' );
 		if ( ! $property ) {
 			return new WP_Error( 'vmsb_gsc', 'No Search Console property selected.' );
 		}
 
 		// Prefer local Rank Math tables if high-volume is requested (Ported from VMAI SEO)
-		if ( $rows > 5000 && class_exists('VMSB_RankMath') ) {
+		// Only for the current, un-offset window - the local mirror has no
+		// notion of a comparison window, so an offset request always needs
+		// the real API.
+		if ( $rows > 5000 && 0 === (int) $offset_days && class_exists('VMSB_RankMath') ) {
 			$local_data = ( new VMSB_RankMath() )->get_local_metrics( $dimensions, $days, $rows );
 			if ( ! empty($local_data) ) return $local_data;
 		}
 
 		$body = array(
-			'startDate'  => gmdate( 'Y-m-d', strtotime( "-{$days} days" ) ),
-			'endDate'    => gmdate( 'Y-m-d', strtotime( '-2 days' ) ),
+			'startDate'  => gmdate( 'Y-m-d', strtotime( '-' . ( $days + $offset_days ) . ' days' ) ),
+			'endDate'    => gmdate( 'Y-m-d', strtotime( '-' . ( 2 + $offset_days ) . ' days' ) ),
 			'dimensions' => $dimensions,
 			'rowLimit'   => (int) $rows,
 			'startRow'   => (int) $start_row,
@@ -180,7 +188,7 @@ class VMSB_Google {
 		// response chain into unbounded sequential API calls.
 		$total_so_far = $start_row + count( $all_rows );
 		if ( count($all_rows) === (int)$rows && $total_so_far < 10000 ) {
-			$next_batch = $this->gsc_query( $dimensions, $days, $rows, $filters, $start_row + $rows );
+			$next_batch = $this->gsc_query( $dimensions, $days, $rows, $filters, $start_row + $rows, $offset_days );
 			if ( ! is_wp_error($next_batch) ) {
 				$all_rows = array_merge( $all_rows, $next_batch );
 			}
@@ -204,16 +212,22 @@ class VMSB_Google {
 
 	/**
 	 * Aggregated Search Console metrics for a single URL over a window.
-	 * Used by the outcome ledger to measure whether an action moved the page.
+	 * Used by the outcome ledger to measure whether an action moved the page,
+	 * and by the decay/lifecycle monitors to compare a period against an
+	 * earlier one via $offset_days (see gsc_query()'s docblock - this was
+	 * silently accepting and dropping a 3rd argument at every "previous
+	 * period" call site until this parameter was added).
 	 *
 	 * @return array{clicks:int,impressions:int,position:float,ctr:float}|WP_Error
 	 */
-	public function gsc_page_metrics( $url, $days = 28 ) {
+	public function gsc_page_metrics( $url, $days = 28, $offset_days = 0 ) {
 		$rows = $this->gsc_query(
 			array( 'page' ),
 			$days,
 			1,
-			array( array( 'dimension' => 'page', 'operator' => 'equals', 'expression' => $url ) )
+			array( array( 'dimension' => 'page', 'operator' => 'equals', 'expression' => $url ) ),
+			0,
+			$offset_days
 		);
 		if ( is_wp_error( $rows ) ) {
 			return $rows;

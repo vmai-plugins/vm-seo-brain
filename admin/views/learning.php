@@ -7,18 +7,21 @@ defined( 'ABSPATH' ) || exit;
  * Jobs: CTR Experiments, Performance Outcomes, Strategic Lessons.
  */
 
+$vmsb_is_nested = defined( 'VMSB_NESTED' ) && VMSB_NESTED;
 ?>
-	<header class="vmsb-head">
-		<div>
-			<p class="vmsb-eyebrow">Continuous Improvement</p>
-			<h1>Learning Center</h1>
-			<p class="vmsb-sub">Inspecting how the Brain learns from past actions and experiments.</p>
-		</div>
-		<div class="vmsb-head-actions">
-			<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="measure-outcomes">Measure Outcomes</button>
-		</div>
-	</header>
-	<span class="wp-header-end"></span>
+	<?php if ( ! $vmsb_is_nested ) : ?>
+		<header class="vmsb-head">
+			<div>
+				<p class="vmsb-eyebrow">Continuous Improvement</p>
+				<h1>Learning Center</h1>
+				<p class="vmsb-sub">Inspecting how the Brain learns from past actions and experiments.</p>
+			</div>
+			<div class="vmsb-head-actions">
+				<button class="vmsb-btn vmsb-btn-ghost" data-vmsb="measure-outcomes">Measure Outcomes</button>
+			</div>
+		</header>
+		<span class="wp-header-end"></span>
+	<?php endif; ?>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">
 		<button class="vmsb-tab is-active" data-tab="outcomes">🧪 Outcomes</button>

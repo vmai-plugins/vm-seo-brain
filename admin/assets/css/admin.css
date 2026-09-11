@@ -10,7 +10,37 @@
 	--gold:       #d4af37;
 	--gold-soft:  #f4cf6d;
 	--text:       #f0ede5;
-	--muted:      #949187;
+	/* Was #949187 - 4.4:1 on the panel, which is under AA for the small,
+	   letterspaced labels this is mostly used on (card captions, eyebrows,
+	   table headers). Lifted to clear 7:1 so secondary text reads as
+	   deliberate rather than washed out. */
+	--muted:      #a8a49a;
+
+	/* Solid elevation surfaces.
+	   Cards were painted with rgba(255,255,255,0.03) over --ink: 3% white on
+	   #0a0a0c resolves to about #0e0e11, roughly one step off the page it sits
+	   on, with an 8%-white border that is nearly invisible at 1px. That is the
+	   whole reason the dark theme reads as thin: there are no surfaces, only
+	   faint tints. Lite Mode already learned this - see .vmsb-mode-lite
+	   .vmsb-card further down, which was given a real fill, border and shadow
+	   for exactly this reason - but the fix was never carried back to the dark
+	   theme it was diagnosed on. These are opaque steps, so a card is an
+	   object with edges rather than a tint. */
+	--surface:    #15151b;
+	--surface-2:  #1b1b22;
+	--surface-3:  #212129;
+	--border:     #2e2e38;
+	--border-strong: #3d3d49;
+
+	/* One spacing scale. 468 inline style attributes across the views set
+	   their own padding and margins; these give the shared components a
+	   consistent rhythm to fall back on. */
+	--sp-1: 6px;
+	--sp-2: 10px;
+	--sp-3: 16px;
+	--sp-4: 22px;
+	--sp-5: 30px;
+	--sp-6: 44px;
 	--crit:       #ff4d4d;
 	--high:       #ff9f43;
 	--med:        #54a0ff;
@@ -33,7 +63,10 @@
 	--mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
 	margin: 20px 20px 40px 0;
-	padding: 40px;
+	/* 40px on every side pushed content inward on narrow screens while leaving
+	   the widest layouts under-filled. This holds a generous frame on desktop
+	   and gives it back on smaller viewports. */
+	padding: clamp(22px, 2.6vw, 46px);
 	background: var(--ink);
 	background-image:
 		radial-gradient(at 0% 0%, rgba(212, 175, 55, 0.05) 0px, transparent 50%),
@@ -53,27 +86,33 @@
    card sizing/rounding inconsistent depending on which page loaded which
    rule last. */
 .vmsb-card {
-	background: rgba(255, 255, 255, 0.03);
-	backdrop-filter: blur(12px);
-	-webkit-backdrop-filter: blur(12px);
-	border: 1px solid rgba(255,255,255,0.08);
+	/* Opaque, with a border that is actually visible and a shadow that seats
+	   the card on the page. The blur is gone with the transparency - there is
+	   nothing behind an opaque surface to blur, and backdrop-filter on every
+	   card forces a compositing layer per card for no visual result. */
+	background: var(--surface);
+	border: 1px solid var(--border);
 	border-radius: 14px;
-	padding: 24px;
-	transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+	padding: var(--sp-5);
+	transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease;
 	position: relative;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
+	box-shadow: 0 1px 2px rgba(0,0,0,.28), 0 12px 28px -18px rgba(0,0,0,.75);
 }
 
 .vmsb-card:hover {
-	background: rgba(255, 255, 255, 0.06);
-	border-color: rgba(212, 175, 55, 0.4);
-	transform: translateY(-6px);
+	background: var(--surface-2);
+	border-color: rgba(212, 175, 55, 0.45);
+	/* 6px of travel on a grid of cards makes the whole page feel loose. 2px
+	   reads as responsive without the layout appearing to wobble. */
+	transform: translateY(-2px);
 	box-shadow:
-		0 20px 40px -12px rgba(0, 0, 0, 0.5),
-		0 0 20px rgba(212, 175, 55, 0.08);
+		0 2px 4px rgba(0,0,0,.3),
+		0 18px 38px -20px rgba(0,0,0,.85),
+		0 0 0 1px rgba(212, 175, 55, 0.12);
 }
 
 .vmsb-card::after {
@@ -89,7 +128,10 @@
 .vmsb-card:hover::after { opacity: 1; }
 
 .vmsb-card-wide {
-	background: linear-gradient(135deg, rgba(22, 22, 27, 0.9) 0%, rgba(22, 22, 27, 0.7) 100%);
+	/* A wide card carries more content, so it sits one step higher than the
+	   small cards around it rather than fading into a translucent gradient. */
+	background: var(--surface-2);
+	border-color: var(--border-strong);
 }
 
 /* ---------------------------------------------------------------- pulses */
@@ -213,10 +255,13 @@
 .vmsb-btn {
 	font: inherit;
 	font-size: 13px;
-	padding: 10px 20px;
+	/* A secondary button needs enough presence to read as a control. At 3%
+	   white with a --line border it was a label with a faint outline, which
+	   is why the action rows looked unfinished. */
+	padding: 10px 18px;
 	border-radius: 8px;
-	border: 1px solid var(--line);
-	background: rgba(255,255,255,0.03);
+	border: 1px solid var(--border-strong);
+	background: var(--surface-3);
 	color: var(--text);
 	cursor: pointer;
 	text-decoration: none;
@@ -274,8 +319,13 @@
 
 .vmsb-grid {
 	display: grid;
-	grid-template-columns: repeat(3, 1fr);
-	gap: 20px;
+	/* repeat(3, 1fr) is a fixed three columns at every width above the 782px
+	   breakpoint, so at ~800px each card gets ~250px and its contents - a
+	   46px serif figure next to a label - wrap into a cramped stack. auto-fit
+	   with a floor lets the row drop to two columns, then one, on its own,
+	   and still reaches three at full width. */
+	grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+	gap: var(--sp-4);
 	/* Grid's default "stretch" force-matches every row's shortest card to its
 	   tallest sibling - harmless when cards happen to be equal height already,
 	   but on rows with genuinely different content lengths (e.g. Silo map's
@@ -321,16 +371,36 @@
 	font-weight: 600;
 }
 
-.vmsb-figure { display: flex; align-items: baseline; gap: 10px; }
+.vmsb-figure { display: flex; align-items: baseline; gap: 10px; margin-top: auto; }
 
 .vmsb-number {
 	font-family: var(--serif);
-	font-size: 46px;
-	line-height: 1;
+	/* Scales with the card instead of sitting at a fixed 46px, which was
+	   oversized in a narrow column and undersized on a wide dashboard. */
+	font-size: clamp(38px, 3.4vw, 54px);
+	line-height: .95;
+	letter-spacing: -0.02em;
 	color: var(--text);
 	font-variant-numeric: tabular-nums;
 }
 .vmsb-of { color: var(--muted); font-size: 13px; }
+
+/* The label above a figure. These carry the meaning of every number on the
+   dashboard and were rendering at the same weight as body copy, so a card
+   read as two unrelated lines rather than one labelled statistic. */
+.vmsb-status-label,
+.vmsb-card > .vmsb-note:first-child {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: .12em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+
+/* Cards in a row rarely hold the same amount of text. Pinning the figure to
+   the bottom (margin-top:auto above) lines every number up across the row
+   instead of letting each float wherever its own label ended. */
+.vmsb-grid > .vmsb-card { min-height: 160px; }
 
 /* The one deliberate flourish: a hairline rule that fills in gold. */
 .vmsb-bar {
@@ -395,7 +465,16 @@
 	.vmsb-table.vmsb-table-narrow td,
 	.vmsb-table.vmsb-table-narrow th { padding-left: 8px; padding-right: 8px; }
 }
-.vmsb-table-full { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; }
+/* 3px on a full-width data table next to 14px cards is what makes the page
+   read as unrelated parts rather than one surface. Matching the card radius
+   (less the border) and clipping the corners lets the header band and the
+   last row actually follow the rounding. */
+.vmsb-table-full {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	overflow: hidden;
+}
 
 .vmsb-table th {
 	text-align: left;
@@ -404,11 +483,22 @@
 	text-transform: uppercase;
 	color: var(--gold);
 	font-weight: 700;
-	padding: 18px 16px;
-	border-bottom: 1px solid var(--line);
+	padding: 14px 18px;
+	/* A filled header band separates the labels from the data. A bare
+	   bottom-border let the header float as just another row. */
+	background: var(--surface-3);
+	border-bottom: 1px solid var(--border);
+	position: sticky;
+	top: 0;
+	z-index: 1;
 }
-.vmsb-table td { padding: 18px 16px; border-bottom: 1px solid rgba(255,255,255,.03); vertical-align: top; color: var(--text); }
-.vmsb-table tr:hover td { background: rgba(255,255,255,0.01); }
+/* 18px vertical on every row made a 20-row table enormously tall and forced
+   scrolling for lists that would otherwise fit. 13px keeps it readable and
+   fits roughly a third more rows on screen. */
+.vmsb-table td { padding: 13px 18px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text); }
+/* rgba(255,255,255,0.01) is a 1% tint - not perceivable, so rows had no hover
+   feedback at all despite the rule existing. */
+.vmsb-table tr:hover td { background: var(--surface-2); }
 .vmsb-table tr:last-child td { border-bottom: 0; }
 .vmsb-table a { color: var(--gold-soft); text-decoration: none; }
 .vmsb-table a:hover { text-decoration: underline; }
@@ -628,13 +718,13 @@
 
 .vmsb-note-item {
 	padding: 15px 20px;
-	border-bottom: 1px solid rgba(255,255,255,0.03);
+	border-bottom: 1px solid var(--border);
 	text-decoration: none;
 	display: block;
 	transition: background 0.2s;
 }
 
-.vmsb-note-item:hover { background: rgba(255,255,255,0.02); }
+.vmsb-note-item:hover { background: var(--surface-2); }
 
 .vmsb-note-item.level-critical { border-left: 4px solid var(--crit); }
 .vmsb-note-item.level-warning  { border-left: 4px solid var(--gold); }
@@ -1434,6 +1524,15 @@
 	--gold-soft:  #d4af37;
 	--text:       #1a1f23;
 	--muted:      #5f6368;
+	/* The dark theme's new elevation and border tokens re-pointed for a light
+	   ground. Without these overrides every surface styled through them - the
+	   cards, the table shell, the sticky header band - would keep painting the
+	   dark theme's near-black fills on a white page. */
+	--surface:    #ffffff;
+	--surface-2:  #f7f8fa;
+	--surface-3:  #eef1f4;
+	--border:     #dfe3e8;
+	--border-strong: #c9cfd6;
 	--shadow-strong: rgba(20,20,30,0.12);
 	--track-bg: rgba(0,0,0,0.06);
 	box-shadow: 0 5px 25px rgba(0,0,0,0.05);
@@ -2207,6 +2306,622 @@
 #adminmenu #toplevel_page_vmsb.wp-has-current-submenu > a.wp-has-current-submenu {
 	border-left: 3px solid #d4af37;
 }
+
+/* ================================================================
+   VM SEO BRAIN 2.0 — MODERN DESIGN SYSTEM OVERHAUL
+   ================================================================ */
+
+/* --- Top Navigation Bar & Header Utility --- */
+.vmsb-top-bar {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 12px 0 18px;
+	margin-bottom: 24px;
+	border-bottom: 1px solid var(--border);
+	flex-wrap: wrap;
+	gap: 16px;
+}
+
+.vmsb-top-left {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.vmsb-breadcrumbs {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--muted);
+}
+
+.vmsb-bc-root {
+	color: var(--text);
+	text-decoration: none;
+	font-weight: 600;
+	transition: color 0.2s;
+}
+
+.vmsb-bc-root:hover {
+	color: var(--gold);
+}
+
+.vmsb-bc-sep {
+	opacity: 0.4;
+}
+
+.vmsb-bc-current {
+	color: var(--gold-soft);
+	font-weight: 600;
+}
+
+.vmsb-top-right {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.vmsb-status-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 14px;
+	background: var(--surface-2);
+	border: 1px solid var(--border);
+	border-radius: 20px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.vmsb-status-pill .vmsb-status-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--muted);
+}
+
+.vmsb-status-pill.is-live .vmsb-status-dot {
+	background: var(--good);
+	box-shadow: 0 0 8px var(--good);
+}
+
+.vmsb-status-pill.is-warning .vmsb-status-dot {
+	background: var(--high);
+	box-shadow: 0 0 8px var(--high);
+}
+
+.vmsb-wizard-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 14px;
+	background: linear-gradient(135deg, #d4af37, #b8860b);
+	color: #000 !important;
+	font-size: 12px;
+	font-weight: 700;
+	border-radius: 20px;
+	text-decoration: none !important;
+	box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+	transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.vmsb-wizard-btn:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 6px 16px rgba(212, 175, 55, 0.45);
+	color: #000 !important;
+}
+
+.vmsb-btn-theme-toggle {
+	background: var(--surface-2);
+	border: 1px solid var(--border);
+	color: var(--text);
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	font-size: 15px;
+	transition: background 0.2s, border-color 0.2s;
+}
+
+.vmsb-btn-theme-toggle:hover {
+	background: var(--surface-3);
+	border-color: var(--gold);
+}
+
+.vmsb-command-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 14px;
+	background: var(--surface-2);
+	border: 1px solid var(--border);
+	border-radius: 20px;
+	color: var(--text);
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s;
+}
+
+.vmsb-command-btn:hover {
+	background: var(--surface-3);
+	border-color: var(--gold);
+	color: var(--gold-soft);
+}
+
+.vmsb-command-btn kbd {
+	background: rgba(255, 255, 255, 0.1);
+	padding: 2px 6px;
+	border-radius: 4px;
+	font-size: 10px;
+	font-family: var(--mono);
+	color: var(--muted);
+}
+
+/* --- Rich Actionable Empty States --- */
+.vmsb-empty-state {
+	padding: 48px 24px;
+	text-align: center;
+	background: var(--surface);
+	border: 1px dashed var(--border-strong);
+	border-radius: 14px;
+	margin: 20px 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+
+.vmsb-empty-icon {
+	font-size: 42px;
+	margin-bottom: 16px;
+	line-height: 1;
+}
+
+.vmsb-empty-title {
+	font-family: var(--serif);
+	font-size: 20px;
+	color: var(--text);
+	margin: 0 0 8px;
+}
+
+.vmsb-empty-desc {
+	font-size: 14px;
+	color: var(--muted);
+	max-width: 460px;
+	line-height: 1.6;
+	margin: 0 0 24px;
+}
+
+/* --- Setup & Onboarding Wizard --- */
+.vmsb-wizard-container {
+	max-width: 820px;
+	margin: 10px auto 40px;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 18px;
+	padding: clamp(24px, 4vw, 44px);
+	box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+}
+
+.vmsb-wizard-header {
+	text-align: center;
+	margin-bottom: 36px;
+	padding-bottom: 28px;
+	border-bottom: 1px solid var(--border);
+}
+
+.vmsb-wizard-badge {
+	display: inline-block;
+	padding: 4px 12px;
+	background: rgba(212, 175, 55, 0.15);
+	color: var(--gold);
+	border: 1px solid rgba(212, 175, 55, 0.3);
+	border-radius: 20px;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	margin-bottom: 12px;
+}
+
+.vmsb-wizard-title {
+	font-family: var(--serif);
+	font-size: 32px;
+	color: var(--text);
+	margin: 0 0 10px;
+	line-height: 1.2;
+}
+
+.vmsb-wizard-subtitle {
+	font-size: 14px;
+	color: var(--muted);
+	max-width: 580px;
+	margin: 0 auto;
+	line-height: 1.6;
+}
+
+/* Stepper Bar */
+.vmsb-wizard-stepper {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-top: 28px;
+	gap: 10px;
+}
+
+.vmsb-step-node {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	opacity: 0.4;
+	transition: all 0.3s;
+}
+
+.vmsb-step-node.is-active,
+.vmsb-step-node.is-completed {
+	opacity: 1;
+}
+
+.vmsb-step-num {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background: var(--surface-3);
+	border: 1px solid var(--border);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--text);
+}
+
+.vmsb-step-node.is-active .vmsb-step-num {
+	background: var(--gold);
+	color: #000;
+	border-color: var(--gold);
+	box-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
+}
+
+.vmsb-step-node.is-completed .vmsb-step-num {
+	background: var(--good);
+	color: #000;
+	border-color: var(--good);
+}
+
+.vmsb-step-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.vmsb-step-line {
+	width: 32px;
+	height: 2px;
+	background: var(--border);
+}
+
+/* Wizard Steps */
+.vmsb-wizard-step {
+	display: none;
+	animation: vmsbFadeIn 0.3s ease-out;
+}
+
+.vmsb-wizard-step.is-active {
+	display: block;
+}
+
+@keyframes vmsbFadeIn {
+	from { opacity: 0; transform: translateY(8px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+.vmsb-step-header {
+	margin-bottom: 24px;
+}
+
+.vmsb-step-header h2 {
+	font-family: var(--serif);
+	font-size: 22px;
+	color: var(--gold-soft);
+	margin: 0 0 6px;
+}
+
+/* Provider Selector Cards */
+.vmsb-provider-selector {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 14px;
+	margin-bottom: 28px;
+}
+
+.vmsb-provider-card {
+	background: var(--surface-2);
+	border: 1.5px solid var(--border);
+	border-radius: 14px;
+	padding: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	cursor: pointer;
+	position: relative;
+	transition: all 0.2s ease;
+}
+
+.vmsb-provider-card input[type="radio"] {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.vmsb-provider-card:hover {
+	border-color: rgba(212, 175, 55, 0.5);
+	background: var(--surface-3);
+}
+
+.vmsb-provider-card.is-selected {
+	border-color: var(--gold);
+	background: linear-gradient(145deg, rgba(212, 175, 55, 0.08) 0%, var(--surface-2) 100%);
+	box-shadow: 0 0 0 1px var(--gold);
+}
+
+.vmsb-provider-icon {
+	font-size: 24px;
+	line-height: 1;
+}
+
+.vmsb-provider-meta strong {
+	display: block;
+	font-size: 14px;
+	color: var(--text);
+	margin-bottom: 3px;
+}
+
+.vmsb-provider-meta span {
+	font-size: 11px;
+	color: var(--muted);
+	line-height: 1.4;
+}
+
+.vmsb-badge-recommended {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	font-size: 9px;
+	font-weight: 800;
+	text-transform: uppercase;
+	padding: 2px 7px;
+	background: rgba(29, 209, 161, 0.2);
+	color: var(--good);
+	border-radius: 10px;
+	letter-spacing: 0.4px;
+}
+
+/* Autonomy Grid */
+.vmsb-autonomy-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 18px;
+	margin-bottom: 28px;
+}
+
+.vmsb-autonomy-card {
+	background: var(--surface-2);
+	border: 1.5px solid var(--border);
+	border-radius: 14px;
+	padding: 22px;
+	cursor: pointer;
+	position: relative;
+	display: flex;
+	gap: 16px;
+	transition: all 0.2s ease;
+}
+
+.vmsb-autonomy-card input[type="radio"] {
+	position: absolute;
+	opacity: 0;
+}
+
+.vmsb-autonomy-card:hover {
+	border-color: rgba(212, 175, 55, 0.5);
+	background: var(--surface-3);
+}
+
+.vmsb-autonomy-card.is-selected {
+	border-color: var(--gold);
+	background: linear-gradient(145deg, rgba(212, 175, 55, 0.08) 0%, var(--surface-2) 100%);
+	box-shadow: 0 0 0 1px var(--gold);
+}
+
+.vmsb-autonomy-icon {
+	font-size: 32px;
+	line-height: 1;
+}
+
+.vmsb-autonomy-content h3 {
+	font-family: var(--serif);
+	font-size: 17px;
+	color: var(--text);
+	margin: 0 0 6px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.vmsb-autonomy-content p {
+	font-size: 12.5px;
+	color: var(--muted);
+	line-height: 1.5;
+	margin: 0 0 12px;
+}
+
+.vmsb-feature-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	font-size: 11.5px;
+	color: var(--good);
+	line-height: 1.6;
+}
+
+/* Calibration & Progress */
+.vmsb-calibration-summary {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 14px;
+	margin-bottom: 24px;
+}
+
+.vmsb-summary-card {
+	background: var(--surface-2);
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	padding: 14px 18px;
+}
+
+.vmsb-summary-label {
+	display: block;
+	font-size: 10.5px;
+	text-transform: uppercase;
+	color: var(--muted);
+	letter-spacing: 0.5px;
+	margin-bottom: 4px;
+}
+
+.vmsb-summary-card strong {
+	font-size: 14px;
+	color: var(--gold-soft);
+}
+
+.vmsb-calibration-box {
+	background: var(--surface-2);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	padding: 24px;
+	margin: 24px 0;
+}
+
+.vmsb-check-item {
+	padding: 10px 0;
+	font-size: 13.5px;
+	color: var(--text);
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.vmsb-check-item:last-child {
+	border-bottom: none;
+}
+
+.vmsb-check-item.is-done {
+	color: var(--good);
+}
+
+.vmsb-calibration-success {
+	text-align: center;
+	padding: 36px 20px;
+	background: linear-gradient(145deg, rgba(29, 209, 161, 0.06) 0%, var(--surface-2) 100%);
+	border: 1px solid rgba(29, 209, 161, 0.3);
+	border-radius: 16px;
+	margin: 24px 0;
+}
+
+.vmsb-success-icon {
+	font-size: 48px;
+	margin-bottom: 14px;
+}
+
+.vmsb-calibration-success h2 {
+	font-family: var(--serif);
+	color: var(--good);
+	font-size: 26px;
+	margin: 0 0 10px;
+}
+
+.vmsb-calibration-success p {
+	font-size: 14px;
+	color: var(--muted);
+	max-width: 500px;
+	margin: 0 auto;
+	line-height: 1.6;
+}
+
+/* Wizard Form Elements */
+.vmsb-field-group {
+	margin-bottom: 18px;
+}
+
+.vmsb-field-group label {
+	display: block;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--text);
+	margin-bottom: 6px;
+}
+
+.vmsb-req {
+	color: var(--gold);
+}
+
+.vmsb-field-hint {
+	font-size: 11px;
+	color: var(--muted);
+	margin: 5px 0 0;
+}
+
+.vmsb-input-test-wrap {
+	display: flex;
+	gap: 10px;
+}
+
+.vmsb-input-test-wrap input {
+	flex: 1;
+}
+
+.vmsb-test-result {
+	margin-top: 8px;
+	padding: 8px 12px;
+	border-radius: 8px;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.vmsb-test-result.is-ok {
+	background: rgba(29, 209, 161, 0.15);
+	color: var(--good);
+	border: 1px solid rgba(29, 209, 161, 0.3);
+}
+
+.vmsb-test-result.is-err {
+	background: rgba(255, 77, 77, 0.15);
+	color: var(--crit);
+	border: 1px solid rgba(255, 77, 77, 0.3);
+}
+
+.vmsb-wizard-actions {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 32px;
+	padding-top: 20px;
+	border-top: 1px solid var(--border);
+}
+
+.vmsb-wizard-actions .vmsb-btn-next,
+.vmsb-wizard-actions .vmsb-btn-gold {
+	margin-left: auto;
+}
+
 
 #adminmenu #toplevel_page_vmsb .wp-submenu a.wp-has-current-submenu,
 #adminmenu #toplevel_page_vmsb .wp-submenu li.current a,

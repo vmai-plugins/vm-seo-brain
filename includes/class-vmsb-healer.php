@@ -40,6 +40,17 @@ class VMSB_Healer {
 
 			// THE HEALER'S Rubric: Identify the specific problem
 			$problem = $this->diagnose_content_failure( $post, $drop['kw'] );
+			if ( null === $problem ) {
+				// The diagnosis call failed (provider down, rate-limited,
+				// unparseable response) - this used to silently substitute
+				// a fabricated "General depth improvement" excuse and
+				// rewrite the post anyway, which is worse than doing
+				// nothing: a real, live page got rewritten on a made-up
+				// pretext with no way to tell it apart from a genuine
+				// diagnosis. Skip this drop; it's picked up again next run.
+				$this->log_diagnostic( $drop['id'], 'Diagnosis failed - skipping rather than rewriting on a guess.' );
+				continue;
+			}
 
 			$this->log_diagnostic($drop['id'], "Detected Failure Root: {$problem['classification']}.");
 
@@ -63,7 +74,19 @@ class VMSB_Healer {
 
 	/**
 	 * Identify keywords that dropped from Top 3 to Pos 4-15 in the last 28 days.
+	 *
+	 * "Previously Top 3" used to be a click-volume proxy (clicks > 50) rather
+	 * than an actual historical position check - the comment admitted as
+	 * much ("simulated check"). That misclassified any keyword that has
+	 * simply always ranked 4-15 with real volume as a "drop", triggering an
+	 * unnecessary AI rewrite on a page that never regressed. Now checks the
+	 * real position for this exact (keyword, page) pair from ~28 days
+	 * earlier via gsc_query()'s $offset_days, bounded to at most
+	 * self::MAX_VERIFY_CALLS extra GSC calls so this can't turn into the
+	 * same unbounded-per-row network loop VMSB_Decay::monitor() had.
 	 */
+	const MAX_VERIFY_CALLS = 15;
+
 	public function get_recent_drops( $limit = 5 ) {
 		$google = new VMSB_Google();
 		if ( ! $google->is_connected() ) return array();
@@ -72,14 +95,20 @@ class VMSB_Healer {
 		if ( is_wp_error($data) ) return array();
 
 		$drops = array();
+		$verified = 0;
 		foreach ( $data as $row ) {
+			if ( count( $drops ) >= $limit || $verified >= self::MAX_VERIFY_CALLS ) {
+				break;
+			}
+
 			$pos = (float)($row['position'] ?? 0);
 			if ( $pos > 3.5 && $pos <= 15 ) {
 				$post_id = url_to_postid( $row['keys'][1] ?? '' );
 				if ( ! $post_id ) continue;
 
-				// Check if it was previously Top 3 (simulated check via current impressions/clicks)
-				if ( (int)$row['clicks'] > 50 ) {
+				$verified++;
+				$was_top3 = $this->was_previously_top3( $google, $row['keys'][0], $row['keys'][1] );
+				if ( $was_top3 ) {
 					$drops[] = array(
 						'id' => $post_id,
 						'kw' => $row['keys'][0],
@@ -91,6 +120,30 @@ class VMSB_Healer {
 		}
 
 		return array_slice( $drops, 0, $limit );
+	}
+
+	/**
+	 * Real position for this exact keyword+page pair, ~28 days before the
+	 * current window - not an aggregate across every keyword the page
+	 * ranks for (gsc_page_metrics() alone can't answer this; it has no
+	 * query dimension), so this queries directly with both filters.
+	 */
+	private function was_previously_top3( VMSB_Google $google, $keyword, $url ) {
+		$rows = $google->gsc_query(
+			array( 'query', 'page' ),
+			7,
+			1,
+			array(
+				array( 'dimension' => 'query', 'operator' => 'equals', 'expression' => $keyword ),
+				array( 'dimension' => 'page', 'operator' => 'equals', 'expression' => $url ),
+			),
+			0,
+			28
+		);
+		if ( is_wp_error( $rows ) || empty( $rows[0]['position'] ) ) {
+			return false; // No data for that earlier window - can't confirm a drop, so don't act on a guess.
+		}
+		return (float) $rows[0]['position'] <= 3.5;
 	}
 
 	private function diagnose_content_failure( $post, $keyword ) {
@@ -106,7 +159,7 @@ class VMSB_Healer {
 			. 'Return JSON: {"classification":"THIN_DEPTH|STALE_DATA|INTENT_MISMATCH","reason":"","missing_context":"","target_intent":""}';
 
 		$res = $ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'complexity' => 'standard', 'persona' => 'auditor' ) );
-		return $res ?: array('classification' => 'THIN_DEPTH', 'missing_context' => 'General depth improvement');
+		return ( is_array( $res ) && ! empty( $res['classification'] ) ) ? $res : null;
 	}
 
 	private function log_diagnostic( $post_id, $msg ) {

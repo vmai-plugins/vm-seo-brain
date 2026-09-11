@@ -54,9 +54,13 @@ class VMSB_AIPuffer {
 			} catch (\Throwable $e) { $log->error('aipuffer', 'Local discovery storage fail: ' . $e->getMessage()); }
 		}
 
-		// AI Power Fallback: Direct DB check if storage class fails or is empty
+		// AI Power Fallback: Direct DB check if storage class fails or is empty.
+		// Post type is 'aipkit_chatbot' (AdminSetup::POST_TYPE in the installed
+		// AI Power/AIPKit plugin) - the older 'wpaicg_chatbots' name this used
+		// to check never matches current installs, so this fallback silently
+		// never found anything.
 		if ( empty($bots) ) {
-			$raw_bots = get_posts( array( 'post_type' => 'wpaicg_chatbots', 'posts_per_page' => 50, 'post_status' => 'any' ) );
+			$raw_bots = get_posts( array( 'post_type' => 'aipkit_chatbot', 'posts_per_page' => 50, 'post_status' => 'any' ) );
 			foreach ( $raw_bots as $rb ) {
 				$bots[] = array( 'id' => $rb->ID, 'name' => $rb->post_title . ' (Local AI Power)' );
 			}
@@ -192,10 +196,23 @@ class VMSB_AIPuffer {
 				}
 			}
 		} else {
-			// Remote Sync
+			// Remote Sync. Fire-and-forget: this runs on every single AI
+			// generation call in the plugin (VMSB_AI_Router::generate()
+			// doesn't use the return value, and its own internal auditor/
+			// refine recursion can call it 2-3x in one content cycle), so
+			// two sequential blocking 15s requests here used to add up to
+			// 30s of pure added latency in front of the real AI call every
+			// time the remote KB was slow or unreachable, with nothing
+			// anywhere to attribute the slowdown to. 'blocking' => false
+			// still sends the request but returns immediately without
+			// waiting for a response - correct for a background sync
+			// nothing downstream reads the result of. The tradeoff is both
+			// endpoints fire unconditionally instead of stopping at the
+			// first 200 (blocking=false gives no real status to check
+			// against), which costs nothing now that neither call blocks.
 			$endpoints = array( '/wp-json/mwai/v1/kb/upsert', '/wp-json/aipkit/v1/vector-stores/upsert' );
 			foreach ( $endpoints as $path ) {
-				$res = wp_remote_post( rtrim( $url, '/' ) . $path, array(
+				wp_remote_post( rtrim( $url, '/' ) . $path, array(
 					'headers' => array(
 						'Authorization' => 'Bearer ' . $key,
 						'X-API-KEY'     => $key,
@@ -210,10 +227,10 @@ class VMSB_AIPuffer {
 							'metadata'=> $metadata
 						)
 					) ),
-					'timeout' => 15,
+					'timeout'    => 15,
+					'blocking'   => false,
 					'user-agent' => 'VM-SEO-Brain/' . VMSB_VERSION . '; ' . home_url(),
 				) );
-				if ( ! is_wp_error( $res ) && wp_remote_retrieve_response_code( $res ) === 200 ) break;
 			}
 		}
 	}

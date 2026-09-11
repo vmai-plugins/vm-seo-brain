@@ -243,30 +243,59 @@ class VMSB_Backlinks {
 	 * dead links, or link targets that have changed subject entirely since we
 	 * linked to them. Files as normal issues so they surface in God Fix scope.
 	 */
-	public function shield_scan( $limit = 30 ) {
+	public function shield_scan( $limit = 30, $budget = 40 ) {
 		$posts = get_posts( array( 'post_type' => array( 'post', 'page' ), 'posts_per_page' => $limit, 'post_status' => 'publish' ) );
 		$flagged = 0;
+		$checked = 0;
+
+		// 30 posts x every external link each is easily 150-300+ sequential
+		// 8s HEAD requests with nothing bounding total wall-clock time -
+		// this shares the same deadline pattern VMSB_Fixer::scan() already
+		// uses, rather than running until it happens to finish.
+		$deadline = time() + (int) $budget;
+		$stopped_early = false;
 
 		foreach ( $posts as $post ) {
+			if ( time() >= $deadline ) {
+				$stopped_early = true;
+				break;
+			}
+			$checked++;
 			if ( ! preg_match_all( '/<a\s[^>]*href=["\']([^"\']+)["\']/i', $post->post_content, $m ) ) {
 				continue;
 			}
 			$home = wp_parse_url( home_url(), PHP_URL_HOST );
 			foreach ( array_unique( $m[1] ) as $href ) {
+				if ( time() >= $deadline ) {
+					$stopped_early = true;
+					break 2;
+				}
 				$host = wp_parse_url( $href, PHP_URL_HOST );
 				if ( ! $host || $host === $home ) {
 					continue;
 				}
 				$res = wp_remote_head( $href, array( 'timeout' => 8, 'redirection' => 3 ) );
-				$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
-				if ( $code >= 400 || 0 === $code ) {
+				if ( is_wp_error( $res ) ) {
+					// A DNS hiccup or timeout on OUR side is not evidence the
+					// target link is dead - it used to file the exact same
+					// "dead outbound link" issue either way. Skip rather
+					// than report a false positive; a link that's actually
+					// down will keep failing on the next scan too.
+					continue;
+				}
+				$code = (int) wp_remote_retrieve_response_code( $res );
+				if ( $code >= 400 ) {
 					$this->file_dead_link( $post->ID, $href, $code );
 					$flagged++;
 				}
 			}
 		}
 
-		return array( 'checked' => count( $posts ), 'flagged' => $flagged );
+		if ( $stopped_early ) {
+			$this->log->warn( 'backlinks', "Dead-link shield stopped at its {$budget}s budget after checking {$checked}/" . count( $posts ) . ' posts.' );
+		}
+
+		return array( 'checked' => $checked, 'flagged' => $flagged );
 	}
 
 	private function file_dead_link( $post_id, $url, $code ) {

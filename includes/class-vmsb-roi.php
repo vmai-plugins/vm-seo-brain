@@ -46,7 +46,15 @@ class VMSB_ROI {
 				continue;
 			}
 
+			// url_to_postid() resolves against the rewrite rules, which can
+			// still hand back an id whose post is gone (trashed between the
+			// GSC window and this scan). A null here fataled the entire leak
+			// scan mid-loop rather than skipping one row.
 			$post = get_post( $post_id );
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+
 			$has_cta = (bool) get_post_meta( $post_id, '_vmsb_cta_inserted', true )
 				|| (bool) preg_match( '/<a\s[^>]*class=["\'][^"\']*\b(cta|button|btn)\b/i', $post->post_content )
 				|| (bool) preg_match( '/\b(contact us|get a quote|book a|call now|sign up|buy now|schedule)\b/i', $post->post_content );
@@ -256,14 +264,18 @@ class VMSB_ROI {
 		$page_data = $metrics[$path] ?? array('sessions' => 0, 'conversions' => 0, 'revenue' => 0);
 
 		// Revenue Opportunity Score = (Sessions * Avg Order Value * Potential Conversion Rate)
-		// Or if we have real revenue, use that as the baseline.
+		// Or if we have real revenue, use that as the baseline. The AOV and
+		// conversion-rate fallbacks used to be hardcoded ($50, 2%) for
+		// every site regardless of vertical; both are configurable now
+		// (same defaults, so behavior is unchanged until corrected).
 		$current_revenue = (float) $page_data['revenue'];
-		$avg_order_value = $current_revenue > 0 && $page_data['conversions'] > 0 ? ($current_revenue / $page_data['conversions']) : 50; // Default $50
+		$avg_order_value = $current_revenue > 0 && $page_data['conversions'] > 0 ? ($current_revenue / $page_data['conversions']) : (float) VMSB_Settings::get( 'default_aov', 50 );
 
 		$intent = (new VMSB_Keywords())->get_keyword_intent_for_post($post_id);
 		$intent_multiplier = ($intent === 'transactional' || $intent === 'commercial') ? 2.5 : 1.0;
 
-		$score = ( ($page_data['sessions'] + 1) * $avg_order_value * 0.02 ) * $intent_multiplier;
+		$conversion_rate = (float) VMSB_Settings::get( 'default_conversion_rate', 2.0 ) / 100;
+		$score = ( ($page_data['sessions'] + 1) * $avg_order_value * $conversion_rate ) * $intent_multiplier;
 
 		return round($score, 2);
 	}

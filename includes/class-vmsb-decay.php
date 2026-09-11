@@ -19,7 +19,7 @@ class VMSB_Decay {
 	 * Scan for decaying content.
 	 * Advanced 2026: Multi-Signal detection including Predictive Velocity and Semantic Staleness.
 	 */
-	public function monitor( $limit = 10 ) {
+	public function monitor( $limit = 10, $budget = 40 ) {
 		if ( ! $this->google->is_connected() ) {
 			return 0;
 		}
@@ -31,8 +31,19 @@ class VMSB_Decay {
 		$found = 0;
 		$processed_urls = array();
 
+		// $found only increments for a page that turns out to actually be
+		// decaying, so on a healthy site (or one where a signal was already
+		// silenced upstream) this loop ran to completion regardless of
+		// $limit - up to 2-3 sequential wp_remote_* calls per row, on up to
+		// 500 rows, with nothing bounding total wall-clock time.
+		$deadline = time() + (int) $budget;
+
 		foreach ( $current as $row ) {
 			if ( $found >= $limit ) break;
+			if ( time() >= $deadline ) {
+				$this->log->warn( 'decay', "Decay monitor stopped at its {$budget}s budget after finding {$found}. Resumes from wherever the next scheduled run starts." );
+				break;
+			}
 
 			$url = $row['keys'][0];
 			if ( in_array($url, $processed_urls) ) continue;

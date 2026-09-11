@@ -92,7 +92,13 @@ class VMSB_Entity {
 			return new WP_Error( 'vmsb_entity', 'This page is built in Elementor - full post_content rewrite is skipped to avoid corrupting the layout.' );
 		}
 
-		$post    = get_post( $post_id );
+		// Caller-supplied id via the entity REST routes - null here used to
+		// fatal on the $post->post_content read below.
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return new WP_Error( 'vmsb_entity', 'That post no longer exists.' );
+		}
+
 		$targets = array_slice( $audit['missing'], 0, $max_entities );
 
 		$prompt = "Article HTML:\n\n" . $post->post_content . "\n\n"
@@ -131,17 +137,7 @@ class VMSB_Entity {
 	 * Posts never entity-audited, or audited under 60, oldest first.
 	 */
 	public function sweep( $limit = 5 ) {
-		global $wpdb;
-		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
-		$types_sql  = "'" . implode( "','", array_map( 'esc_sql', $safe_types ) ) . "'";
-
-		$ids = $wpdb->get_col( $wpdb->prepare(
-			"SELECT p.ID FROM {$wpdb->posts} p
-			 LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_vmsb_entity_audit'
-			 WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql}) AND m.meta_id IS NULL
-			 ORDER BY p.post_date DESC LIMIT %d",
-			(int) $limit
-		) );
+		$ids = VMSB_Settings::posts_missing_meta( '_vmsb_entity_audit', $limit );
 
 		$done = 0;
 		foreach ( $ids as $id ) {

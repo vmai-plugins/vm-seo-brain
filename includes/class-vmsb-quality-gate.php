@@ -33,7 +33,15 @@ class VMSB_Quality_Gate {
 		}
 
 		$text  = trim( wp_strip_all_tags( $content ) );
-		$words = str_word_count( $text );
+		// str_word_count() only recognizes ASCII letters - it cannot see
+		// Devanagari (or any non-Latin script) at all, so a genuine,
+		// complete Hindi article counted as 0 words here and was rejected
+		// as "thin content" regardless of actual length. The sibling
+		// readability() check below was already fixed for this exact
+		// defect (see its docblock); this length check used the same
+		// broken function and was never updated to match. Same
+		// Unicode-aware counting method both places now.
+		$words = self::word_count( $text );
 
 		$checks   = array();
 		$blocking = array();
@@ -205,8 +213,16 @@ class VMSB_Quality_Gate {
 	 * sentence terminator, and refuses to score text that is not mostly Latin
 	 * rather than inventing a number for it.
 	 */
+	/**
+	 * Unicode-aware word count: any run of letters/numbers in any script
+	 * counts as one word, unlike str_word_count() which is ASCII-only.
+	 */
+	private static function word_count( $text ) {
+		return (int) preg_match_all( '/[\p{L}\p{N}]+/u', $text );
+	}
+
 	private static function readability( $text ) {
-		$words_total = preg_match_all( '/[\p{L}\p{N}]+/u', $text );
+		$words_total = self::word_count( $text );
 		if ( $words_total < 1 ) {
 			return array( 'score' => 0, 'detail' => 'No readable text found.' );
 		}

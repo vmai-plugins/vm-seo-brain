@@ -146,4 +146,19 @@ class VMSB_Performance {
 			'top_declined'      => array_slice( array_values( $declined ), 0, 3 ),
 		);
 	}
+
+	/**
+	 * Prune old rank history records to prevent unbounded table growth.
+	 */
+	public function prune( $days = 180 ) {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare(
+			"DELETE FROM {$this->table()} WHERE snapshot_date < DATE_SUB(CURDATE(), INTERVAL %d DAY)",
+			(int) $days
+		) );
+		$wpdb->query( $wpdb->prepare(
+			"DELETE FROM {$wpdb->prefix}vmsb_metrics WHERE snapshot_date < DATE_SUB(CURDATE(), INTERVAL %d DAY)",
+			(int) $days
+		) );
+	}
 }

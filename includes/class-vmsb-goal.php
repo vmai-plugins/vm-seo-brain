@@ -161,6 +161,26 @@ class VMSB_Goal {
 	 * goes live stays a human's decision.
 	 */
 	public function directive() {
+		// status() -> status_for() runs 4 aggregate queries over vmsb_metrics
+		// plus a projection loop, and this is recomputed on every single
+		// pipeline-feed poll - every 6-30 seconds while the Content Factory/
+		// Pipeline panel is open (admin.js's FAST/SLOW interval). The
+		// underlying data is daily-granularity GA4 snapshots; it cannot
+		// meaningfully change between one poll and the next 6 seconds later.
+		// A short cache turns "4 extra queries every poll tick, indefinitely"
+		// into "4 extra queries once a minute" with no loss of real freshness.
+		$cache_key = 'vmsb_goal_directive';
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
+		$directive = $this->compute_directive();
+		set_transient( $cache_key, $directive, MINUTE_IN_SECONDS );
+		return $directive;
+	}
+
+	private function compute_directive() {
 		$s = $this->status();
 		if ( ! $s ) {
 			return array(
@@ -342,6 +362,9 @@ class VMSB_Goal {
 
 			update_option( self::PHASES_KEY, $phases, false );
 			update_option( self::STATE_KEY, array( 'last_review' => time(), 'reason' => $reason ), false );
+			// The phase just changed - directive()'s cache must not hand back
+			// a directive computed against the phase that just ended.
+			delete_transient( 'vmsb_goal_directive' );
 
 			( new VMSB_Logger() )->info( 'goal', $reason, array(
 				'next_target' => $next_target,
@@ -371,7 +394,7 @@ class VMSB_Goal {
 	 *
 	 * @return array{applied:bool,from:int,to:int}
 	 */
-	public function apply( array $directive = null ) {
+	public function apply( ?array $directive = null ) {
 		$directive = $directive ?: $this->directive();
 
 		if ( empty( $directive['active'] ) || empty( $directive['pace_changed'] ) ) {

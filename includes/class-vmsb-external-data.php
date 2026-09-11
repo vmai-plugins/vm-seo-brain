@@ -97,6 +97,54 @@ class VMSB_External_Data {
 		) );
 	}
 
+	/**
+	 * Who actually ranks for a keyword right now, and at which URL - real
+	 * SERP composition from SEMrush's own index, not a live Google fetch.
+	 * Used to find a specific competitor page to compare against instead
+	 * of guessing what "a site like this" probably covers.
+	 */
+	public static function semrush_phrase_organic( $keyword, $database = 'us', $limit = 20 ) {
+		return self::semrush_request( array(
+			'type'     => 'phrase_organic',
+			'phrase'   => $keyword,
+			'database' => $database,
+			'display_limit' => $limit,
+			'export_columns' => 'Dn,Ur,Po',
+		) );
+	}
+
+	/**
+	 * Fetch a public page's readable text - a normal HTTP GET on content
+	 * the page owner has already published for anyone to read, the same
+	 * way a browser or any crawler would. Bounded length and a real
+	 * User-Agent so this behaves like any other well-behaved fetcher.
+	 *
+	 * @return string|WP_Error
+	 */
+	public static function fetch_page_text( $url, $max_chars = 6000 ) {
+		$res = wp_remote_get( $url, array(
+			'timeout'    => 15,
+			'redirection'=> 3,
+			'user-agent' => 'VM-SEO-Brain/' . VMSB_VERSION . ' (+' . home_url() . ')',
+		) );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		$code = wp_remote_retrieve_response_code( $res );
+		if ( $code < 200 || $code >= 300 ) {
+			return new WP_Error( 'vmsb_external', "Fetching {$url} returned HTTP {$code}." );
+		}
+
+		$html = wp_remote_retrieve_body( $res );
+		// Strip script/style blocks before tag-stripping so their contents
+		// (JS/CSS, not article text) never leak into the extracted text.
+		$html = preg_replace( '#<(script|style)\b[^>]*>.*?</\1>#is', '', $html );
+		$text = wp_strip_all_tags( $html );
+		$text = trim( preg_replace( '/\s+/', ' ', $text ) );
+
+		return mb_substr( $text, 0, $max_chars );
+	}
+
 	/* ---------------------------------------------------------------- Ahrefs */
 
 	/**

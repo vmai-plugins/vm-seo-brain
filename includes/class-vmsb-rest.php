@@ -68,6 +68,10 @@ class VMSB_REST {
 			'pending-approve' => 'pending_approve',
 			'pending-reject'  => 'pending_reject',
 			'alt-backfill'    => 'alt_backfill',
+			'plan-dedupe'     => 'plan_dedupe',
+			'geo-save-map'    => 'geo_save_map',
+			'geo-coverage'    => 'geo_coverage',
+			'geo-expand'      => 'geo_expand',
 			'test-provider'   => 'test_provider',
 			'webhook-test'    => 'webhook_test',
 			'index-vectors'   => 'index_vectors',
@@ -133,6 +137,8 @@ class VMSB_REST {
 			'execute-opportunity' => 'execute_opportunity',
 			'generate-report'     => 'generate_report',
 			'notifications'       => 'notifications',
+			'wizard-save'         => 'wizard_save',
+			'citability-audit'    => 'citability_audit',
 		);
 
 		foreach ( $routes as $path => $callback ) {
@@ -609,9 +615,75 @@ class VMSB_REST {
 		return rest_ensure_response( array( 'fixed' => ( new VMSB_Image_Engine() )->backfill_alt_text( (int) $request->get_param( 'limit' ) ?: 25 ) ) );
 	}
 
+	/**
+	 * Defaults to a dry run. Deleting a thousand plan rows is not something a
+	 * mis-sent request should be able to do by omitting a parameter.
+	 */
+	public function plan_dedupe( $request ) {
+		$confirm = (bool) $request->get_param( 'confirm' );
+		$res     = VMSB_Plan_Dedupe::run( ! $confirm, (int) $request->get_param( 'limit' ) );
+
+		// The group objects carry full rows; the client only needs a summary.
+		$summary = array();
+		foreach ( array_slice( $res['groups'], 0, 25 ) as $group ) {
+			$summary[] = array(
+				'keyword' => $group['keyword'],
+				'keep_id' => (int) $group['keep']->id,
+				'removes' => count( $group['remove'] ),
+			);
+		}
+
+		return rest_ensure_response( array(
+			'dry_run' => $res['dry_run'],
+			'removed' => $res['removed'],
+			'totals'  => $res['totals'],
+			'worst'   => $summary,
+		) );
+	}
+
+	/* ------------------------------------------------------------ geo */
+
+	public function geo_save_map( $request ) {
+		$text = (string) $request->get_param( 'map' );
+		$map  = VMSB_Geo::save_map( VMSB_Geo::parse( $text ) );
+
+		$cities = 0;
+		foreach ( $map as $list ) {
+			$cities += count( $list );
+		}
+
+		return rest_ensure_response( array(
+			'states' => count( $map ),
+			'cities' => $cities,
+			'map'    => $map,
+		) );
+	}
+
+	public function geo_coverage( $request ) {
+		return rest_ensure_response( VMSB_Geo::coverage() );
+	}
+
+	public function geo_expand( $request ) {
+		$res = VMSB_Geo::expand(
+			(string) $request->get_param( 'service' ),
+			(string) $request->get_param( 'state' ),
+			(int) $request->get_param( 'limit' ) ?: 20,
+			(bool) $request->get_param( 'dry_run' )
+		);
+
+		if ( is_wp_error( $res ) ) {
+			return new WP_REST_Response( array( 'error' => $res->get_error_message() ), 422 );
+		}
+
+		return rest_ensure_response( $res );
+	}
+
 	public function test_provider( $request ) {
 		$provider = sanitize_key( $request->get_param( 'provider' ) );
-		$res      = ( new VMSB_AI_Router() )->generate( 'Reply with exactly: OK', array( 'provider' => $provider, 'max_tokens' => 10, 'bypass_circuit' => true ) );
+		// 'kb' => false: a connection test should not also push "Prompt
+		// History" into the AI Puffer knowledge base, which is what every
+		// click of Test used to do on top of the actual check.
+		$res      = ( new VMSB_AI_Router() )->generate( 'Reply with exactly: OK', array( 'provider' => $provider, 'max_tokens' => 10, 'bypass_circuit' => true, 'kb' => false ) );
 		return rest_ensure_response( array( 'ok' => ! empty( $res['ok'] ), 'message' => ! empty( $res['ok'] ) ? trim( $res['text'] ) : $res['error'] ) );
 	}
 
@@ -897,16 +969,27 @@ class VMSB_REST {
 		$social = get_post_meta( $post_id, '_vmsb_social_pack', true );
 
 		$entities = class_exists( 'VMSB_Entity' ) ? ( new VMSB_Entity() )->get_missing_entities( $post_id ) : array();
+		$citability = class_exists( 'VMSB_Citability' ) ? ( new VMSB_Citability() )->analyze( $post_id ) : array();
 
 		return rest_ensure_response( array(
-			'title'    => $post->post_title,
-			'score'    => (int) get_post_meta( $post_id, '_vmsb_quality_score', true ),
-			'report'   => $report,
-			'aeo'      => $aeo,
-			'social'   => $social,
-			'entities' => $entities,
-			'links'    => ( new VMSB_Silo() )->semantic_targets( $post_id, 3 )
+			'title'      => $post->post_title,
+			'score'      => (int) get_post_meta( $post_id, '_vmsb_quality_score', true ),
+			'report'     => $report,
+			'aeo'        => $aeo,
+			'citability' => $citability,
+			'social'     => $social,
+			'entities'   => $entities,
+			'links'      => ( new VMSB_Silo() )->semantic_targets( $post_id, 3 )
 		) );
+	}
+
+	public function citability_audit( $request ) {
+		$post_id = (int) $request->get_param( 'id' );
+		if ( ! $post_id ) {
+			return new WP_Error( 'invalid_id', 'Post ID required.' );
+		}
+		$citability = new VMSB_Citability();
+		return rest_ensure_response( $citability->analyze( $post_id ) );
 	}
 
 	/* ---------------------------------------------------------------- strategist / tasks */
@@ -1456,5 +1539,78 @@ class VMSB_REST {
 		VMSB_Task_Runner::log_event( $id, 'Re-queued by hand', 'Retried from the Production Hub after a failure.' );
 
 		return rest_ensure_response( array( 'success' => true, 'requeued' => $id ) );
+	}
+
+	public function wizard_save( $request ) {
+		$ai_primary     = sanitize_key( $request->get_param( 'ai_primary' ) ?: 'gemini' );
+		$api_key        = trim( (string) $request->get_param( 'api_key' ) );
+		$model          = sanitize_text_field( (string) $request->get_param( 'model' ) );
+		$business_name  = sanitize_text_field( (string) $request->get_param( 'business_name' ) );
+		$business_type  = sanitize_text_field( (string) $request->get_param( 'business_type' ) );
+		$description    = sanitize_text_field( (string) $request->get_param( 'description' ) );
+		$services       = sanitize_text_field( (string) $request->get_param( 'services' ) );
+		$audience       = sanitize_text_field( (string) $request->get_param( 'audience' ) );
+		$tone           = sanitize_text_field( (string) $request->get_param( 'tone' ) ?: 'professional' );
+		$autonomy_mode  = sanitize_key( $request->get_param( 'autonomy_mode' ) ?: 'assisted' );
+
+		$settings_update = array(
+			'ai_primary'           => $ai_primary,
+			'business_name'        => $business_name,
+			'business_type'        => $business_type,
+			'business_description' => $description,
+			'services'             => $services,
+			'audience'             => $audience,
+			'tone'                 => $tone,
+		);
+
+		if ( $api_key && ! VMSB_Settings::is_masked( $api_key ) ) {
+			if ( 'openai' === $ai_primary ) {
+				$settings_update['openai_key'] = $api_key;
+				if ( $model ) $settings_update['openai_model'] = $model;
+			} elseif ( 'gemini' === $ai_primary ) {
+				$settings_update['gemini_key'] = $api_key;
+				if ( $model ) $settings_update['gemini_model'] = $model;
+			} elseif ( 'openrouter' === $ai_primary ) {
+				$settings_update['openrouter_key'] = $api_key;
+				if ( $model ) $settings_update['openrouter_model'] = $model;
+			} elseif ( 'aipuffer' === $ai_primary ) {
+				$settings_update['aipuffer_key'] = $api_key;
+				if ( $model ) $settings_update['aipuffer_bot_id'] = $model;
+			} elseif ( 'ollama' === $ai_primary ) {
+				$settings_update['ollama_url'] = $api_key;
+				if ( $model ) $settings_update['ollama_model'] = $model;
+			}
+		}
+
+		if ( 'autopilot' === $autonomy_mode ) {
+			$settings_update['god_mode']       = 1;
+			$settings_update['auto_publish']   = 1;
+			$settings_update['require_review'] = 0;
+			$settings_update['posts_per_day']  = 1;
+		} else {
+			$settings_update['god_mode']       = 0;
+			$settings_update['auto_publish']   = 0;
+			$settings_update['require_review'] = 1;
+		}
+
+		VMSB_Settings::update( $settings_update );
+		update_option( 'vmsb_onboarded', 1 );
+
+		// Seed initial business understanding into memory
+		$brain = new VMSB_Brain();
+		if ( $business_name ) $brain->remember( 'business', 'name', $business_name, 1.0, 'wizard' );
+		if ( $business_type ) $brain->remember( 'business', 'type', $business_type, 1.0, 'wizard' );
+		if ( $description )   $brain->remember( 'business', 'description', $description, 1.0, 'wizard' );
+		if ( $services )      $brain->remember( 'business', 'services', $services, 1.0, 'wizard' );
+
+		// Index links if needed
+		if ( class_exists( 'VMSB_Link_Index' ) ) {
+			VMSB_Link_Index::index_all();
+		}
+
+		return rest_ensure_response( array(
+			'ok'      => true,
+			'message' => 'Configuration saved and Brain calibrated successfully.',
+		) );
 	}
 }

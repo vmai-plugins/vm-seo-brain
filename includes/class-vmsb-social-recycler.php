@@ -60,7 +60,16 @@ class VMSB_Social_Recycler {
 	 * Generate a pack of content for LinkedIn, X (Twitter), and Facebook.
 	 */
 	public function generate_social_pack( $post_id ) {
+		// Reached from the 'social-generate' REST route with a caller-supplied
+		// id. get_post() returns null for an id that does not exist (or was
+		// trashed between page render and click), and the next line
+		// dereferenced it unconditionally - a hard fatal, surfaced to the
+		// browser as an opaque 500 rather than a usable message.
 		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return new WP_Error( 'vmsb_social', 'That post no longer exists.' );
+		}
+
 		$text = wp_strip_all_tags( strip_shortcodes( $post->post_content ) );
 		$url  = get_permalink( $post_id );
 

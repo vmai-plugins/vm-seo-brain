@@ -125,20 +125,8 @@ class VMSB_Schema {
 	 * Posts published without any schema, oldest first.
 	 */
 	public function sweep( $limit = 5 ) {
-		global $wpdb;
-		$safe_types = (array) VMSB_Settings::get( 'safe_post_types', array( 'post' ) );
-		$types_sql  = "'" . implode( "','", array_map( 'esc_sql', $safe_types ) ) . "'";
-
-		// Check for both native and Rank Math FAQ schema
-		$ids = $wpdb->get_col( $wpdb->prepare(
-			"SELECT p.ID FROM {$wpdb->posts} p
-			 LEFT JOIN {$wpdb->postmeta} m1 ON m1.post_id = p.ID AND m1.meta_key = '_vmsb_faq_schema'
-			 LEFT JOIN {$wpdb->postmeta} m2 ON m2.post_id = p.ID AND m2.meta_key = 'rank_math_schema_FAQPage'
-			 WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql})
-			 AND m1.meta_id IS NULL AND m2.meta_id IS NULL
-			 ORDER BY p.post_date DESC LIMIT %d",
-			(int) $limit
-		) );
+		// Check for both native and Rank Math FAQ schema.
+		$ids = VMSB_Settings::posts_missing_meta( array( '_vmsb_faq_schema', 'rank_math_schema_FAQPage' ), $limit );
 
 		$done = 0;
 		foreach ( $ids as $id ) {

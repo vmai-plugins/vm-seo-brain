@@ -8,10 +8,17 @@ defined( 'ABSPATH' ) || exit;
  * keyword-thief) because they all answer the same underlying question: what is
  * a named competitor doing that we are not, and is it working for them?
  *
- * Everything here reads from Search Console (our own visibility for shared
- * queries) plus the model's own knowledge of the competitor's site - there is
- * no paid rank-tracking API required, though SEMrush/Ahrefs (Tier 3) sharpen
- * the numbers when a key is present.
+ * Real data first, model reasoning as the fallback - never a live Google
+ * fetch (against Google's own ToS to scrape, and actively blocked). When
+ * SEMrush is configured (Tier 3, optional): assess() checks who actually
+ * ranks for our weak queries, duel() fetches the competitor's real ranking
+ * page (a normal HTTP GET on content they've already published) and
+ * compares against it directly. track_velocity() always tries a real
+ * sitemap fetch first, no API key needed. Every result's 'source' field
+ * says which path produced it (semrush / fetched_page / ai_estimate) - no
+ * paid API is required for any of this to work, but the model is asked to
+ * reason only when nothing real was found, not asked to reason instead of
+ * looking.
  */
 class VMSB_Competitor {
 
@@ -380,12 +387,24 @@ class VMSB_Competitor {
 	}
 
 	/**
-	 * Ask the model to reason about a competitor against our weak queries.
-	 * Upgraded with Infiltrator logic to detect "Tactical Gaps".
+	 * Which of our weak queries this competitor actually, verifiably ranks
+	 * for, from SEMrush's own real keyword-gap data when configured -
+	 * falling back to the model's reasoning when it isn't (SEMrush is an
+	 * optional Tier-3 integration, not everyone has a key).
 	 */
 	private function assess( $domain, array $weak_queries ) {
 		if ( ! $weak_queries ) {
 			return array( 'gaps' => array(), 'threat_score' => 0 );
+		}
+
+		if ( VMSB_External_Data::semrush_configured() ) {
+			$real = $this->assess_from_semrush( $domain, $weak_queries );
+			if ( ! is_wp_error( $real ) ) {
+				return $real;
+			}
+			// Real data failed (rate limit, transient API error, etc.) -
+			// fall through to the AI-estimate path rather than surface an
+			// error for what should be a resilient background scan.
 		}
 
 		$brain  = new VMSB_Brain();
@@ -408,6 +427,59 @@ class VMSB_Competitor {
 			'threat_score' => (float) ( $data['threat_score'] ?? 0 ),
 			'gaps'         => array_slice( (array) ( $data['gaps'] ?? array() ), 0, 5 ),
 			'assessed_at'  => current_time( 'mysql' ),
+			'source'       => 'ai_estimate',
+		);
+	}
+
+	/**
+	 * Real gaps: for each of our weak queries, ask SEMrush who actually
+	 * ranks for it and at what position. A gap is real, verified fact here
+	 * - this competitor's actual position for this actual query - not a
+	 * guess about what they "likely" cover. Bounded to the same 10-query
+	 * slice the AI path used, so this can't turn into an unbounded per-
+	 * query API-call loop.
+	 */
+	private function assess_from_semrush( $domain, array $weak_queries ) {
+		$gaps = array();
+		foreach ( array_slice( $weak_queries, 0, 10 ) as $query ) {
+			$rows = VMSB_External_Data::semrush_phrase_organic( $query );
+			if ( is_wp_error( $rows ) || ! is_array( $rows ) ) {
+				continue;
+			}
+			foreach ( $rows as $row ) {
+				$ranking_domain = self::clean_domain( $row['Domain'] ?? '' );
+				if ( $ranking_domain !== $domain ) {
+					continue;
+				}
+				$gaps[] = array(
+					'query'        => $query,
+					'reason'       => "Ranks position " . ( $row['Position'] ?? '?' ) . " for this query.",
+					'angle'        => "Outrank {$domain} at " . ( $row['Url'] ?? $domain ),
+					'tactical_gap' => 'Verified ranking (SEMrush), not a guess.',
+					'position'     => (int) ( $row['Position'] ?? 0 ),
+					'url'          => $row['Url'] ?? '',
+				);
+				break; // one match per query is enough signal
+			}
+		}
+
+		if ( ! $gaps ) {
+			return array( 'threat_score' => 0, 'gaps' => array(), 'assessed_at' => current_time( 'mysql' ), 'source' => 'semrush' );
+		}
+
+		// Threat score from real signal: how many of our weak queries this
+		// competitor actually holds, weighted toward better positions.
+		$score = 0;
+		foreach ( $gaps as $g ) {
+			$score += $g['position'] > 0 ? max( 0, 100 - ( $g['position'] * 5 ) ) : 20;
+		}
+		$threat_score = min( 100, round( $score / max( 1, count( $weak_queries ) ) ) );
+
+		return array(
+			'threat_score' => $threat_score,
+			'gaps'         => array_slice( $gaps, 0, 5 ),
+			'assessed_at'  => current_time( 'mysql' ),
+			'source'       => 'semrush',
 		);
 	}
 
@@ -455,20 +527,70 @@ class VMSB_Competitor {
 			return new WP_Error( 'vmsb_competitor', 'Post not found.' );
 		}
 
-		$brain  = new VMSB_Brain();
-		$prompt = "Our article, title \"{$post->post_title}\":\n\n" . mb_substr( wp_strip_all_tags( $post->post_content ), 0, 5000 ) . "\n\n"
-			. "Competitor domain: {$domain}\n\n"
-			. "Based on how a site like this typically covers this topic, what does their coverage likely include that ours does not - "
-			. "specific subtopics, data points, formats (comparison table, calculator, FAQ), or angles? Be concrete, not generic ('more detail').\n\n"
-			. 'Return JSON: {"likely_gaps":[""],"recommended_additions":[""],"verdict":"ahead|even|behind"}';
+		$our_text = mb_substr( wp_strip_all_tags( $post->post_content ), 0, 5000 );
+		$brain    = new VMSB_Brain();
+
+		// Try to ground this in the competitor's actual page instead of
+		// asking the model to imagine "how a site like this typically
+		// covers this topic" - find their real ranking URL for our post's
+		// focus keyword (SEMrush's own index, not a live Google fetch),
+		// then fetch that page's real text (a normal HTTP GET on content
+		// already published for anyone to read).
+		$their_url  = null;
+		$their_text = null;
+		$keyword    = (string) ( new VMSB_RankMath() )->get_focus_keyword( $post_id );
+		if ( $keyword && VMSB_External_Data::semrush_configured() ) {
+			$their_url = $this->find_ranking_url( $domain, $keyword );
+			if ( $their_url ) {
+				$fetched = VMSB_External_Data::fetch_page_text( $their_url );
+				if ( ! is_wp_error( $fetched ) && mb_strlen( $fetched ) > 200 ) {
+					$their_text = $fetched;
+				}
+			}
+		}
+
+		if ( $their_text ) {
+			$prompt = "Our article, title \"{$post->post_title}\":\n\n{$our_text}\n\n"
+				. "Competitor's actual page ({$their_url}):\n\n{$their_text}\n\n"
+				. "Compare the two directly. What does the competitor's page actually cover that ours does not - "
+				. "specific subtopics, data points, formats (comparison table, calculator, FAQ), or angles? Be concrete and cite what you actually see in their text, not generic ('more detail').\n\n"
+				. 'Return JSON: {"likely_gaps":[""],"recommended_additions":[""],"verdict":"ahead|even|behind"}';
+			$source = 'fetched_page';
+		} else {
+			$prompt = "Our article, title \"{$post->post_title}\":\n\n{$our_text}\n\n"
+				. "Competitor domain: {$domain}\n\n"
+				. "Based on how a site like this typically covers this topic, what does their coverage likely include that ours does not - "
+				. "specific subtopics, data points, formats (comparison table, calculator, FAQ), or angles? Be concrete, not generic ('more detail').\n\n"
+				. 'Return JSON: {"likely_gaps":[""],"recommended_additions":[""],"verdict":"ahead|even|behind"}';
+			$source = 'ai_estimate';
+		}
 
 		$data = $this->ai->generate_json( $prompt, array( 'system' => $brain->context_prompt(), 'max_tokens' => 700, 'temperature' => 0.3, 'persona' => 'thief' ) );
 		if ( ! is_array( $data ) ) {
 			return new WP_Error( 'vmsb_competitor', $this->ai->get_last_error() ?: 'No usable response.' );
 		}
+		$data['source'] = $source;
 
 		update_post_meta( $post_id, '_vmsb_competitor_duel', array( 'domain' => $domain, 'result' => $data, 'checked_at' => current_time( 'mysql' ) ) );
 		return $data;
+	}
+
+	/**
+	 * The competitor's real URL currently ranking for this keyword, from
+	 * SEMrush's index - or null if they don't rank for it (or SEMrush has
+	 * no data), in which case duel() falls back to reasoning instead.
+	 */
+	private function find_ranking_url( $domain, $keyword ) {
+		$rows = VMSB_External_Data::semrush_phrase_organic( $keyword );
+		if ( is_wp_error( $rows ) || ! is_array( $rows ) ) {
+			return null;
+		}
+		foreach ( $rows as $row ) {
+			if ( self::clean_domain( $row['Domain'] ?? '' ) === $domain && ! empty( $row['Url'] ) ) {
+				return esc_url_raw( $row['Url'] );
+			}
+		}
+		return null;
 	}
 
 	private function discovery_duel( $domain ) {
@@ -483,23 +605,25 @@ class VMSB_Competitor {
 	}
 
 	/**
-	 * Attempt to estimate competitor publishing velocity.
+	 * Estimate competitor publishing velocity from a real sitemap fetch -
+	 * only falls back to an AI guess when no sitemap could be found at all.
+	 *
+	 * Was checking exactly one path (/post-sitemap.xml, a Yoast-specific
+	 * convention), so it missed WordPress core's own default
+	 * (/wp-sitemap.xml, every WP 5.5+ site without an SEO plugin), a plain
+	 * /sitemap.xml, and sitemap index files that list per-type sub-sitemaps
+	 * rather than URLs directly - meaning the real-data path silently
+	 * failed far more often than it needed to, falling through to an AI
+	 * estimate that then got stored with a real snapshot_date, visually
+	 * indistinguishable from a genuine sitemap count.
 	 */
 	public function track_velocity( $domain ) {
 		global $wpdb;
 		$table = $wpdb->prefix . 'vmsb_competitor_velocity';
 
-		// 1. Try to find a sitemap to count posts (lightweight HEAD request first)
-		$sitemap_url = "https://{$domain}/post-sitemap.xml";
-		$response = wp_remote_get( $sitemap_url, array( 'timeout' => 10 ) );
-		$count = 0;
+		$count = $this->count_urls_from_sitemap( $domain );
 
-		if ( ! is_wp_error( $response ) && wp_remote_retrieve_response_code( $response ) === 200 ) {
-			$body = wp_remote_retrieve_body( $response );
-			$count = substr_count( $body, '<url>' );
-		}
-
-		if ( $count === 0 ) {
+		if ( 0 === $count ) {
 			// Fallback: Ask AI to estimate based on their current index size
 			$brain = new VMSB_Brain();
 			$prompt = "Estimate the current total number of blog posts/articles on the domain: {$domain}. "
@@ -516,6 +640,55 @@ class VMSB_Competitor {
 				'snapshot_date' => current_time( 'mysql' )
 			) );
 		}
+	}
+
+	/**
+	 * Try several real, standard sitemap locations in order and count the
+	 * URLs in whichever responds first. A sitemap *index* (which lists
+	 * per-type sub-sitemaps via <sitemap><loc> rather than URLs directly -
+	 * WordPress core's /wp-sitemap.xml is one of these) is followed one
+	 * level into its post/page sub-sitemap rather than miscounted as zero.
+	 */
+	private function count_urls_from_sitemap( $domain ) {
+		$candidates = array(
+			"https://{$domain}/wp-sitemap.xml",   // WordPress core default (5.5+), no SEO plugin needed
+			"https://{$domain}/sitemap.xml",       // Most common convention across CMSs
+			"https://{$domain}/sitemap_index.xml", // Yoast/RankMath index
+			"https://{$domain}/post-sitemap.xml",  // Yoast's posts-only sub-sitemap
+		);
+
+		foreach ( $candidates as $url ) {
+			$response = wp_remote_get( $url, array( 'timeout' => 10 ) );
+			if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+				continue;
+			}
+			$body = wp_remote_retrieve_body( $response );
+
+			$url_count = substr_count( $body, '<url>' );
+			if ( $url_count > 0 ) {
+				return $url_count;
+			}
+
+			// It's an index, not a URL list - follow the first sub-sitemap
+			// that looks post/page-related, one level deep only.
+			if ( preg_match_all( '/<loc>([^<]+)<\/loc>/i', $body, $m ) && $m[1] ) {
+				foreach ( $m[1] as $sub_url ) {
+					if ( ! preg_match( '/post|page|article/i', $sub_url ) ) {
+						continue;
+					}
+					$sub_response = wp_remote_get( esc_url_raw( $sub_url ), array( 'timeout' => 10 ) );
+					if ( is_wp_error( $sub_response ) || 200 !== wp_remote_retrieve_response_code( $sub_response ) ) {
+						continue;
+					}
+					$sub_count = substr_count( wp_remote_retrieve_body( $sub_response ), '<url>' );
+					if ( $sub_count > 0 ) {
+						return $sub_count;
+					}
+				}
+			}
+		}
+
+		return 0;
 	}
 
 	public function get_velocity_report() {

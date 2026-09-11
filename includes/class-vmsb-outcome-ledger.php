@@ -30,8 +30,11 @@ class VMSB_Outcome_Ledger {
 		$counts = self::counts();
 		$net_clicks = (int) $counts['net_clicks'];
 
-		// Benchmark: $1.85 per click (Average CPC)
-		$avg_cpc = 1.85;
+		// Was a fixed $1.85 for every site regardless of vertical - a real
+		// legal-firm CPC and a blog's are 10-50x apart. Configurable in
+		// Settings now, same default so existing installs see no change
+		// until they correct it.
+		$avg_cpc = (float) VMSB_Settings::get( 'avg_cpc', 1.85 );
 
 		return array(
 			'net_clicks' => $net_clicks,

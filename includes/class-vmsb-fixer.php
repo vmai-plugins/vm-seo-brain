@@ -631,14 +631,27 @@ class VMSB_Fixer {
 	}
 
 	private function rule_in_scope( $rule, array $scope ) {
+		/*
+		 * Every rule fix_issue() can actually repair must appear in exactly one
+		 * family here, or God Mode can never reach it: this is a default-deny
+		 * allowlist, so a rule missing from the map is silently unfixable and
+		 * its issues pile up in the queue forever with no indication why.
+		 *
+		 * Four working repairs were stranded that way. The worst was
+		 * 'accidental_noindex' - detected at CRITICAL severity, with a complete
+		 * and safety-guarded handler (fix_accidental_noindex(), which refuses to
+		 * touch the Home or Blog page) - for the single most damaging state a
+		 * page can be in: telling Google not to index it at all. The fix existed
+		 * and simply could not run.
+		 */
 		$families = array(
 			'meta'           => array( 'missing_seo_title', 'title_too_long', 'title_too_short', 'missing_meta_description', 'description_too_long', 'missing_focus_keyword', 'low_ctr_snippet', 'missing_term_seo_title' ),
 			'alt'            => array( 'images_missing_alt', 'missing_featured_image' ),
-			'schema'         => array( 'missing_schema' ),
+			'schema'         => array( 'missing_schema', 'aeo_gap' ),
 			'internal_links' => array( 'orphan_from_pillar', 'orphan_page', 'not_marked_as_pillar', 'false_pillar', 'missing_pillar' ),
 			'taxonomy'       => array( 'missing_term_description', 'empty_archive', 'thin_tag', 'zombie_tag', 'duplicate_term', 'missing_silo_category' ),
-			'content'        => array( 'thin_content', 'stale_content', 'striking_distance', 'no_h2_structure', 'poor_readability', 'low_rankmath_score' ),
-			'technical'      => array( 'robots_no_sitemap', 'weak_permalinks', 'search_engines_discouraged' ),
+			'content'        => array( 'thin_content', 'stale_content', 'striking_distance', 'no_h2_structure', 'poor_readability', 'low_rankmath_score', 'content_decay', 'semantic_gap' ),
+			'technical'      => array( 'robots_no_sitemap', 'weak_permalinks', 'search_engines_discouraged', 'accidental_noindex' ),
 		);
 
 		foreach ( $scope as $family ) {
@@ -688,6 +701,17 @@ class VMSB_Fixer {
 		}
 
 		$prompt = "Act as an Elite SEO Editor. Your mission is to rewrite this content to achieve a Rank Math SEO score of 85-90+.\n\n"
+			// Same class of risk as the main content generator: a focus
+			// keyword written in a non-English script (Hindi-script search
+			// terms are common on this site) can pull the model's whole
+			// rewrite into that language even though the existing CONTENT
+			// below is English and there was never any intent to publish a
+			// non-English article. Rewriting from real English content
+			// makes this less likely than a from-scratch draft, but it is
+			// not zero, so the same explicit guard applies here too.
+			. "LANGUAGE: Write the rewrite in English throughout, even if the focus keyword below is in Hindi or another script. "
+			. "Use the keyword itself, and other Hindi words or proper nouns, naturally within the English text where that reads authentically - "
+			. "do not translate the article or write full paragraphs in Hindi.\n\n"
 			. "TITLE: {$post->post_title}\n"
 			. "FOCUS KEYWORD: {$keyword}\n"
 			. "CONTENT:\n{$post->post_content}\n\n"
@@ -843,8 +867,13 @@ class VMSB_Fixer {
 				return $this->fix_robots_sitemap();
 
 			case 'search_engines_discouraged':
+				// Reports the value actually written. It returned '0' - the
+				// state being repaired, not the result - so the fix ledger
+				// recorded every one of these as having switched the site
+				// back to "discourage search engines", the exact opposite of
+				// what happened.
 				update_option( 'blog_public', '1' );
-				return array( 'blog_public' => '0' );
+				return array( 'blog_public' => '1' );
 
 			case 'poor_readability':
 			case 'no_h2_structure':

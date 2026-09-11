@@ -138,4 +138,15 @@ class VMSB_Usage {
 			ORDER BY day ASC
 		", (int) $days ) );
 	}
+
+	/**
+	 * Prune old usage records to prevent infinite table growth.
+	 */
+	public static function prune( $days = 90 ) {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare(
+			"DELETE FROM " . self::table() . " WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY)",
+			(int) $days
+		) );
+	}
 }

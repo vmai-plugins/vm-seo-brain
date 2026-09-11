@@ -60,7 +60,7 @@ class VMSB_Commander {
 
 	private function move( $niche ) {
 		if ( ! $niche ) {
-			return "Please provide a niche or location. Example: /move Madhya Pradesh travel";
+			return "Please provide a niche or location. Example: /move <region> <niche>";
 		}
 		$keywords = new VMSB_Keywords();
 		$found = $keywords->research( 40, $niche );
