@@ -36,6 +36,9 @@ class VMSB_Healer {
 			if ( get_post_meta( $drop['id'], '_vmsb_last_healed', true ) > time() - ( 14 * DAY_IN_SECONDS ) ) continue;
 
 			$post = get_post($drop['id']);
+			if ( ! $post ) {
+				continue;
+			}
 			$this->log_diagnostic($drop['id'], "Analyzing drop for '{$drop['kw']}' (Current: #{$drop['pos']})");
 
 			// THE HEALER'S Rubric: Identify the specific problem

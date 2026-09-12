@@ -3,7 +3,7 @@ Contributors: vmstudiocreatives
 Tags: seo, rank math, search console, analytics, ai, automation
 Requires at least: 6.2
 Requires PHP: 8.0
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 
 An autonomous SEO layer for WordPress: it reads the business, researches keywords,
@@ -61,6 +61,21 @@ content in the priority order.
 * At least one working AI provider in the chain
 
 == Changelog ==
+
+= 1.6.0 =
+* Fixed Google OAuth token exchange failure caused by nonce vs transient state mismatch.
+* Fixed Rank Math page metrics query targeting analytics table and missing columns.
+* Fixed rollback status false-positive completion on post update failure.
+* Fixed Unix epoch 1970 timestamp corruption when parsing invalid sheet dates.
+* Fixed secondary keywords and internal link hints dropping when not strictly JSON-encoded.
+* Fixed textarea line break stripping for business descriptions and services.
+* Fixed GitHub updater stdClass uninitialized property notices in PHP 8.2+.
+* Fixed Pexels image engine fallback and attribution edge-cases.
+* Hardened D3 knowledge graph visualizer against blocked or offline CDN resources.
+* Comprehensive PHP 8.2+ compatibility audit and strict null-safety enhancements.
+
+= 1.5.0 =
+* OmniRoute integration and enhanced resilience chain.
 
 = 1.0.0 =
 * First release.

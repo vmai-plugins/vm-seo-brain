@@ -1010,6 +1010,9 @@ class VMSB_Fixer {
 
 		if ( ! $keyword ) {
 			$post = get_post( $post_id );
+			if ( ! $post ) {
+				return new WP_Error( 'vmsb_fix', 'Post not found.' );
+			}
 			$data = $this->ai->generate_json(
 				"Title: {$post->post_title}\n\nBody excerpt:\n" . mb_substr( wp_strip_all_tags( $post->post_content ), 0, 1500 )
 				. "\n\nGive the single primary search query this page should target. Return JSON: {\"keyword\":\"\"}",

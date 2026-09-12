@@ -309,6 +309,9 @@ class VMSB_Opportunity_Engine {
 
 			// Logic: If Top 3 all use a 'Calculator' or 'Case Study' and we don't, it's a Tactical Gap.
 			$post = get_post($kw->post_id);
+			if ( ! $post ) {
+				continue;
+			}
 			$missing_features = array();
 			foreach ( (array)$blueprint['trust_features'] as $feature ) {
 				if ( stripos($post->post_content, $feature) === false ) {

@@ -110,11 +110,12 @@ class VMSB_Actions {
 				break;
 		}
 
-		if ( $ok ) {
+		if ( $ok && ! is_wp_error( $ok ) ) {
 			$wpdb->update( self::table(), array( 'rollback_status' => 'completed' ), array( 'id' => $action_id ) );
 			return true;
 		}
 
-		return new WP_Error( 'vmsb_action', 'Rollback failed for type: ' . $row->action_type );
+		$err_msg = is_wp_error( $ok ) ? $ok->get_error_message() : 'Rollback failed for type: ' . $row->action_type;
+		return new WP_Error( 'vmsb_action', $err_msg );
 	}
 }

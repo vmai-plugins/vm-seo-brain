@@ -406,9 +406,10 @@ class VMSB_Brain {
 	 */
 	public function decide( array $state ) {
 		// World-Class Context: Authority Radar, Rivals & Rank Math
-		$silo_engine = new VMSB_Silo();
-		$silos = $silo_engine->map_for_display();
-		$weakest_silo = reset(array_filter($silos, fn($s) => $s['strength'] < 50));
+		$silo_engine  = new VMSB_Silo();
+		$silos        = $silo_engine->map_for_display();
+		$weak_silos   = array_filter( $silos, fn( $s ) => isset( $s['strength'] ) && $s['strength'] < 50 );
+		$weakest_silo = ! empty( $weak_silos ) ? reset( $weak_silos ) : false;
 
 		$rm = new VMSB_RankMath();
 		$avg_score = $rm->get_average_site_score();

@@ -36,6 +36,10 @@ defined( 'ABSPATH' ) || exit;
 
 <script>
 jQuery(function($) {
+	if ( typeof d3 === 'undefined' ) {
+		$("#vmsb-graph-container").html('<div style="padding:40px;text-align:center;color:#888;">Visualization library (D3.js) could not be loaded. Please check your internet connection or Content Security Policy.</div>');
+		return;
+	}
 	const container = d3.select("#vmsb-graph-container");
 	const svg = d3.select("#vmsb-graph-svg");
 

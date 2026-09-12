@@ -3,7 +3,7 @@
  * Plugin Name:       VM SEO Brain
  * Plugin URI:        https://vmstudio.digital/vm-seo-brain
  * Description:       Autonomous SEO brain for WordPress. Understands the business, researches keywords, plans topics, fixes technical + on-page errors, rebuilds silo structure, optimises taxonomies, generates images, and ships published posts through AI Puffer.
- * Version:           1.5.0
+ * Version:           1.6.0
  * Requires at least: 6.2
  * Requires PHP:      8.0
  * Author:            VM Studio Creatives

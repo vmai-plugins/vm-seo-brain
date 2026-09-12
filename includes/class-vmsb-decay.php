@@ -61,6 +61,9 @@ class VMSB_Decay {
 
 			// 1. Semantic Staleness Check: Year-based outdating (e.g. "Best of 2024")
 			$post = get_post($post_id);
+			if ( ! $post ) {
+				continue;
+			}
 			$prev_year = (int)date('Y') - 1;
 			if ( stripos($post->post_title, (string)$prev_year) !== false ) {
 				( new VMSB_Fixer() )->record( 'post', $post_id, 'semantic_stale', 'high', "Semantic Staleness: Title uses an outdated year ({$prev_year})." );

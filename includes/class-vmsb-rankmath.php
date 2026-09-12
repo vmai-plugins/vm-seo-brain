@@ -140,7 +140,7 @@ class VMSB_RankMath {
 		$dim = $dimensions[0] ?? 'query';
 
 		if ( $dim === 'page' ) {
-			$table = "{$p}rank_math_analytics_objects";
+			$table = "{$p}rank_math_analytics_gsc";
 			$col   = 'page'; // Path without domain
 		} else {
 			// Rank Math stores high-quality keyword reporting here
@@ -162,11 +162,11 @@ class VMSB_RankMath {
 		$rows = array();
 		foreach ( $results as $r ) {
 			$rows[] = array(
-				'keys'        => array( $r[ $col ] ),
-				'clicks'      => (int)$r['clicks'],
-				'impressions' => (int)$r['impressions'],
-				'ctr'         => (float)($r['ctr'] ?? 0),
-				'position'    => (float)$r['position']
+				'keys'        => array( $r[ $col ] ?? '' ),
+				'clicks'      => (int) ( $r['clicks'] ?? 0 ),
+				'impressions' => (int) ( $r['impressions'] ?? 0 ),
+				'ctr'         => (float) ( $r['ctr'] ?? 0 ),
+				'position'    => (float) ( $r['position'] ?? 0 )
 			);
 		}
 		return $rows;

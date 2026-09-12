@@ -8,6 +8,7 @@ defined( 'ABSPATH' ) || exit;
 class VMSB_Image_Engine {
 
 	private $log;
+	public $last_credit = '';
 
 	public function __construct() {
 		$this->log = new VMSB_Logger();
@@ -524,15 +525,19 @@ class VMSB_Image_Engine {
 			return new WP_Error( 'vmsb_pexels', 'No stock match for: ' . $query );
 		}
 		$photo = $data['photos'][ array_rand( $data['photos'] ) ];
-		$bytes = $this->fetch_bytes( $photo['src']['large2x'], 60 );
+		$src   = is_array( $photo['src'] ?? null ) ? $photo['src'] : array();
+		$img_url = $src['large2x'] ?? $src['large'] ?? $src['original'] ?? '';
+		if ( empty( $img_url ) ) {
+			return new WP_Error( 'vmsb_pexels', 'No usable image source in Pexels payload.' );
+		}
+		$bytes = $this->fetch_bytes( $img_url, 60 );
 		if ( ! is_wp_error( $bytes ) && $bytes ) {
 			// Remember attribution for the caption.
-			$this->last_credit = sprintf( 'Photo by %s on Pexels', $photo['photographer'] );
+			$photographer = ! empty( $photo['photographer'] ) ? $photo['photographer'] : 'Pexels';
+			$this->last_credit = sprintf( 'Photo by %s on Pexels', $photographer );
 		}
 		return $bytes;
 	}
-
-	public $last_credit = '';
 
 	/* ---------------------------------------------------------------- helpers */
 

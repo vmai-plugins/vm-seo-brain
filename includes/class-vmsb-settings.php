@@ -37,6 +37,7 @@ class VMSB_Settings {
 		'semrush_key',
 		'ahrefs_token',
 		'omniroute_key',
+		'github_token',
 	);
 
 	/** The bullet run masked() substitutes for a stored credential. */
@@ -246,6 +247,9 @@ class VMSB_Settings {
 			'feature_schema'     => 1,
 			'feature_llms_txt'   => 1,
 			'feature_citability' => 1,
+
+			// GitHub Updater
+			'github_token'       => '',
 		);
 	}
 

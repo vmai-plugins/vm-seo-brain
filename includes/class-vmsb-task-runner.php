@@ -337,7 +337,7 @@ class VMSB_Task_Runner {
 		}
 	}
 
-	private static function dispatch( $task_type, array $payload, $task_id ) {
+	public static function dispatch( $task_type, array $payload = array(), $task_id = 0 ) {
 		// All handlers should eventually use the task_id for logging/rollback association
 		switch ( $task_type ) {
 			/* -------------------------------------------------- scheduled work
@@ -490,7 +490,6 @@ class VMSB_Task_Runner {
 				}
 				return ( new VMSB_Fixer() )->god_fix( 10 );
 			case 'monitor_decay':    return ( new VMSB_Decay() )->monitor( 10 );
-			case 'news_scout':       return ( new VMSB_News() )->scout( 5 );
 			case 'social_recycle':   return ( new VMSB_Social_Recycler() )->process_recent( 5 );
 			case 'link_autopilot':   return ( new VMSB_Internal_Link_Autopilot() )->funnel_authority( 10 );
 			case 'hydrate_pipeline': return ( new VMSB_Content() )->hydrate_pipeline( 10 );

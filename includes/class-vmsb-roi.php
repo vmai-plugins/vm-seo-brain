@@ -268,14 +268,16 @@ class VMSB_ROI {
 		// conversion-rate fallbacks used to be hardcoded ($50, 2%) for
 		// every site regardless of vertical; both are configurable now
 		// (same defaults, so behavior is unchanged until corrected).
-		$current_revenue = (float) $page_data['revenue'];
-		$avg_order_value = $current_revenue > 0 && $page_data['conversions'] > 0 ? ($current_revenue / $page_data['conversions']) : (float) VMSB_Settings::get( 'default_aov', 50 );
+		$current_revenue = (float) ( $page_data['revenue'] ?? 0 );
+		$conversions     = (float) ( $page_data['conversions'] ?? 0 );
+		$avg_order_value = $current_revenue > 0 && $conversions > 0 ? ( $current_revenue / $conversions ) : (float) VMSB_Settings::get( 'default_aov', 50 );
 
 		$intent = (new VMSB_Keywords())->get_keyword_intent_for_post($post_id);
 		$intent_multiplier = ($intent === 'transactional' || $intent === 'commercial') ? 2.5 : 1.0;
 
 		$conversion_rate = (float) VMSB_Settings::get( 'default_conversion_rate', 2.0 ) / 100;
-		$score = ( ($page_data['sessions'] + 1) * $avg_order_value * $conversion_rate ) * $intent_multiplier;
+		$sessions        = (int) ( $page_data['sessions'] ?? 0 );
+		$score = ( ($sessions + 1) * $avg_order_value * $conversion_rate ) * $intent_multiplier;
 
 		return round($score, 2);
 	}

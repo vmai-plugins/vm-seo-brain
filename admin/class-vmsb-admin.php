@@ -516,13 +516,29 @@ class VMSB_Admin {
 		}
 
 		if ( isset( $_GET['vmsb_google'], $_GET['code'] ) && 'callback' === $_GET['vmsb_google'] ) {
-			if ( ! isset( $_GET['state'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['state'] ) ), 'vmsb_google_oauth' ) ) {
-				wp_die( 'That authorisation link has expired.' );
+			$google = new VMSB_Google();
+			if ( ! isset( $_GET['state'] ) || ! $google->verify_oauth_state( sanitize_text_field( wp_unslash( $_GET['state'] ) ) ) ) {
+				wp_die( esc_html__( 'That authorisation link has expired. Please try connecting again.', 'vm-seo-brain' ) );
 			}
-			$res = ( new VMSB_Google() )->exchange_code( sanitize_text_field( wp_unslash( $_GET['code'] ) ) );
+			$res = $google->exchange_code( sanitize_text_field( wp_unslash( $_GET['code'] ) ) );
 			$key = is_wp_error( $res ) ? 'google_failed' : 'google_connected';
 			wp_safe_redirect( admin_url( 'admin.php?page=vmsb-settings&vmsb_msg=' . $key ) );
 			exit;
+		}
+
+		if ( isset( $_GET['vmsb_action'], $_GET['vmsb_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['vmsb_nonce'] ) ), 'vmsb_update' ) ) {
+			$action = sanitize_key( wp_unslash( $_GET['vmsb_action'] ) );
+			if ( 'check_update' === $action && class_exists( 'VMSB_GitHub_Updater' ) ) {
+				VMSB_GitHub_Updater::check( true );
+				wp_safe_redirect( admin_url( 'admin.php?page=vmsb-settings&tab=updates&vmsb_msg=checked' ) );
+				exit;
+			}
+			if ( 'update_from_github' === $action && class_exists( 'VMSB_GitHub_Updater' ) ) {
+				$res = VMSB_GitHub_Updater::perform_direct_update();
+				$key = is_wp_error( $res ) ? 'update_failed' : 'update_done';
+				wp_safe_redirect( admin_url( 'admin.php?page=vmsb-settings&tab=updates&vmsb_msg=' . $key ) );
+				exit;
+			}
 		}
 
 		if ( ! isset( $_POST['vmsb_settings_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['vmsb_settings_nonce'] ) ), 'vmsb_save_settings' ) ) {
@@ -532,8 +548,15 @@ class VMSB_Admin {
 		$fields = wp_unslash( $_POST['vmsb'] ?? array() );
 		$clean  = array();
 
+		$textarea_keys = array( 'business_description', 'services' );
+		foreach ( $textarea_keys as $key ) {
+			if ( isset( $fields[ $key ] ) ) {
+				$clean[ $key ] = sanitize_textarea_field( $fields[ $key ] );
+			}
+		}
+
 		$text_keys = array(
-			'business_name', 'business_type', 'business_description', 'primary_locations', 'services',
+			'business_name', 'business_type', 'primary_locations',
 			'audience', 'tone', 'language', 'country', 'currency', 'competitors',
 			'ai_primary', 'aipuffer_url', 'aipuffer_kb_id', 'aipuffer_bot_id', 'openai_model', 'gemini_model',
 			'openrouter_model', 'ollama_url', 'ollama_model', 'pollinations_url', 'pollinations_model',
@@ -671,6 +694,9 @@ class VMSB_Admin {
 			'import_done'      => array( 'success', 'Topics imported successfully. View them in Content Engine.' ),
 			'license_active'   => array( 'success', 'License activated successfully! Your plan is now: ' . strtoupper(VMSB_License::plan()) ),
 			'wizard_completed' => array( 'success', 'Setup Wizard completed! Your SEO Brain is now calibrated.' ),
+			'checked'          => array( 'success', 'Update check completed with GitHub.' ),
+			'update_done'      => array( 'success', 'Successfully updated VM SEO Brain from GitHub!' ),
+			'update_failed'    => array( 'error', 'GitHub update failed. Check plugin logs for details.' ),
 		);
 		$key = sanitize_key( wp_unslash( $_GET['vmsb_msg'] ) );
 		if ( ! isset( $messages[ $key ] ) ) {

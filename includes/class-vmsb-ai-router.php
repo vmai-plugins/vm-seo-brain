@@ -198,6 +198,7 @@ class VMSB_AI_Router {
 			$result = array('ok' => false);
 
 			while ( $provider_attempts < $max_provider_attempts ) {
+				@set_time_limit( 120 );
 				$start_time = microtime(true);
 				$result = $this->$method( $prompt, $args );
 				$latency = microtime(true) - $start_time;

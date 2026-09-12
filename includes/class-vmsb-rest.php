@@ -139,6 +139,8 @@ class VMSB_REST {
 			'notifications'       => 'notifications',
 			'wizard-save'         => 'wizard_save',
 			'citability-audit'    => 'citability_audit',
+			'check-update'        => 'check_update',
+			'github-update'       => 'github_update',
 		);
 
 		foreach ( $routes as $path => $callback ) {
@@ -1612,5 +1614,52 @@ class VMSB_REST {
 			'ok'      => true,
 			'message' => 'Configuration saved and Brain calibrated successfully.',
 		) );
+	}
+
+	/**
+	 * Check for GitHub updates on demand.
+	 */
+	public function check_update( $request ) {
+		if ( ! class_exists( 'VMSB_GitHub_Updater' ) ) {
+			return new WP_Error( 'vmsb_missing_class', 'GitHub Updater class not found.', array( 'status' => 500 ) );
+		}
+
+		$data = VMSB_GitHub_Updater::check( true );
+
+		$formatted_time = ! empty( $data['checked_at'] )
+			? sprintf( '%s (%s ago)', gmdate( 'Y-m-d H:i:s', $data['checked_at'] ) . ' UTC', human_time_diff( $data['checked_at'], time() ) )
+			: 'Never';
+
+		return rest_ensure_response( array(
+			'ok'                     => ! empty( $data['ok'] ),
+			'installed_version'      => $data['installed_version'],
+			'remote_version'         => $data['remote_version'],
+			'update_available'       => ! empty( $data['update_available'] ),
+			'checked_at'             => $data['checked_at'],
+			'last_checked_formatted' => $formatted_time,
+			'release_name'           => $data['release_name'],
+			'release_notes'          => $data['release_notes'],
+			'source_type'            => $data['source_type'],
+			'repo'                   => $data['repo'],
+			'branch'                 => $data['branch'],
+			'repo_url'               => $data['repo_url'],
+			'message'                => $data['message'],
+		) );
+	}
+
+	/**
+	 * Execute 1-click in-place update from GitHub.
+	 */
+	public function github_update( $request ) {
+		if ( ! class_exists( 'VMSB_GitHub_Updater' ) ) {
+			return new WP_Error( 'vmsb_missing_class', 'GitHub Updater class not found.', array( 'status' => 500 ) );
+		}
+
+		$result = VMSB_GitHub_Updater::perform_direct_update();
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return rest_ensure_response( $result );
 	}
 }

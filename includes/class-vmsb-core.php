@@ -66,6 +66,7 @@ final class VMSB_Core {
 		'growth_engine' => 'VMSB_Growth_Engine',
 		'citability'    => 'VMSB_Citability',
 		'llms_txt'      => 'VMSB_LLMS_Txt',
+		'updater'       => 'VMSB_GitHub_Updater',
 	);
 
 	/** @var array<string,object> Resolved instances. */
@@ -82,6 +83,7 @@ final class VMSB_Core {
 		new VMSB_REST();
 		new VMSB_LLMS_Txt();
 		VMSB_Link_Index::boot();
+		VMSB_GitHub_Updater::init();
 
 		foreach ( array( 'indexing', 'webhooks', 'backlinks' ) as $eager ) {
 			$this->get( $eager );

@@ -7,7 +7,17 @@ defined( 'ABSPATH' ) || exit;
  */
 class VMSB_Google {
 
-	const SCOPES = 'https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/indexing';
+	// The Indexing API scope (auth/indexing) is deliberately NOT in the
+	// consent list. Google only issues Indexing API credentials to *service
+	// accounts*; a user OAuth token can never use them. Requesting the scope
+	// anyway was worse than useless: on a Google Cloud project that has not
+	// enabled it for OAuth clients, the consent screen can refuse the whole
+	// authorization outright (invalid_scope) - which is exactly the "stuck at
+	// Not connected" state this panel is meant to explain.
+	const SCOPES = 'https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/spreadsheets';
+
+	/** How long a completed consent state stays valid before it expires (24h). */
+	const OAUTH_STATE_TTL = 86400;
 
 	private $log;
 
@@ -18,40 +28,73 @@ class VMSB_Google {
 	/* ---------------------------------------------------------------- auth */
 
 	public function is_connected() {
-		// Site Kit Awareness (from Autopilot)
-		if ( VMSB_Settings::get('sitekit_prefer') && class_exists('\Google\Web_Stories\Integrations\Site_Kit') ) {
-			return true; // Simplified for logic check, actual token handling happens in access_token()
-		}
+		// "Connected" means exactly one thing: a usable refresh token in our
+		// own settings. The old Site Kit branch tested for a class that does
+		// not exist in either plugin and returned true without any token, so
+		// the UI claimed Synchronized while every Google call failed.
 		return (bool) VMSB_Settings::get( 'google_refresh_token' );
 	}
+
 
 	public function redirect_uri() {
 		return admin_url( 'admin.php?page=vmsb-settings&vmsb_google=callback' );
 	}
 
+	/**
+	 * A fresh one-time consent state. A WP nonce used to be used here; the
+	 * problem is that nonces expire after ~12 hours, and setting up Search
+	 * Console (creating the project, adding the redirect URI, waiting for
+	 * verification) routinely takes longer than that. The user would come
+	 * back from Google and be told "That authorisation link has expired"
+	 * with no way forward but to restart the dance. A random state stored
+	 * in a 24h transient survives the setup session.
+	 */
 	public function consent_url() {
+		$client_id = VMSB_Settings::get( 'google_client_id' );
+		if ( empty( $client_id ) ) {
+			return null; // Not enough to build a consent screen.
+		}
+		$state = hash( 'sha256', random_bytes( 32 ) . time() );
+		set_transient( 'vmsb_google_oauth_state', $state, self::OAUTH_STATE_TTL );
 		return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query(
 			array(
-				'client_id'     => VMSB_Settings::get( 'google_client_id' ),
+				'client_id'     => $client_id,
 				'redirect_uri'  => $this->redirect_uri(),
 				'response_type' => 'code',
 				'scope'         => self::SCOPES,
 				'access_type'   => 'offline',
 				'prompt'        => 'consent',
-				'state'         => wp_create_nonce( 'vmsb_google_oauth' ),
+				'state'         => $state,
 			)
 		);
 	}
 
+	public function verify_oauth_state( $state ) {
+		if ( empty( $state ) ) {
+			return false;
+		}
+		$expected = get_transient( 'vmsb_google_oauth_state' );
+		if ( empty( $expected ) || ! hash_equals( (string) $expected, (string) $state ) ) {
+			return false;
+		}
+		delete_transient( 'vmsb_google_oauth_state' );
+		return true;
+	}
+
 	public function exchange_code( $code ) {
+		$client_id     = VMSB_Settings::get( 'google_client_id' );
+		$client_secret = VMSB_Settings::get( 'google_client_secret' );
+		if ( empty( $client_id ) || empty( $client_secret ) ) {
+			return new WP_Error( 'vmsb_oauth_config', 'Save your Google OAuth Client ID and Client Secret in Settings before authorizing.' );
+		}
 		$res = wp_remote_post(
 			'https://oauth2.googleapis.com/token',
 			array(
 				'timeout' => 30,
 				'body'    => array(
 					'code'          => $code,
-					'client_id'     => VMSB_Settings::get( 'google_client_id' ),
-					'client_secret' => VMSB_Settings::get( 'google_client_secret' ),
+					'client_id'     => $client_id,
+					'client_secret' => $client_secret,
 					'redirect_uri'  => $this->redirect_uri(),
 					'grant_type'    => 'authorization_code',
 				),
@@ -61,13 +104,32 @@ class VMSB_Google {
 			return $res;
 		}
 		$data = json_decode( wp_remote_retrieve_body( $res ), true );
+		if ( ! is_array( $data ) ) {
+			return new WP_Error( 'vmsb_oauth', 'Google returned an unreadable token response (HTTP ' . wp_remote_retrieve_response_code( $res ) . ').' );
+		}
+		if ( ! empty( $data['error'] ) ) {
+			$desc = isset( $data['error_description'] ) ? $data['error_description'] : '';
+			return new WP_Error( 'vmsb_oauth', ( $desc ? $desc . ' ' : '' ) . self::oauth_error_hint( $data['error'] ) );
+		}
 		if ( empty( $data['refresh_token'] ) ) {
-			return new WP_Error( 'vmsb_oauth', isset( $data['error_description'] ) ? $data['error_description'] : 'Google did not return a refresh token.' );
+			return new WP_Error( 'vmsb_oauth', 'Google did not return a refresh token. ' . self::oauth_error_hint( 'no_refresh_token' ) );
 		}
 		VMSB_Settings::update( array( 'google_refresh_token' => $data['refresh_token'] ) );
 		$ttl = isset( $data['expires_in'] ) ? max( 60, (int) $data['expires_in'] - 60 ) : 3540;
 		set_transient( 'vmsb_google_access', $data['access_token'], $ttl );
 		return true;
+	}
+
+	private static function oauth_error_hint( $error ) {
+		$hints = array(
+			'invalid_client'         => 'Google rejected the client credentials - double-check the Client ID and Client Secret saved above.',
+			'redirect_uri_mismatch'  => 'The Redirect URI registered in Google Cloud Console must be exactly the one shown below.',
+			'invalid_grant'          => 'The authorization code expired or was already used - click Authorize again to get a fresh one.',
+			'access_denied'          => 'The consent window was cancelled before it was finished.',
+			'unsupported_grant_type' => 'Google rejected the grant itself - this plugin version may be too old; update from GitHub.',
+			'no_refresh_token'       => 'Make sure the OAuth app is in Production (or your account is a test user) - otherwise Google will not hand out a refresh token.',
+		);
+		return isset( $hints[ $error ] ) ? $hints[ $error ] : 'Google error: ' . $error;
 	}
 
 	public function access_token() {
@@ -103,6 +165,66 @@ class VMSB_Google {
 		return $data['access_token'];
 	}
 
+
+	/**
+	 * Human-readable state for the Settings screen, so a plain "Not connected"
+	 * warning (which told the operator nothing about *why*) can become an
+	 * actionable list.
+	 */
+	public function connection_status() {
+		$has_id     = ! empty( VMSB_Settings::get( 'google_client_id' ) );
+		$has_secret = ! empty( VMSB_Settings::get( 'google_client_secret' ) );
+		$has_token  = ! empty( VMSB_Settings::get( 'google_refresh_token' ) );
+		$failed     = (bool) get_option( 'vmsb_decryption_failed' );
+
+		$reasons = array();
+		if ( ! $has_id ) {
+			$reasons[] = 'Add your OAuth <strong>Client ID</strong> below and save it.';
+		}
+		if ( $has_id && ! $has_secret ) {
+			$reasons[] = 'Add your OAuth <strong>Client Secret</strong> below and save it.';
+		}
+		if ( $failed ) {
+			$reasons[] = 'A stored credential could not be decrypted - your <code>AUTH_KEY</code> changed since it was saved. Save the Client Secret again, then re-authorize.';
+		}
+		if ( $has_id && $has_secret && ! $has_token ) {
+			$reasons[] = 'Client credentials are saved. Click <strong>Authorize Google Access</strong> below to finish the connection.';
+		}
+
+		return array(
+			'connected'      => $this->is_connected(),
+			'has_client_id'  => $has_id,
+			'has_secret'     => $has_secret,
+			'has_token'      => $has_token,
+			'decrypt_failed' => $failed,
+			'reasons'        => $reasons,
+		);
+	}
+
+	/**
+	 * Prove the connection actually works end to end: refresh the access
+	 * token (a network round trip), then hit the Search Console site list -
+	 * the same read scope the SEO screens depend on.
+	 */
+	public function test_connection() {
+		if ( ! $this->is_connected() ) {
+			return array( 'ok' => false, 'detail' => 'No refresh token is stored - complete the Google authorization below first.' );
+		}
+		$token = $this->access_token();
+		if ( is_wp_error( $token ) ) {
+			$msg = strtolower( (string) $token->get_error_message() );
+			if ( strpos( $msg, 'refresh' ) !== false || strpos( $msg, 'invalid_grant' ) !== false || strpos( $msg, 'inactive' ) !== false ) {
+				return array( 'ok' => false, 'detail' => 'The saved token was rejected by Google when refreshed. Re-authorize below to store a fresh token.' );
+			}
+			return array( 'ok' => false, 'detail' => $token->get_error_message() );
+		}
+		$sites = $this->gsc_sites();
+		if ( is_wp_error( $sites ) ) {
+			return array( 'ok' => false, 'detail' => 'Token refresh works, but Search Console returned: ' . $sites->get_error_message() );
+		}
+		$n = count( $sites );
+		return array( 'ok' => true, 'detail' => 'Token works and Search Console answers (' . $n . ' propert' . ( 1 === $n ? 'y' : 'ies' ) . ' available).' );
+	}
 	// Public - VMSB_Indexing calls this directly to hit the Google Indexing
 	// API, which reuses this class's OAuth/token-refresh handling rather
 	// than duplicating it. It was private, which fatals (PHP visibility

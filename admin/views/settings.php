@@ -8,7 +8,7 @@ $profile = $brain->profile();
 $field   = static function ( $key ) { return 'vmsb[' . $key . ']'; };
 
 $active_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'identity';
-if ( ! in_array( $active_tab, array( 'identity', 'ai-images', 'google', 'autonomy', 'license', 'appearance', 'webhooks' ), true ) ) {
+if ( ! in_array( $active_tab, array( 'identity', 'ai-images', 'google', 'autonomy', 'license', 'appearance', 'webhooks', 'updates' ), true ) ) {
 	$active_tab = 'identity';
 }
 ?>
@@ -54,6 +54,7 @@ if ( ! in_array( $active_tab, array( 'identity', 'ai-images', 'google', 'autonom
 			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'license' ? 'is-active' : ''; ?>" data-tab="license">💳 License & Plans</button>
 			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'appearance' ? 'is-active' : ''; ?>" data-tab="appearance">🎨 Appearance</button>
 			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'webhooks' ? 'is-active' : ''; ?>" data-tab="webhooks">🔌 Webhooks</button>
+			<button type="button" class="vmsb-nav-item <?php echo $active_tab === 'updates' ? 'is-active' : ''; ?>" data-tab="updates">🔄 Updates & Sync</button>
 		</aside>
 
 		<div class="vmsb-settings-panels">
@@ -339,10 +340,31 @@ if ( ! in_array( $active_tab, array( 'identity', 'ai-images', 'google', 'autonom
 				<section class="vmsb-panel <?php echo $active_tab === 'google' ? 'is-active' : ''; ?>" data-panel="google">
 					<section class="vmsb-fieldset">
 						<h2>Google Cloud Connectivity</h2>
-						<?php if ( $google->is_connected() ) : ?>
+						<?php
+						$gstatus = $google->connection_status();
+						if ( $gstatus['connected'] ) :
+						?>
 							<p class="vmsb-status-line is-good">✅ Search Console & Sheets Connected</p>
+							<p class="vmsb-note" style="margin-top:4px;">GSC: <strong><?php echo esc_html( $s['gsc_property'] ? $s['gsc_property'] : '— not set yet' ); ?></strong> · GA4: <strong><?php echo esc_html( $s['ga4_property_id'] ? $s['ga4_property_id'] : '— not set yet' ); ?></strong> · Sheet: <strong><?php echo esc_html( $s['sheet_id'] ? $s['sheet_id'] : '— not set yet' ); ?></strong></p>
 						<?php else : ?>
-							<p class="vmsb-status-line is-warning">⚠️ Not connected — authorize below to enable Sheets sync and Search Console data.</p>
+							<p class="vmsb-status-line is-warning">⚠️ Not connected — Search Console data and Sheets sync need Google authorization.</p>
+							<?php if ( $gstatus['reasons'] ) : ?>
+								<ul class="vmsb-google-reasons" style="margin:6px 0 6px 0; padding-left:16px;">
+									<?php foreach ( $gstatus['reasons'] as $r ) : ?>
+										<li><?php echo $r; /* intentionally pre-escaped */ ?></li>
+									<?php endforeach; ?>
+								</ul>
+							<?php endif; ?>
+							<button type="button" class="vmsb-mini-btn" onclick="var e=document.getElementById('vmsb-google-steps');e.style.display=e.style.display==='none'?'':'none';">How to connect (Google Cloud Console)</button>
+							<div id="vmsb-google-steps" class="vmsb-note" style="display:none; margin-top:8px; padding:10px 12px; border:1px solid var(--line); border-radius:6px;">
+								<ol style="margin:0; padding-left:18px;">
+									<li>Create an OAuth client ID in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud → APIs &amp; Services → Credentials</a> (type: Web application).</li>
+									<li>Enable these APIs for the project: <code>Search Console API</code>, <code>Google Analytics API</code>, <code>Google Sheets API</code>.</li>
+									<li>Add this exact Redirect URI (no more, no less):<br><code style="word-break:break-all;"><?php echo esc_html( $google->redirect_uri() ); ?></code></li>
+									<li>Paste the Client ID and Secret above, save, then click the authorize button.</li>
+									<li>The OAuth app must be in <strong>Production</strong> (or your Google account added as a test user) — in Testing mode Google does not hand out refresh tokens.</li>
+								</ol>
+							</div>
 						<?php endif; ?>
 						<div class="vmsb-form-grid">
 							<label>Client ID<input type="text" name="<?php echo esc_attr( $field( 'google_client_id' ) ); ?>" value="<?php echo esc_attr( $s['google_client_id'] ); ?>"></label>
@@ -353,8 +375,13 @@ if ( ! in_array( $active_tab, array( 'identity', 'ai-images', 'google', 'autonom
 							<label>Planning Sheet Tab<input type="text" name="<?php echo esc_attr( $field( 'sheet_tab' ) ); ?>" value="<?php echo esc_attr( $s['sheet_tab'] ); ?>" placeholder="Pipeline"></label>
 							<label>Bulk Topics Tab<input type="text" name="<?php echo esc_attr( $field( 'bulk_topics_tab' ) ); ?>" value="<?php echo esc_attr( $s['bulk_topics_tab'] ); ?>" placeholder="Bulk Topics"></label>
 						</div>
-						<?php if ( $s['google_client_id'] ) : ?>
-							<a class="vmsb-btn vmsb-btn-gold" style="margin-top:20px;" href="<?php echo esc_url( $google->consent_url() ); ?>"><?php echo $google->is_connected() ? 'Refresh Connection' : 'Authorize Google Access'; ?></a>
+						<?php if ( $gstatus['connected'] ) : ?>
+							<a class="vmsb-btn vmsb-btn-gold" style="margin-top:20px;" href="<?php echo esc_url( $google->consent_url() ); ?>">⟳ Refresh Connection</a>
+							<a class="vmsb-btn vmsb-btn-ghost" style="margin-left:8px;" href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-settings&vmsb_google=test&vmsb_nonce=' . wp_create_nonce( 'vmsb_google_oauth' ) ) ); ?>">🔬 Test Connection</a>
+						<?php elseif ( $s['google_client_id'] && $s['google_client_secret'] ) : ?>
+							<a class="vmsb-btn vmsb-btn-gold" style="margin-top:20px;" href="<?php echo esc_url( $google->consent_url() ); ?>">Authorize Google Access</a>
+						<?php else : ?>
+							<p class="vmsb-note" style="margin-top:16px;">Save the Client ID and Client Secret above — the authorize button appears once both are saved.</p>
 						<?php endif; ?>
 					</section>
 				</section>
@@ -630,6 +657,143 @@ if ( ! in_array( $active_tab, array( 'identity', 'ai-images', 'google', 'autonom
 									<?php endforeach; ?>
 								</span>
 							</label>
+						</div>
+					</section>
+				</section>
+
+				<!-- UPDATES & SYNC PANEL -->
+				<section class="vmsb-panel <?php echo $active_tab === 'updates' ? 'is-active' : ''; ?>" data-panel="updates">
+					<?php
+					$upd     = class_exists( 'VMSB_GitHub_Updater' ) ? VMSB_GitHub_Updater::check( false ) : ( get_transient( 'vmsb_update_check' ) ?: array() );
+					$applied = get_transient( 'vmsb_update_applied' );
+					$repo_slug = class_exists( 'VMSB_GitHub_Updater' ) ? VMSB_GitHub_Updater::repo() : 'vmai-plugins/vm-seo-brain';
+					$branch_name = class_exists( 'VMSB_GitHub_Updater' ) ? VMSB_GitHub_Updater::branch() : 'master';
+
+					$is_ok = ! empty( $upd['ok'] );
+					$has_update = ! empty( $upd['update_available'] );
+					$remote_version = ! empty( $upd['remote_version'] ) ? $upd['remote_version'] : '';
+					$checked_time = ! empty( $upd['checked_at'] )
+						? sprintf( '%s (%s ago)', gmdate( 'Y-m-d H:i:s', (int) $upd['checked_at'] ) . ' UTC', human_time_diff( (int) $upd['checked_at'], time() ) )
+						: 'Never';
+					?>
+					<section class="vmsb-fieldset">
+						<div class="vmsb-fieldset-head" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
+							<div>
+								<h2 style="margin:0 0 6px;">🔄 GitHub Continuous Updates & Sync</h2>
+								<p class="vmsb-note" style="margin:0;">Synchronize updates in-place directly from the official repository <code><?php echo esc_html( $repo_slug ); ?></code> (<code><?php echo esc_html( $branch_name ); ?></code> branch).</p>
+							</div>
+							<a href="https://github.com/<?php echo esc_attr( $repo_slug ); ?>" target="_blank" rel="noopener noreferrer" class="vmsb-btn vmsb-btn-ghost vmsb-btn-sm">
+								GitHub Repo ↗
+							</a>
+						</div>
+
+						<!-- Status Cards Grid -->
+						<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:24px;">
+							<div class="vmsb-card" style="padding:18px; border-left:4px solid var(--gold);">
+								<span style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:700;">Installed Version</span>
+								<div style="font-size:22px; font-weight:800; color:var(--text); margin-top:6px; font-family:var(--mono);">
+									v<?php echo esc_html( VMSB_VERSION ); ?>
+								</div>
+							</div>
+
+							<div class="vmsb-card" style="padding:18px; border-left:4px solid <?php echo $has_update ? 'var(--gold)' : 'var(--good)'; ?>;">
+								<span style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:700;">Latest on GitHub</span>
+								<div id="vmsb-updater-remote-ver" style="font-size:22px; font-weight:800; color:var(--text); margin-top:6px; font-family:var(--mono);">
+									<?php echo $remote_version ? 'v' . esc_html( $remote_version ) : '—'; ?>
+								</div>
+							</div>
+
+							<div class="vmsb-card" style="padding:18px; border-left:4px solid <?php echo $has_update ? 'var(--gold)' : ( $is_ok ? 'var(--good)' : 'var(--crit)' ); ?>;">
+								<span style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:700;">Update Status</span>
+								<div id="vmsb-updater-status-container" style="margin-top:8px;">
+									<?php if ( $has_update ) : ?>
+										<span class="vmsb-tag vmsb-tag-gold" id="vmsb-updater-status-badge">⬆ Update Available (v<?php echo esc_html( $remote_version ); ?>)</span>
+									<?php elseif ( $is_ok ) : ?>
+										<span class="vmsb-tag vmsb-tag-good" id="vmsb-updater-status-badge">✓ Up to Date</span>
+									<?php else : ?>
+										<span class="vmsb-tag vmsb-tag-crit" id="vmsb-updater-status-badge">⚠ Check Required</span>
+									<?php endif; ?>
+								</div>
+							</div>
+
+							<div class="vmsb-card" style="padding:18px; border-left:4px solid var(--border);">
+								<span style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:700;">Last Checked</span>
+								<div id="vmsb-updater-last-checked" style="font-size:13px; font-weight:600; color:var(--text); margin-top:8px;">
+									<?php echo esc_html( $checked_time ); ?>
+								</div>
+							</div>
+						</div>
+
+						<!-- Action Buttons & Controls -->
+						<div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:18px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; margin-bottom:24px;">
+							<button type="button" class="vmsb-btn vmsb-btn-ghost" id="vmsb-btn-check-update">
+								<span id="vmsb-check-spin">🔄</span> Check for Updates
+							</button>
+
+							<button type="button" class="vmsb-btn vmsb-btn-gold" id="vmsb-btn-direct-update">
+								<span>⬇</span> Update from GitHub Now
+							</button>
+
+							<div style="margin-left:auto; display:flex; gap:8px;">
+								<a class="vmsb-mini-btn" href="<?php echo esc_url( admin_url( 'admin.php?page=vmsb-settings&vmsb_action=check_update&vmsb_nonce=' . wp_create_nonce( 'vmsb_update' ) ) ); ?>" title="Direct browser fallback check">
+									Force Sync
+								</a>
+							</div>
+						</div>
+
+						<!-- Live Update Process Console -->
+						<div id="vmsb-updater-console" class="vmsb-card" style="display:none; margin-bottom:24px; padding:20px; border-left:4px solid var(--gold); background:var(--surface-3);">
+							<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+								<h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--gold); display:flex; align-items:center; gap:8px;">
+									<span class="vmsb-status-dot" style="background:var(--gold); display:inline-block; width:8px; height:8px; border-radius:50%;"></span>
+									Update Execution Progress
+								</h3>
+								<span id="vmsb-updater-timer" style="font-family:var(--mono); font-size:12px; color:var(--muted);"></span>
+							</div>
+							<div class="vmsb-progress-bar" style="height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden; margin-bottom:14px;">
+								<div id="vmsb-updater-progress-fill" style="width:10%; height:100%; background:var(--gold); transition:width 0.4s ease;"></div>
+							</div>
+							<pre id="vmsb-updater-log" style="margin:0; padding:12px; background:rgba(0,0,0,0.4); border:1px solid var(--line); border-radius:8px; font-family:var(--mono); font-size:12px; line-height:1.6; color:var(--text); max-height:180px; overflow-y:auto;"></pre>
+						</div>
+
+						<?php if ( $applied && ! empty( $applied['at'] ) ) : ?>
+							<div style="padding:12px 16px; background:rgba(29, 209, 161, 0.08); border:1px solid rgba(29, 209, 161, 0.25); border-radius:10px; margin-bottom:24px; display:flex; align-items:center; gap:10px;">
+								<span style="font-size:16px;">✅</span>
+								<span style="font-size:13px; color:var(--good); font-weight:600;">
+									Last update applied on <?php echo esc_html( gmdate( 'Y-m-d H:i:s', (int) $applied['at'] ) ); ?> UTC
+									<?php echo ! empty( $applied['version'] ) ? ' (version ' . esc_html( $applied['version'] ) . ')' : ''; ?>
+								</span>
+							</div>
+						<?php endif; ?>
+
+						<!-- Release Notes / Changelog Card -->
+						<?php if ( ! empty( $upd['release_notes'] ) || ! empty( $upd['release_name'] ) ) : ?>
+							<div class="vmsb-card" style="margin-bottom:24px; padding:20px;">
+								<h3 style="margin:0 0 10px; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--gold);">
+									📋 Latest GitHub Release Notes (<?php echo esc_html( $upd['release_name'] ?: 'Latest' ); ?>)
+								</h3>
+								<div style="font-size:13px; line-height:1.7; color:var(--text); max-height:220px; overflow-y:auto; padding-right:8px;">
+									<?php echo nl2br( esc_html( $upd['release_notes'] ) ); ?>
+								</div>
+							</div>
+						<?php endif; ?>
+
+						<!-- Authentication & Repo Configuration -->
+						<div style="margin-top:20px; padding:24px; background:rgba(0,0,0,0.03); border:1px solid var(--line); border-radius:14px;">
+							<h3 style="margin:0 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--gold);">
+								🔐 GitHub Authentication & Security
+							</h3>
+							<p class="vmsb-note" style="margin-bottom:20px;">
+								Configure an optional Personal Access Token (PAT). Public repositories work out-of-the-box, but adding a token increases your GitHub API rate limit from 60 to 5,000 requests/hour and enables updates for private repos.
+							</p>
+
+							<div class="vmsb-form-grid">
+								<label class="vmsb-full">
+									GitHub Personal Access Token (PAT)
+									<input type="password" name="<?php echo esc_attr( $field( 'github_token' ) ); ?>" value="<?php echo esc_attr( $s['github_token'] ); ?>" placeholder="ghp_************************************" autocomplete="new-password">
+									<small class="vmsb-note">Token requires the <code>repo</code> scope (for private repositories) or <code>public_repo</code> scope. Credentials are encrypted at rest with WordPress security salts.</small>
+								</label>
+							</div>
 						</div>
 					</section>
 				</section>

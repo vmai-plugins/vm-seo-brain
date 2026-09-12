@@ -190,6 +190,14 @@
 		if ( route === 'retry-critique' ) {
 			return data.queued ? 'Critique task queued. The agent will rewrite in the background.' : ( data.post_id ? 'Success! Redirecting to draft...' : 'Retry started.' );
 		}
+		if ( route === 'check-update' ) {
+			return data.update_available
+				? 'GitHub update available: v' + data.remote_version + ' (installed: v' + data.installed_version + ').'
+				: 'Up to date: installed v' + data.installed_version + ' is synchronized with GitHub ' + data.branch + '.';
+		}
+		if ( route === 'github-update' ) {
+			return data.message || 'Updated from GitHub successfully.';
+		}
 		return JSON.stringify( data, null, 2 );
 	}
 
@@ -1523,6 +1531,135 @@
 			$( '#vmsb-open-commander' ).click();
 		}
 	} );
+
+	/* ------------------------------------------------------------ GitHub Updater Controller */
+	( function () {
+		const consoleBox   = $( '#vmsb-updater-console' );
+		const progressFill = $( '#vmsb-updater-progress-fill' );
+		const logPre       = $( '#vmsb-updater-log' );
+		const timerSpan    = $( '#vmsb-updater-timer' );
+
+		function logUpdate( msg ) {
+			const text = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+			if ( logPre.length ) {
+				logPre.text( logPre.text() ? logPre.text() + '\n' + text : text );
+				logPre.scrollTop( logPre[0].scrollHeight );
+			}
+			say( text, true );
+		}
+
+		function setProgress( percent, msg ) {
+			if ( progressFill.length ) {
+				progressFill.css( 'width', Math.min( 100, Math.max( 5, percent ) ) + '%' );
+			}
+			if ( msg ) {
+				logUpdate( msg );
+			}
+		}
+
+		// Interactive Check for Updates
+		$( document ).on( 'click', '#vmsb-btn-check-update', async function ( e ) {
+			e.preventDefault();
+			const btn  = $( this );
+			const spin = $( '#vmsb-check-spin' );
+
+			btn.prop( 'disabled', true );
+			spin.addClass( 'vmsb-spinning' );
+			say( stamp() + ' Checking GitHub API for latest release and branch header...', true );
+
+			try {
+				const data = await call( 'check-update', {} );
+
+				// Update DOM elements
+				if ( data.remote_version ) {
+					$( '#vmsb-updater-remote-ver' ).text( 'v' + data.remote_version );
+				}
+				if ( data.last_checked_formatted ) {
+					$( '#vmsb-updater-last-checked' ).text( data.last_checked_formatted );
+				}
+
+				const container = $( '#vmsb-updater-status-container' );
+				if ( container.length ) {
+					if ( data.update_available ) {
+						container.html( '<span class="vmsb-tag vmsb-tag-gold vmsb-pulse-tag" id="vmsb-updater-status-badge">⬆ Update Available (v' + esc( data.remote_version ) + ')</span>' );
+					} else if ( data.ok ) {
+						container.html( '<span class="vmsb-tag vmsb-tag-good" id="vmsb-updater-status-badge">✓ Up to Date</span>' );
+					} else {
+						container.html( '<span class="vmsb-tag vmsb-tag-crit" id="vmsb-updater-status-badge">⚠ Check Failed: ' + esc( data.message || 'Error' ) + '</span>' );
+					}
+				}
+
+				say( stamp() + ' ' + summarise( 'check-update', data ), true );
+
+			} catch ( err ) {
+				say( stamp() + ' Update check error: ' + err.message, true );
+				const container = $( '#vmsb-updater-status-container' );
+				if ( container.length ) {
+					container.html( '<span class="vmsb-tag vmsb-tag-crit" id="vmsb-updater-status-badge">⚠ ' + esc( err.message ) + '</span>' );
+				}
+			} finally {
+				btn.prop( 'disabled', false );
+				spin.removeClass( 'vmsb-spinning' );
+			}
+		} );
+
+		// Interactive 1-Click Update from GitHub
+		$( document ).on( 'click', '#vmsb-btn-direct-update', async function ( e ) {
+			e.preventDefault();
+			const btn = $( this );
+
+			if ( ! window.confirm( 'Pull latest release from GitHub and apply update in-place?\n\nDatabase tables, site settings, and local custom files are safely preserved.' ) ) {
+				return;
+			}
+
+			btn.prop( 'disabled', true ).text( 'Updating in progress…' );
+			$( '#vmsb-btn-check-update' ).prop( 'disabled', true );
+
+			if ( consoleBox.length ) {
+				consoleBox.slideDown( 300 );
+				logPre.text( '' );
+			}
+
+			setProgress( 15, '🚀 Initiating GitHub update pipeline...' );
+
+			setTimeout( () => {
+				setProgress( 35, '📦 Querying latest package and verifying integrity on GitHub...' );
+			}, 500 );
+
+			setTimeout( () => {
+				setProgress( 60, '⬇ Downloading archive & unpacking via WP_Filesystem...' );
+			}, 1200 );
+
+			try {
+				const res = await call( 'github-update', {} );
+
+				setProgress( 90, '⚡ Replacing files, invalidating OPcache, and clearing update cache...' );
+
+				setTimeout( () => {
+					setProgress( 100, '✅ Update applied successfully! Version: ' + ( res.new_version || 'latest' ) );
+
+					let count = 3;
+					timerSpan.text( 'Reloading page in ' + count + 's…' );
+					const interval = setInterval( () => {
+						count--;
+						if ( count > 0 ) {
+							timerSpan.text( 'Reloading page in ' + count + 's…' );
+						} else {
+							clearInterval( interval );
+							timerSpan.text( 'Reloading now…' );
+							window.location.reload();
+						}
+					}, 1000 );
+				}, 600 );
+
+			} catch ( err ) {
+				setProgress( 100, '❌ Update failed: ' + err.message );
+				btn.prop( 'disabled', false ).text( '⬇ Retry Update from GitHub' );
+				$( '#vmsb-btn-check-update' ).prop( 'disabled', false );
+				alert( 'GitHub Update Error: ' + err.message );
+			}
+		} );
+	} )();
 
 	// Expose for inline usage
 	VMSB.call = call;

@@ -52,6 +52,9 @@ class VMSB_Freshness {
 	 */
 	public function inject_live_update( $post_id ) {
 		$post = get_post($post_id);
+		if ( ! $post ) {
+			return new WP_Error( 'vmsb_freshness', 'Post not found.' );
+		}
 		$keyword = ( new VMSB_RankMath() )->get_focus_keyword($post_id) ?: $post->post_title;
 		$brain = new VMSB_Brain();
 

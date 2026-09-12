@@ -417,7 +417,10 @@ class VMSB_Content {
 
 		$to_append = array();
 		$pushed_count = 0;
-		$author = wp_get_current_user()->user_login;
+		$current_user = wp_get_current_user();
+		$author = ( $current_user && ! empty( $current_user->user_login ) )
+			? $current_user->user_login
+			: ( get_userdata( $this->author_id() )->user_login ?? 'admin' );
 
 		// $force's update branch below is one Google Sheets API call per
 		// already-synced row, serially - an admin clicking "force re-sync"
@@ -527,8 +530,9 @@ class VMSB_Content {
 				continue;
 			}
 
+			$sched_time = ( isset( $row[2] ) && $row[2] ) ? strtotime( $row[2] ) : false;
 			$data = array(
-				'scheduled_for'   => isset( $row[2] ) && $row[2] ? gmdate( 'Y-m-d H:i:s', strtotime( $row[2] ) ) : null,
+				'scheduled_for'   => ( false !== $sched_time ) ? gmdate( 'Y-m-d H:i:s', $sched_time ) : null,
 				'title'           => isset( $row[3] ) ? sanitize_text_field( $row[3] ) : '',
 				'primary_keyword' => isset( $row[4] ) ? sanitize_text_field( $row[4] ) : '',
 				'brief'           => isset( $row[10] ) ? wp_kses_post( $row[10] ) : '',
@@ -614,12 +618,17 @@ class VMSB_Content {
 			return new WP_Error( 'vmsb_plan_not_found', 'Content plan item not found.' );
 		}
 
-		// Both columns are nullable and are NULL on every plan row that was
-		// not created by the sheet importer, so this fired a deprecation on
-		// each production run under PHP 8.1+ and will be a TypeError once
-		// that deprecation is promoted.
-		$secondary     = (array) json_decode( (string) ( $item->secondary_keywords ?? '' ), true );
-		$links         = (array) json_decode( (string) ( $item->internal_links ?? '' ), true );
+		$raw_sec = (string) ( $item->secondary_keywords ?? '' );
+		$secondary = json_decode( $raw_sec, true );
+		if ( ! is_array( $secondary ) ) {
+			$secondary = ! empty( trim( $raw_sec ) ) ? array_values( array_filter( array_map( 'trim', preg_split( '/[\r\n,]+/', $raw_sec ) ) ) ) : array();
+		}
+
+		$raw_links = (string) ( $item->internal_links ?? '' );
+		$links = json_decode( $raw_links, true );
+		if ( ! is_array( $links ) ) {
+			$links = ! empty( trim( $raw_links ) ) ? array_values( array_filter( array_map( 'trim', preg_split( '/[\r\n,]+/', $raw_links ) ) ) ) : array();
+		}
 		$agent_context = isset( $args['agent_context'] ) ? $args['agent_context'] : '';
 
 

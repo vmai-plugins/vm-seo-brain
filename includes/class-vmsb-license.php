@@ -37,8 +37,13 @@ class VMSB_License {
 	 *
 	 * Nothing used to read the stored expiry date, so a lapsed or refunded
 	 * licence stayed Elite forever - the plan was written once at activation
-	 * and never revisited.
+	/**
+	 * Backward compatibility alias for plan().
 	 */
+	public static function tier() {
+		return self::plan();
+	}
+
 	public static function plan() {
 		if ( self::is_license_host() ) {
 			return 'elite';

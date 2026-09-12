@@ -544,7 +544,6 @@ class VMSB_Strategist {
 			case 'semantic_mesh':   $parts[] = 'weaving internal link web'; break;
 			case 'video_pipeline':  $parts[] = 'generating viral production packs'; break;
 			case 'freshness_boost': $parts[] = 'signaling QDF authority'; break;
-			case 'thief_scout':    $parts[] = 'hijacking competitor gaps'; break;
 			case 'social_recycle': $parts[] = 'generating social distribution packs'; break;
 			case 'link_autopilot': $parts[] = 'funneling Juice to rising stars'; break;
 			case 'competitor_blitz': $parts[] = 'hijacking top rival rankings'; break;

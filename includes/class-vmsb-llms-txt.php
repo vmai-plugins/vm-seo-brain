@@ -87,8 +87,14 @@ class VMSB_LLMS_Txt {
 
 		if ( ! empty( $profile['services'] ) ) {
 			$output .= "## Core Services & Capabilities\n\n";
-			foreach ( (array) $profile['services'] as $svc ) {
-				$output .= "- " . trim( $svc ) . "\n";
+			$services = is_array( $profile['services'] )
+				? $profile['services']
+				: preg_split( '/[\r\n,]+/', (string) $profile['services'] );
+			foreach ( $services as $svc ) {
+				$svc = trim( $svc );
+				if ( $svc !== '' ) {
+					$output .= "- " . $svc . "\n";
+				}
 			}
 			$output .= "\n";
 		}

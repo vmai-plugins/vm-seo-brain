@@ -109,13 +109,15 @@ class VMSB_Health {
 				: ( $decrypt_failed ? 'Decryption failed - AUTH_KEY mismatch. Re-save your API keys.' : 'Available.' ),
 		);
 
-		// Indexing API health
+		// Indexing API health. Google only issues Indexing API credentials to
+		// *service accounts*; the user OAuth token this plugin stores cannot
+		// drive it, and the old check claimed readiness whenever the consent
+		// scope string happened to mention "indexing" - which was never true
+		// and is why the Indexing bridge logged 403s on every publish.
 		$checks['indexing'] = array(
 			'label'  => 'Google Indexing API',
-			'ok'     => $google->is_connected() && strpos( VMSB_Google::SCOPES, 'indexing' ) !== false,
-			'detail' => ( $google->is_connected() && strpos( VMSB_Google::SCOPES, 'indexing' ) !== false )
-				? 'Ready to ping Google on publish.'
-				: 'Indexing scope missing. Please reconnect Google in Settings.',
+			'ok'     => false,
+			'detail' => 'Requires a Google service-account key; the standard OAuth connection cannot submit URLs to the Indexing API. URL notifications are skipped until one is wired in.',
 		);
 
 		// Knowledge Graph health

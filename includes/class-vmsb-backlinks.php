@@ -141,7 +141,10 @@ class VMSB_Backlinks {
 			return new WP_Error( 'vmsb_backlinks', 'No target post set.' );
 		}
 
-		$post   = get_post( $row->target_post_id );
+		$post = get_post( $row->target_post_id );
+		if ( ! $post ) {
+			return new WP_Error( 'vmsb_backlinks', 'Target post not found.' );
+		}
 		$brain  = new VMSB_Brain();
 		$tone   = VMSB_Settings::get( 'outreach_tone', 'brief, human, no hype' );
 		$sender = VMSB_Settings::get( 'outreach_from_name' );

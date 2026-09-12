@@ -39,11 +39,11 @@ class VMSB_Video_Agent {
 		}
 
 		// OmniRoute Integration: Generate real video if configured
-		$omni_url = VMSB_Settings::get( 'omniroute_url' );
-		$omni_key = VMSB_Settings::get( 'omniroute_key' );
-		if ( $omni_url && $omni_key ) {
+		$omni_base = VMSB_Settings::omniroute_base();
+		$omni_key  = VMSB_Settings::get( 'omniroute_key' );
+		if ( $omni_base && $omni_key ) {
 			$this->log->info( 'video', "Pushing video generation to OmniRoute for post #{$post_id}." );
-			$omni_res = wp_remote_post( untrailingslashit($omni_url) . '/v1/videos/generations', array(
+			$omni_res = wp_remote_post( $omni_base . '/v1/videos/generations', array(
 				'timeout' => 300,
 				'headers' => array( 'Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $omni_key ),
 				'body'    => wp_json_encode( array(
