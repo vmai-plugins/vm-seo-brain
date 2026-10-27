@@ -82,6 +82,26 @@ class VMSB_CLI {
 		WP_CLI::line( $reply );
 		WP_CLI::line( "---" );
 	}
+
+	/**
+	 * Batch boost posts in striking-distance to reach 85-90+ Rank Math score.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--limit=<limit>]
+	 * : Number of posts to optimize. Default 25.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp vmsb boost-85 --limit=50
+	 */
+	public function boost_85( $args, $assoc_args ) {
+		$limit = isset( $assoc_args['limit'] ) ? (int) $assoc_args['limit'] : 25;
+		WP_CLI::line( "Starting Rank Math 85-90+ batch optimizer (Limit: {$limit})..." );
+		$optimizer = new VMSB_RankMath_Optimizer();
+		$res = $optimizer->batch_boost_85( $limit );
+		WP_CLI::success( "Boost complete: {$res['boosted']} posts boosted, {$res['failed']} failed (Attempted: {$res['attempted']})." );
+	}
 }
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {

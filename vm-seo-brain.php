@@ -3,7 +3,7 @@
  * Plugin Name:       VM SEO Brain
  * Plugin URI:        https://vmstudio.digital/vm-seo-brain
  * Description:       Autonomous SEO brain for WordPress. Understands the business, researches keywords, plans topics, fixes technical + on-page errors, rebuilds silo structure, optimises taxonomies, generates images, and ships published posts through AI Puffer.
- * Version:           1.6.0
+ * Version:           1.6.1
  * Requires at least: 6.2
  * Requires PHP:      8.0
  * Author:            VM Studio Creatives
@@ -64,7 +64,11 @@ final class VMSB_Install {
 	// 1.14.1: Added geo_cell index to vmsb_plan CREATE TABLE and ensure single_activate()
 	// calls ensure_indexes() to cover fresh installs. Bumped version to backfill on existing
 	// 1.14.0 installs that missed the index.
-	const DB_VERSION = '1.14.1';
+	// 1.14.2: VMSB_Geo::uid() now hashes state too, so identically-named cities in
+	// different states stop colliding onto one row_uid. Bumped to run
+	// migrate_geo_uids() once and recompute existing geo rows' row_uid under
+	// the new formula.
+	const DB_VERSION = '1.14.2';
 
 	/**
 	 * Main plugin activation handler (supports single and multisite network activation).
@@ -156,6 +160,18 @@ final class VMSB_Install {
 				VMSB_Settings::encrypt_legacy_secrets();
 			}
 
+			// VMSB_Geo::uid() used to hash only service+city, so two
+			// identically-named cities in different states collided onto one
+			// row_uid. Fixed forward by hashing state too - this recomputes
+			// row_uid for rows already on disk using their own stored
+			// geo_service/geo_city/geo_state columns, so a page generated
+			// under the old formula is still recognised by coverage() under
+			// the new one instead of looking "missing" and getting a
+			// duplicate queued next to it.
+			if ( class_exists( 'VMSB_Geo' ) ) {
+				self::migrate_geo_uids();
+			}
+
 			update_option( 'vmsb_db_version', self::DB_VERSION );
 		}
 	}
@@ -195,6 +211,36 @@ final class VMSB_Install {
 				}
 				$wpdb->query( "ALTER TABLE `{$table}` ADD KEY `{$name}` {$columns}" );
 			}
+		}
+	}
+
+	/**
+	 * Recompute row_uid for existing geo plan rows under VMSB_Geo::uid()'s
+	 * now-state-aware formula. Runs once per version bump; touches only rows
+	 * that are actually geo-tagged (non-empty geo_service/geo_city), and
+	 * updates one row at a time so a genuine collision under the new formula
+	 * (two rows that really were duplicates) fails that single UPDATE against
+	 * the UNIQUE index rather than aborting the whole batch.
+	 */
+	private static function migrate_geo_uids() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'vmsb_plan';
+
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			return;
+		}
+
+		$rows = $wpdb->get_results(
+			"SELECT id, geo_service, geo_city, geo_state, row_uid FROM {$table}
+			 WHERE geo_service IS NOT NULL AND geo_service != '' AND geo_city IS NOT NULL AND geo_city != ''"
+		);
+
+		foreach ( (array) $rows as $row ) {
+			$new_uid = VMSB_Geo::uid( $row->geo_service, $row->geo_city, (string) $row->geo_state );
+			if ( $new_uid === $row->row_uid ) {
+				continue;
+			}
+			$wpdb->update( $table, array( 'row_uid' => $new_uid ), array( 'id' => (int) $row->id ) );
 		}
 	}
 

@@ -73,6 +73,14 @@ class VMSB_RankMath_Optimizer {
 		$content = $post->post_content;
 		$dirty   = false;
 
+		// 0. Unicode and serialization artifact cleanup (removes u003cstrongu003e, etc.)
+		$clean_content = $this->sanitize_content_artifacts( $content );
+		if ( $clean_content !== $content ) {
+			$content = $clean_content;
+			$dirty   = true;
+			$applied[] = 'unicodeArtifactsSanitized';
+		}
+
 		if ( isset( $fails['contentHasTOC'] ) ) {
 			$next = $this->add_toc( $content );
 			if ( null !== $next ) {
@@ -118,6 +126,12 @@ class VMSB_RankMath_Optimizer {
 		if ( isset( $fails['keywordInTitle'] ) || isset( $fails['titleStartWithKeyword'] ) ) {
 			if ( $this->fix_seo_title( $post_id, $kw ) ) {
 				$applied[] = 'titleStartWithKeyword';
+			}
+		}
+
+		if ( isset( $fails['titleHasNumber'] ) || isset( $fails['titleHasPowerWords'] ) ) {
+			if ( $this->boost_title_elements( $post_id, $kw ) ) {
+				$applied[] = 'titleHasNumberAndPowerWord';
 			}
 		}
 
@@ -455,5 +469,105 @@ class VMSB_RankMath_Optimizer {
 
 	private function title_case( $s ) {
 		return ucwords( mb_strtolower( $s ) );
+	}
+
+	/**
+	 * Automatically clean corrupted unicode and serialization artifacts from content.
+	 */
+	private function sanitize_content_artifacts( $content ) {
+		$clean = preg_replace( '/u003c\/?strongu003e/i', '', $content );
+		$clean = preg_replace( '/\\\\u003c\/?strong\\\\u003e/i', '', $clean );
+		$clean = preg_replace( '/u003c\/?emu003e/i', '', $clean );
+		$clean = preg_replace( '/u003c\/?bru003e/i', ' ', $clean );
+		$clean = preg_replace( '/\\\\u003c\/?bru003e/i', ' ', $clean );
+		$clean = preg_replace( '/u0027/i', "'", $clean );
+		return $clean;
+	}
+
+	/**
+	 * Ensure title contains a power word and year/number for high Rank Math CTR scoring.
+	 */
+	private function boost_title_elements( $post_id, $keyword ) {
+		$title = (string) get_post_meta( $post_id, 'rank_math_title', true );
+		if ( '' === $title ) {
+			$title = get_the_title( $post_id );
+		}
+
+		$has_num     = (bool) preg_match( '/\b\d{4}\b|\b\d+\b/', $title );
+		$power_words = array( 'guide', 'complete', 'ultimate', 'best', 'verified', 'essential', 'top', 'rates', 'price', 'pricing', 'exclusive', 'honest', 'expert', 'tips', 'today' );
+		$has_power   = false;
+		$title_lc    = mb_strtolower( $title );
+		foreach ( $power_words as $pw ) {
+			if ( false !== mb_strpos( $title_lc, $pw ) ) {
+				$has_power = true;
+				break;
+			}
+		}
+
+		if ( $has_num && $has_power ) {
+			return false; // Already satisfied
+		}
+
+		$suffix = '';
+		if ( ! $has_num && ! $has_power ) {
+			$suffix = ' 2026: Complete Guide';
+		} elseif ( ! $has_num ) {
+			$suffix = ' (2026)';
+		} elseif ( ! $has_power ) {
+			$suffix = ': Complete Guide';
+		}
+
+		$new_title = trim( $title ) . $suffix;
+		if ( mb_strlen( $new_title ) > 115 ) {
+			$new_title = mb_substr( $title, 0, 85 ) . $suffix;
+		}
+
+		update_post_meta( $post_id, 'rank_math_title', $new_title );
+		return true;
+	}
+
+	/**
+	 * Batch boost posts in striking-distance (70-84 score) towards 85-90+ Rank Math score.
+	 */
+	public function batch_boost_85( $limit = 25 ) {
+		global $wpdb;
+		$limit = max( 1, min( 100, (int) $limit ) );
+
+		$post_ids = $wpdb->get_col( $wpdb->prepare( "
+			SELECT p.ID
+			FROM {$wpdb->posts} p
+			JOIN {$wpdb->postmeta} pm ON (p.ID = pm.post_id AND pm.meta_key = 'rank_math_seo_score')
+			WHERE p.post_type = 'post'
+			  AND p.post_status = 'publish'
+			  AND CAST(pm.meta_value AS UNSIGNED) BETWEEN 70 AND 84
+			ORDER BY CAST(pm.meta_value AS UNSIGNED) DESC, p.ID DESC
+			LIMIT %d
+		", $limit ) );
+
+		$results = array(
+			'attempted'     => count( $post_ids ),
+			'boosted'       => 0,
+			'already_high'  => 0,
+			'failed'        => 0,
+			'details'       => array(),
+		);
+
+		foreach ( $post_ids as $pid ) {
+			$res = $this->optimize( (int) $pid );
+			if ( is_wp_error( $res ) ) {
+				$results['failed']++;
+				$results['details'][] = array( 'id' => $pid, 'status' => 'error', 'message' => $res->get_error_message() );
+			} else {
+				$results['boosted']++;
+				$results['details'][] = array(
+					'id'     => $pid,
+					'status' => 'success',
+					'before' => $res['before']['pass_pct'] ?? 0,
+					'after'  => $res['after']['pass_pct'] ?? 0,
+				);
+			}
+		}
+
+		return $results;
 	}
 }

@@ -123,6 +123,17 @@ class VMSB_Quality_Gate {
 			$blocking[] = 'Reads as generic AI filler rather than genuine expertise: ' . implode( '; ', $alignment['generic_patterns'] );
 		}
 
+		// 8. Unicode & Serialization Artifact Sanitization Guard.
+		$has_unicode_leak = (bool) preg_match( '/u003c\/?strongu003e|\\\\u003c\/?strong\\\\u003e|u003c\/?bru003e|u0027/i', $content );
+		$checks['unicode_clean'] = array(
+			'weight' => 10,
+			'score'  => $has_unicode_leak ? 20 : 100,
+			'detail' => $has_unicode_leak ? 'Contains raw unescaped JSON/Unicode entity artifacts.' : 'Clean formatting and typography.',
+		);
+		if ( $has_unicode_leak ) {
+			$blocking[] = 'Corrupted Unicode or raw JSON tokens detected in content (e.g. u003cstrongu003e). Must be cleaned before publish.';
+		}
+
 		// Weighted total.
 		$total = 0;
 		$wsum  = 0;

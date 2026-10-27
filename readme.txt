@@ -3,7 +3,7 @@ Contributors: vmstudiocreatives
 Tags: seo, rank math, search console, analytics, ai, automation
 Requires at least: 6.2
 Requires PHP: 8.0
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPLv2 or later
 
 An autonomous SEO layer for WordPress: it reads the business, researches keywords,
@@ -61,6 +61,12 @@ content in the priority order.
 * At least one working AI provider in the chain
 
 == Changelog ==
+
+= 1.6.1 =
+* Added Unicode and JSON serialization artifact sanitization guard in Quality Gate and Content Optimizer (eliminates u003cstrongu003e leaks).
+* Added Rank Math 85-90+ batch optimizer (boost_85) targeting striking distance posts.
+* Enhanced Title Power Word and Number optimization engine for higher SERP CTR.
+* Added WP-CLI command 'wp vmsb boost-85' for rapid background execution on VPS.
 
 = 1.6.0 =
 * Fixed Google OAuth token exchange failure caused by nonce vs transient state mismatch.
