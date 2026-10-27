@@ -501,6 +501,136 @@ class VMSB_Image_Engine {
 		return new WP_Error( 'vmsb_aipuffer', 'No image in AI Puffer response.' );
 	}
 
+	/**
+	 * ComfyUI (self-hosted) image generation.
+	 *
+	 * Queues a workflow on the user's ComfyUI instance, polls for the
+	 * result, and downloads the rendered image as raw bytes.
+	 *
+	 * Settings used:
+	 *   comfy_url      – base URL, e.g. http://127.0.0.1:8188
+	 *   comfy_key      – optional Bearer token for proxied instances
+	 *   comfy_workflow  – saved API-format workflow JSON with placeholders:
+	 *                     {{prompt}}, {{negative}}, {{width}}, {{height}}, {{seed}}
+	 *
+	 * If no custom workflow is supplied, a default SDXL txt2img graph is used.
+	 */
+	private function from_comfyui( $prompt, $subject, $meta ) {
+		$base = rtrim( (string) VMSB_Settings::get( 'comfy_url' ), '/' );
+		if ( ! $base ) {
+			return new WP_Error( 'vmsb_comfyui', 'ComfyUI server URL not set.' );
+		}
+
+		$headers = array( 'Content-Type' => 'application/json' );
+		$token   = VMSB_Settings::get( 'comfy_key' );
+		if ( $token ) {
+			$headers['Authorization'] = 'Bearer ' . $token;
+		}
+
+		$workflow = $this->build_comfyui_workflow( $prompt, $meta );
+		$cid      = 'vmsb-' . wp_generate_password( 12, false );
+
+		$resp = wp_remote_post(
+			$base . '/prompt',
+			array(
+				'timeout' => 30,
+				'headers' => $headers,
+				'body'    => wp_json_encode( array( 'prompt' => $workflow, 'client_id' => $cid ) ),
+			)
+		);
+
+		if ( is_wp_error( $resp ) ) {
+			return $resp;
+		}
+
+		$queued = json_decode( wp_remote_retrieve_body( $resp ), true );
+		$pid    = $queued['prompt_id'] ?? '';
+		if ( ! $pid ) {
+			return new WP_Error( 'vmsb_comfyui', 'ComfyUI did not return a prompt_id.' );
+		}
+
+		// Poll history – budget-aware to avoid exceeding max_execution_time.
+		$budget   = (int) ini_get( 'max_execution_time' );
+		$deadline = time() + ( $budget > 0 ? max( 15, $budget - 10 ) : 60 );
+
+		while ( time() < $deadline ) {
+			sleep( 3 );
+			$h_resp = wp_remote_get(
+				$base . '/history/' . rawurlencode( $pid ),
+				array( 'timeout' => 15, 'headers' => $headers )
+			);
+			if ( is_wp_error( $h_resp ) ) {
+				continue;
+			}
+			$hist = json_decode( wp_remote_retrieve_body( $h_resp ), true );
+			if ( empty( $hist[ $pid ]['outputs'] ) ) {
+				continue;
+			}
+			foreach ( $hist[ $pid ]['outputs'] as $node ) {
+				if ( ! empty( $node['images'][0]['filename'] ) ) {
+					$img = $node['images'][0];
+					$view_url = $base . '/view?' . http_build_query(
+						array(
+							'filename'  => $img['filename'],
+							'subfolder' => $img['subfolder'] ?? '',
+							'type'      => $img['type'] ?? 'output',
+						)
+					);
+					return $this->fetch_bytes( $view_url, 60 );
+				}
+			}
+		}
+
+		return new WP_Error( 'vmsb_comfyui', 'Timed out waiting for ComfyUI render.' );
+	}
+
+	/**
+	 * Build the ComfyUI workflow graph.
+	 *
+	 * If a custom workflow is saved in settings, substitute placeholders.
+	 * Otherwise fall back to a minimal SDXL txt2img graph.
+	 */
+	private function build_comfyui_workflow( $prompt, $meta ) {
+		$raw = VMSB_Settings::get( 'comfy_workflow' );
+		$w   = (int) VMSB_Settings::get( 'image_width', 1200 );
+		$h   = (int) VMSB_Settings::get( 'image_height', 675 );
+		$seed = wp_rand( 1, PHP_INT_MAX );
+		$negative = 'lowres, blurry, watermark, text, deformed, extra fingers';
+
+		if ( $raw ) {
+			$replacements = array(
+				'{{prompt}}'   => trim( wp_json_encode( (string) $prompt ), '"' ),
+				'{{negative}}' => trim( wp_json_encode( $negative ), '"' ),
+				'{{width}}'    => $w,
+				'{{height}}'   => $h,
+				'{{seed}}'     => $seed,
+			);
+			$json = str_replace( array_keys( $replacements ), array_values( $replacements ), $raw );
+			$data = json_decode( $json, true );
+			if ( is_array( $data ) ) {
+				return $data;
+			}
+		}
+
+		// Default minimal SDXL txt2img graph.
+		return array(
+			'4' => array( 'class_type' => 'CheckpointLoaderSimple', 'inputs' => array( 'ckpt_name' => 'sd_xl_base_1.0.safetensors' ) ),
+			'5' => array( 'class_type' => 'EmptyLatentImage', 'inputs' => array( 'width' => $w, 'height' => $h, 'batch_size' => 1 ) ),
+			'6' => array( 'class_type' => 'CLIPTextEncode', 'inputs' => array( 'text' => $prompt, 'clip' => array( '4', 1 ) ) ),
+			'7' => array( 'class_type' => 'CLIPTextEncode', 'inputs' => array( 'text' => $negative, 'clip' => array( '4', 1 ) ) ),
+			'3' => array(
+				'class_type' => 'KSampler',
+				'inputs'     => array(
+					'seed' => $seed, 'steps' => 25, 'cfg' => 7, 'sampler_name' => 'euler',
+					'scheduler' => 'normal', 'denoise' => 1,
+					'model' => array( '4', 0 ), 'positive' => array( '6', 0 ),
+					'negative' => array( '7', 0 ), 'latent_image' => array( '5', 0 ),
+				),
+			),
+			'8' => array( 'class_type' => 'VAEDecode', 'inputs' => array( 'samples' => array( '3', 0 ), 'vae' => array( '4', 2 ) ) ),
+			'9' => array( 'class_type' => 'SaveImage', 'inputs' => array( 'filename_prefix' => 'vmsb', 'images' => array( '8', 0 ) ) ),
+		);
+	}
 	private function from_pexels( $prompt, $subject, $meta ) {
 		$key = VMSB_Settings::get( 'pexels_key' );
 		if ( ! $key ) {

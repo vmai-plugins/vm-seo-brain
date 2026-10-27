@@ -78,7 +78,7 @@ class VMSB_Settings {
 			'ollama_model'    => 'llama3.1',
 
 			// Image chain.
-			'image_chain'     => array( 'aipuffer', 'google', 'banana', 'pollinations', 'huggingface', 'cloudflare', 'pexels' ),
+			'image_chain'     => array( 'aipuffer', 'google', 'banana', 'pollinations', 'huggingface', 'cloudflare', 'comfyui', 'pexels' ),
 			'pollinations_url'=> 'https://image.pollinations.ai/prompt/',
 			'pollinations_model' => 'flux',
 			'huggingface_key' => '',
