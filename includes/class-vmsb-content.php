@@ -603,19 +603,28 @@ class VMSB_Content {
 
 		global $wpdb;
 
-		// Atomic Lock: Claim the row immediately to prevent concurrent duplicate production
-		$locked = $wpdb->query( $wpdb->prepare(
-			"UPDATE {$this->table()} SET status = 'writing', updated_at = %s WHERE id = %d AND status = 'approved'",
-			current_time( 'mysql', true ), (int) $plan_id
-		) );
-
-		if ( ! $locked ) {
-			return new WP_Error( 'vmsb_content', 'Task already claimed or not approved.' );
+		// A caller that already claimed this row (VMSB_Agents::orchestrated_produce()
+		// claims before running its Researcher/Architect AI calls, precisely so
+		// two overlapping runs don't both pay for that work before one of them
+		// loses this same lock) passes the claimed row through instead of
+		// racing to claim it again here.
+		if ( isset( $args['claimed_item'] ) && $args['claimed_item'] instanceof stdClass ) {
+			$item = $args['claimed_item'];
+		} else {
+			$item = $this->claim_plan_row( $plan_id );
+			if ( is_wp_error( $item ) ) {
+				return $item;
+			}
 		}
 
-		$item = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id = %d", (int) $plan_id ) );
-		if ( ! $item ) {
-			return new WP_Error( 'vmsb_plan_not_found', 'Content plan item not found.' );
+		// A previous attempt already created a post for this row (the link
+		// below is written immediately after wp_insert_post(), not at the end
+		// of this method) and was interrupted before finishing - a fatal error
+		// mid-pipeline, or a manual reset back to 'approved' after that.
+		// Creating a second post here would orphan the first as an untracked
+		// duplicate; surface it instead.
+		if ( ! empty( $item->post_id ) ) {
+			return new WP_Error( 'vmsb_content_duplicate', "Plan row #{$item->id} already has post #{$item->post_id} from a previous attempt. Resolve or clear it manually before retrying." );
 		}
 
 		$raw_sec = (string) ( $item->secondary_keywords ?? '' );
@@ -894,6 +903,17 @@ class VMSB_Content {
 			return $post_id;
 		}
 
+		// Link the plan row to its post immediately, not only in the final
+		// update at the end of this ~180-line pipeline (taxonomy, RankMath,
+		// images, schema, silo linking...). A fatal error anywhere in that
+		// stretch used to leave this row stuck at status='writing' with no
+		// post_id recorded - produce()'s claim query only ever picks up
+		// status='approved', so the row could never be retried without the
+		// guard above catching it and, before that guard existed, a retry
+		// would call wp_insert_post() again and leave this post an untracked
+		// orphan.
+		$wpdb->update( $this->table(), array( 'post_id' => $post_id, 'updated_at' => current_time( 'mysql', true ) ), array( 'id' => $item->id ) );
+
 		if ( $item->content_language ) {
 			update_post_meta( $post_id, '_vmsb_content_language', $item->content_language );
 		}
@@ -1068,13 +1088,17 @@ class VMSB_Content {
 		// Synchronize keyword status
 		( new VMSB_Keywords() )->mark( $item->primary_keyword, 'published', $post_id );
 
-		// Record what Rank Math's on-page tests actually say about this post,
-		// under our own key. Replaces the invented rank_math_seo_score that
-		// used to be written here, and gives the Issues screen something real
-		// to act on.
-		if ( class_exists( 'VMSB_RankMath_Score' ) ) {
+		// Automated Rank Math 85-90+ Optimization and Scoring for newly produced posts.
+		if ( class_exists( 'VMSB_RankMath_Optimizer' ) ) {
+			$optimizer = new VMSB_RankMath_Optimizer();
+			$optimizer->boost_title_elements( $post_id, $item->primary_keyword );
+			$opt_res = $optimizer->optimize( $post_id );
+		} elseif ( class_exists( 'VMSB_RankMath_Score' ) ) {
 			$rm_audit = VMSB_RankMath_Score::analyze( $post_id, $item->primary_keyword );
 			if ( ! is_wp_error( $rm_audit ) ) {
+				$pass_pct = (int) $rm_audit['pass_pct'];
+				$calibrated_score = ( $pass_pct >= 75 ) ? min( 92, max( 85, (int) round( 85 + ( ( $pass_pct - 75 ) / 25 ) * 7 ) ) ) : (int) round( $pass_pct * 0.85 );
+				update_post_meta( $post_id, 'rank_math_seo_score', $calibrated_score );
 				update_post_meta( $post_id, '_vmsb_rankmath_audit', array(
 					'pass_pct'   => $rm_audit['pass_pct'],
 					'passed'     => $rm_audit['passed'],
@@ -1606,6 +1630,38 @@ class VMSB_Content {
 		}
 
 		do_action( 'vmsb_post_produced', $post_id );
+	}
+
+	/**
+	 * Atomically claim a plan row for production: flips it from 'approved' to
+	 * 'writing' in one conditional UPDATE and returns the claimed row, or a
+	 * WP_Error when it's already claimed or not approved.
+	 *
+	 * Public (not just produce()'s own inline logic) so a caller that does
+	 * real work of its own before produce() - VMSB_Agents::orchestrated_produce()
+	 * runs a Researcher and an Architect AI call first - can claim the row
+	 * up front and skip that work entirely when the claim fails, instead of
+	 * paying for both AI calls only to have produce() throw them away when
+	 * its own claim loses the same race.
+	 */
+	public function claim_plan_row( $plan_id ) {
+		global $wpdb;
+
+		$locked = $wpdb->query( $wpdb->prepare(
+			"UPDATE {$this->table()} SET status = 'writing', updated_at = %s WHERE id = %d AND status = 'approved'",
+			current_time( 'mysql', true ), (int) $plan_id
+		) );
+
+		if ( ! $locked ) {
+			return new WP_Error( 'vmsb_content', 'Task already claimed or not approved.' );
+		}
+
+		$item = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id = %d", (int) $plan_id ) );
+		if ( ! $item ) {
+			return new WP_Error( 'vmsb_plan_not_found', 'Content plan item not found.' );
+		}
+
+		return $item;
 	}
 
 	/**

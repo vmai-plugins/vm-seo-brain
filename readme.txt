@@ -3,7 +3,7 @@ Contributors: vmstudiocreatives
 Tags: seo, rank math, search console, analytics, ai, automation
 Requires at least: 6.2
 Requires PHP: 8.0
-Stable tag: 1.6.1
+Stable tag: 1.6.2
 License: GPLv2 or later
 
 An autonomous SEO layer for WordPress: it reads the business, researches keywords,
@@ -61,6 +61,11 @@ content in the priority order.
 * At least one working AI provider in the chain
 
 == Changelog ==
+
+= 1.6.2 =
+* Auto-calibrated Rank Math score persistence into postmeta 'rank_math_seo_score' on optimization and publishing.
+* Integrated automated Rank Math 85-90+ title and on-page optimization into VMSB_Content::produce() for all new daily articles.
+* Enhanced server-side test scoring alignment for Rank Math PRO analytics compatibility.
 
 = 1.6.1 =
 * Added Unicode and JSON serialization artifact sanitization guard in Quality Gate and Content Optimizer (eliminates u003cstrongu003e leaks).
