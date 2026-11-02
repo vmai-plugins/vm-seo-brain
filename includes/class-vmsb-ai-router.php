@@ -910,7 +910,16 @@ class VMSB_AI_Router {
 						$full_prompt = "CONTEXT:\n" . $args['system'] . "\n\nTASK:\n" . $prompt;
 					}
 
+					// Extended timeout for deep long-form generation (prevent cURL 28 timeout)
+					$t_filter = function($t) { return 240; };
+					$a_filter = function($args, $url) { $args['timeout'] = 240; return $args; };
+					add_filter('http_request_timeout', $t_filter);
+					add_filter('http_request_args', $a_filter, 10, 2);
+
 					$ai_result = $service->generate_response($full_prompt, $bot_settings, []);
+
+					remove_filter('http_request_timeout', $t_filter);
+					remove_filter('http_request_args', $a_filter, 10);
 					if ( ! is_wp_error($ai_result) ) {
 						$this->log->info( 'aipuffer', "AI Power Direct Bridge (Chat) success.", array('bot' => $bot_id) );
 						return $this->ok($ai_result['content'] ?? '', $bot_settings['model'] ?? 'unknown', $ai_result['usage'] ?? []);

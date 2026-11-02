@@ -800,7 +800,7 @@ class VMSB_Content {
 				. "TASK: Does this article invent facts not supported by common knowledge or the business profile?\n"
 				. "Return ONLY 'PASS' or 'FAIL: [Reason]'.";
 
-			$verification = $this->ai->generate( $verify_prompt, array( 'complexity' => 'standard', 'persona' => 'auditor', 'provider' => 'gemini' ) ); // Use different provider
+			$verification = $this->ai->generate( $verify_prompt, array( 'complexity' => 'standard', 'persona' => 'auditor' ) ); // Use different provider
 			if ( ! empty($verification['ok']) && 0 === stripos(trim($verification['text']), 'FAIL') ) {
 				$reason = "Independent Verification Failed: " . trim($verification['text']);
 				$wpdb->update( $this->table(), array( 'status' => 'failed', 'last_error' => $reason ), array( 'id' => $item->id ) );
