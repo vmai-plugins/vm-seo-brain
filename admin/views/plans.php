@@ -17,16 +17,13 @@ $daily = $usage->get_daily_usage(14);
 $cap = (int) VMSB_Settings::get( 'max_ai_calls_day', 500 );
 $calls_today = (new VMSB_AI_Router())->calls_today();
 $budget_pct = round(($calls_today / $cap) * 100);
-
-$checkout_base = 'https://vmstudio.digital/checkout/';
-$site_url = urlencode( home_url() );
 ?>
 
 	<header class="vmsb-head">
 		<div>
 			<p class="vmsb-eyebrow">Agency Resources</p>
 			<h1>Billing & Usage</h1>
-			<p class="vmsb-sub">Current Tier: <strong style="color:var(--gold); text-transform:uppercase;"><?php echo esc_html($current_plan); ?></strong> &mdash; Track AI expenditure and license status.</p>
+			<p class="vmsb-sub">Current Tier: <strong style="color:var(--gold); text-transform:uppercase;">SOVEREIGN ENTERPRISE</strong> &mdash; Track AI expenditure and license status.</p>
 		</div>
 		<div class="vmsb-head-actions">
 			<button class="vmsb-btn vmsb-btn-ghost" onclick="window.location.reload()">Refresh Data</button>
@@ -36,72 +33,29 @@ $site_url = urlencode( home_url() );
 	<span class="wp-header-end"></span>
 
 	<div class="vmsb-tabs" style="margin-top:30px;">
-		<button class="vmsb-tab is-active" data-tab="subscription">💳 Subscription Plans</button>
+		<button class="vmsb-tab is-active" data-tab="subscription">👑 License Status</button>
 		<button class="vmsb-tab" data-tab="usage">📊 AI Expenditure</button>
 		<button class="vmsb-tab" data-tab="latency">⚡ Provider Health</button>
 	</div>
 
-	<!-- SUBSCRIPTION PLANS PANEL -->
+	<!-- SOVEREIGN LICENSE STATUS PANEL -->
 	<section class="vmsb-panel is-active" data-panel="subscription">
-		<div class="vmsb-plans-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 25px; margin-top: 20px;">
-			<!-- FREE PLAN -->
-			<div class="vmsb-plan-card <?php echo 'free' === $current_plan ? 'is-active' : ''; ?>" style="background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 40px 30px; display: flex; flex-direction: column; position: relative;">
-				<?php if('free' === $current_plan): ?><span style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--gold); color: #000; font-size: 10px; font-weight: bold; padding: 4px 12px; border-radius: 20px;">CURRENT PLAN</span><?php endif; ?>
-				<div class="vmsb-plan-head">
-					<h3 style="margin: 0; font-family: var(--serif); font-size: 24px;">Starter</h3>
-					<div class="vmsb-plan-price" style="font-size: 36px; font-weight: bold; margin: 20px 0; color: var(--gold);">FREE <span style="font-size: 14px; color: var(--muted); font-weight: normal;">/ forever</span></div>
+		<div style="background: rgba(201, 162, 39, 0.08); border: 1px solid var(--gold); border-radius: 16px; padding: 40px 30px; text-align: center; margin-top: 20px;">
+			<span style="display: inline-block; font-size: 36px; margin-bottom: 12px;">👑</span>
+			<h2 style="margin: 0 0 10px; font-family: var(--serif); font-size: 26px; color: var(--gold);">Sovereign Enterprise Edition &mdash; 100% Free &amp; Unrestricted</h2>
+			<p style="margin: 0 auto 20px; max-width: 650px; color: var(--muted); font-size: 15px; line-height: 1.6;">
+				All enterprise AI SEO engines (Autonomous Silo Rebuilder, Competitor Hijacking, Programmatic Page Scaler, Vector Memory, and Trend Scout) are <strong>permanently unlocked and free</strong> for this workspace. No subscription or paid plan required.
+			</p>
+			<div style="display: inline-flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-top: 15px;">
+				<div style="background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 20px; font-size: 13px;">
+					<strong>Daily Quota:</strong> Unlimited Posts
 				</div>
-				<ul class="vmsb-plan-features" style="list-style: none; margin: 30px 0; padding: 0; flex-grow: 1;">
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ 3 Posts per day</li>
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ 100 Keywords tracking</li>
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px; opacity: 0.4; text-decoration: line-through;">✕ Trend Scout 2026</li>
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px; opacity: 0.4; text-decoration: line-through;">✕ Competitor Hijacking</li>
-				</ul>
-				<button class="vmsb-btn" disabled>Currently Active</button>
-			</div>
-
-			<!-- PRO PLAN -->
-			<div class="vmsb-plan-card <?php echo 'pro' === $current_plan ? 'is-active' : ''; ?>" style="background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 40px 30px; display: flex; flex-direction: column; position: relative;">
-				<?php if('pro' === $current_plan): ?><span style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--gold); color: #000; font-size: 10px; font-weight: bold; padding: 4px 12px; border-radius: 20px;">CURRENT PLAN</span><?php endif; ?>
-				<div class="vmsb-plan-head">
-					<h3 style="margin: 0; font-family: var(--serif); font-size: 24px;">Pro Authority</h3>
-					<div class="vmsb-plan-price" style="font-size: 36px; font-weight: bold; margin: 20px 0; color: var(--gold);">₹2,499 <span style="font-size: 14px; color: var(--muted); font-weight: normal;">/ month</span></div>
+				<div style="background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 20px; font-size: 13px;">
+					<strong>Keyword Tracking:</strong> Unlimited Keywords
 				</div>
-				<ul class="vmsb-plan-features" style="list-style: none; margin: 30px 0; padding: 0; flex-grow: 1;">
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ 15 Posts per day</li>
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ 1,000 Keywords tracking</li>
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ Trend Scout 2026 RSS</li>
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ Competitor Hijacking (Thief)</li>
-				</ul>
-				<a href="<?php echo $checkout_base; ?>?plan=pro&product=vm-seo-brain&site=<?php echo $site_url; ?>" target="_blank" class="vmsb-btn vmsb-btn-gold">
-					<?php echo 'pro' === $current_plan ? 'Active' : 'Upgrade to Pro'; ?>
-				</a>
-			</div>
-
-			<!-- ELITE PLAN -->
-			<div class="vmsb-plan-card <?php echo 'elite' === $current_plan ? 'is-active' : ''; ?>" style="background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 40px 30px; display: flex; flex-direction: column; position: relative;">
-				<?php if('elite' === $current_plan): ?><span style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--gold); color: #000; font-size: 10px; font-weight: bold; padding: 4px 12px; border-radius: 20px;">CURRENT PLAN</span><?php endif; ?>
-				<div class="vmsb-plan-head">
-					<h3 style="margin: 0; font-family: var(--serif); font-size: 24px;">Elite Dominance</h3>
-					<div class="vmsb-plan-price" style="font-size: 36px; font-weight: bold; margin: 20px 0; color: var(--gold);">₹5,999 <span style="font-size: 14px; color: var(--muted); font-weight: normal;">/ month</span></div>
+				<div style="background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 20px; font-size: 13px;">
+					<strong>Pro &amp; Elite Engines:</strong> Unlocked &amp; Sovereign
 				</div>
-				<ul class="vmsb-plan-features" style="list-style: none; margin: 30px 0; padding: 0; flex-grow: 1;">
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ 50+ Posts per day</li>
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ Unlimited Keywords</li>
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ Programmatic SEO Engine</li>
-					<li style="margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px;">✓ Vector Memory Access</li>
-				</ul>
-				<a href="<?php echo $checkout_base; ?>?plan=elite&product=vm-seo-brain&site=<?php echo $site_url; ?>" target="_blank" class="vmsb-btn vmsb-btn-gold">
-					<?php echo 'elite' === $current_plan ? 'Active' : 'Get Elite Access'; ?>
-				</a>
-			</div>
-		</div>
-
-		<div style="margin-top: 40px; text-align: center; background: rgba(201, 162, 39, 0.05); padding: 30px; border-radius: 12px; border: 1px dashed var(--gold);">
-			<h2 style="margin: 0 0 10px;">Already have a license key?</h2>
-			<div id="vmsb-license-form" class="vmsb-inline-form" style="justify-content: center; gap: 15px;">
-				<input type="text" name="license_key" placeholder="VMSB-XXXX-XXXX-XXXX" style="min-width: 300px; height: 45px;" value="<?php echo esc_attr( get_option('vmsb_license', [])['key'] ?? '' ); ?>">
-				<button class="vmsb-btn vmsb-btn-gold" data-vmsb="license-verify" data-vmsb-form="vmsb-license-form">Activate License</button>
 			</div>
 		</div>
 	</section>
