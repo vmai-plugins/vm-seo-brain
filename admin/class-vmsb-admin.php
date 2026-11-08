@@ -522,7 +522,22 @@ class VMSB_Admin {
 			}
 			$res = $google->exchange_code( sanitize_text_field( wp_unslash( $_GET['code'] ) ) );
 			$key = is_wp_error( $res ) ? 'google_failed' : 'google_connected';
-			wp_safe_redirect( admin_url( 'admin.php?page=vmsb-settings&vmsb_msg=' . $key ) );
+			wp_safe_redirect( admin_url( 'admin.php?page=vmsb-settings&tab=google&vmsb_msg=' . $key ) );
+			exit;
+		}
+
+		if ( isset( $_GET['vmsb_google'] ) && 'broker_callback' === $_GET['vmsb_google'] ) {
+			$google = new VMSB_Google();
+			$res    = $google->handle_broker_callback( $_GET );
+			$key    = is_wp_error( $res ) ? 'google_failed' : 'google_connected';
+			wp_safe_redirect( admin_url( 'admin.php?page=vmsb-settings&tab=google&vmsb_msg=' . $key ) );
+			exit;
+		}
+
+		if ( isset( $_GET['vmsb_google'], $_GET['vmsb_nonce'] ) && 'disconnect' === $_GET['vmsb_google'] && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['vmsb_nonce'] ) ), 'vmsb_google_disconnect' ) ) {
+			$google = new VMSB_Google();
+			$google->disconnect();
+			wp_safe_redirect( admin_url( 'admin.php?page=vmsb-settings&tab=google&vmsb_msg=google_disconnected' ) );
 			exit;
 		}
 
@@ -561,7 +576,7 @@ class VMSB_Admin {
 			'ai_primary', 'aipuffer_url', 'aipuffer_kb_id', 'aipuffer_bot_id', 'openai_model', 'gemini_model',
 			'openrouter_model', 'ollama_url', 'ollama_model', 'pollinations_url', 'pollinations_model',
 			'huggingface_model', 'cloudflare_account_id', 'cloudflare_model',
-			'comfy_url', 'image_style', 'google_client_id', 'gsc_property', 'ga4_property_id',
+			'comfy_url', 'image_style', 'google_client_id', 'google_connect_mode', 'google_account_email', 'google_account_name', 'google_account_picture', 'gsc_property', 'ga4_property_id',
 			'sheet_id', 'sheet_tab', 'bulk_topics_tab', 'theme_mode', 'aipuffer_image_provider', 'aipuffer_image_model',
 			'google_imagen_model', 'banana_model', 'webhook_url',
 			'conversion_goal', 'cta_style',
@@ -689,8 +704,9 @@ class VMSB_Admin {
 		}
 		$messages = array(
 			'saved'            => array( 'success', 'Settings saved successfully.' ),
-			'google_connected' => array( 'success', 'Google Cloud synchronized.' ),
-			'google_failed'    => array( 'error', 'Google Cloud authorization failed.' ),
+			'google_connected'    => array( 'success', 'Google Cloud synchronized.' ),
+			'google_failed'       => array( 'error', 'Google Cloud authorization failed.' ),
+			'google_disconnected' => array( 'info', 'Google account disconnected successfully.' ),
 			'import_done'      => array( 'success', 'Topics imported successfully. View them in Content Engine.' ),
 			'license_active'   => array( 'success', 'License activated successfully! Your plan is now: ' . strtoupper(VMSB_License::plan()) ),
 			'wizard_completed' => array( 'success', 'Setup Wizard completed! Your SEO Brain is now calibrated.' ),

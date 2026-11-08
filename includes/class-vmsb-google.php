@@ -14,7 +14,10 @@ class VMSB_Google {
 	// enabled it for OAuth clients, the consent screen can refuse the whole
 	// authorization outright (invalid_scope) - which is exactly the "stuck at
 	// Not connected" state this panel is meant to explain.
-	const SCOPES = 'https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/spreadsheets';
+	const SCOPES = 'https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
+
+	/** Connect Hub Broker endpoint for zero-config 1-Click OAuth. */
+	const BROKER_URL = 'https://connect.vmstudio.digital';
 
 	/** How long a completed consent state stays valid before it expires (24h). */
 	const OAUTH_STATE_TTL = 86400;
@@ -28,31 +31,41 @@ class VMSB_Google {
 	/* ---------------------------------------------------------------- auth */
 
 	public function is_connected() {
-		// "Connected" means exactly one thing: a usable refresh token in our
-		// own settings. The old Site Kit branch tested for a class that does
-		// not exist in either plugin and returned true without any token, so
-		// the UI claimed Synchronized while every Google call failed.
 		return (bool) VMSB_Settings::get( 'google_refresh_token' );
 	}
-
 
 	public function redirect_uri() {
 		return admin_url( 'admin.php?page=vmsb-settings&vmsb_google=callback' );
 	}
 
+	public function broker_redirect_uri() {
+		return admin_url( 'admin.php?page=vmsb-settings&vmsb_google=broker_callback' );
+	}
+
 	/**
-	 * A fresh one-time consent state. A WP nonce used to be used here; the
-	 * problem is that nonces expire after ~12 hours, and setting up Search
-	 * Console (creating the project, adding the redirect URI, waiting for
-	 * verification) routinely takes longer than that. The user would come
-	 * back from Google and be told "That authorisation link has expired"
-	 * with no way forward but to restart the dance. A random state stored
-	 * in a 24h transient survives the setup session.
+	 * Instant 1-Click Connect URL via Connect Hub broker.
+	 */
+	public function one_click_connect_url() {
+		$state = hash( 'sha256', random_bytes( 32 ) . time() );
+		set_transient( 'vmsb_google_oauth_state', $state, self::OAUTH_STATE_TTL );
+
+		$params = array(
+			'service'      => 'seo',
+			'site_url'     => home_url(),
+			'redirect_uri' => $this->broker_redirect_uri(),
+			'state'        => $state,
+		);
+
+		return self::BROKER_URL . '/oauth/google/start?' . http_build_query( $params );
+	}
+
+	/**
+	 * Developer custom app consent URL.
 	 */
 	public function consent_url() {
 		$client_id = VMSB_Settings::get( 'google_client_id' );
 		if ( empty( $client_id ) ) {
-			return null; // Not enough to build a consent screen.
+			return null;
 		}
 		$state = hash( 'sha256', random_bytes( 32 ) . time() );
 		set_transient( 'vmsb_google_oauth_state', $state, self::OAUTH_STATE_TTL );
@@ -78,6 +91,40 @@ class VMSB_Google {
 			return false;
 		}
 		delete_transient( 'vmsb_google_oauth_state' );
+		return true;
+	}
+
+	/**
+	 * Process callback from 1-Click Connect Hub Broker.
+	 */
+	public function handle_broker_callback( array $data ) {
+		$state = isset( $data['state'] ) ? sanitize_text_field( wp_unslash( $data['state'] ) ) : '';
+		if ( ! $this->verify_oauth_state( $state ) ) {
+			return new WP_Error( 'vmsb_oauth_state', 'That authorisation link has expired. Please try connecting again.' );
+		}
+
+		$refresh = isset( $data['refresh_token'] ) ? sanitize_text_field( wp_unslash( $data['refresh_token'] ) ) : '';
+		if ( empty( $refresh ) ) {
+			return new WP_Error( 'vmsb_oauth_token', 'No refresh token returned by Connect Hub.' );
+		}
+
+		$patch = array(
+			'google_refresh_token'   => $refresh,
+			'google_connect_mode'    => 'broker',
+			'google_account_email'   => sanitize_email( wp_unslash( $data['email'] ?? '' ) ),
+			'google_account_name'    => sanitize_text_field( wp_unslash( $data['name'] ?? '' ) ),
+			'google_account_picture' => esc_url_raw( wp_unslash( $data['picture'] ?? '' ) ),
+		);
+
+		VMSB_Settings::update( $patch );
+
+		if ( ! empty( $data['access_token'] ) ) {
+			$ttl = isset( $data['expires_in'] ) ? max( 60, (int) $data['expires_in'] - 60 ) : 3540;
+			set_transient( 'vmsb_google_access', sanitize_text_field( wp_unslash( $data['access_token'] ) ), $ttl );
+		}
+
+		$this->auto_configure_properties();
+
 		return true;
 	}
 
@@ -114,9 +161,17 @@ class VMSB_Google {
 		if ( empty( $data['refresh_token'] ) ) {
 			return new WP_Error( 'vmsb_oauth', 'Google did not return a refresh token. ' . self::oauth_error_hint( 'no_refresh_token' ) );
 		}
-		VMSB_Settings::update( array( 'google_refresh_token' => $data['refresh_token'] ) );
+		VMSB_Settings::update( array(
+			'google_refresh_token' => $data['refresh_token'],
+			'google_connect_mode'  => 'custom',
+		) );
 		$ttl = isset( $data['expires_in'] ) ? max( 60, (int) $data['expires_in'] - 60 ) : 3540;
 		set_transient( 'vmsb_google_access', $data['access_token'], $ttl );
+
+		// Fetch profile and auto-configure properties
+		$this->user_profile( true );
+		$this->auto_configure_properties();
+
 		return true;
 	}
 
@@ -141,18 +196,56 @@ class VMSB_Google {
 		if ( ! $refresh ) {
 			return new WP_Error( 'vmsb_oauth', 'Google is not connected yet.' );
 		}
-		$res = wp_remote_post(
-			'https://oauth2.googleapis.com/token',
-			array(
-				'timeout' => 30,
-				'body'    => array(
-					'client_id'     => VMSB_Settings::get( 'google_client_id' ),
-					'client_secret' => VMSB_Settings::get( 'google_client_secret' ),
-					'refresh_token' => $refresh,
-					'grant_type'    => 'refresh_token',
-				),
-			)
-		);
+
+		$client_id     = VMSB_Settings::get( 'google_client_id' );
+		$client_secret = VMSB_Settings::get( 'google_client_secret' );
+		$connect_mode  = VMSB_Settings::get( 'google_connect_mode', 'broker' );
+
+		// If developer mode with custom credentials
+		if ( 'custom' === $connect_mode && ! empty( $client_id ) && ! empty( $client_secret ) ) {
+			$res = wp_remote_post(
+				'https://oauth2.googleapis.com/token',
+				array(
+					'timeout' => 30,
+					'body'    => array(
+						'client_id'     => $client_id,
+						'client_secret' => $client_secret,
+						'refresh_token' => $refresh,
+						'grant_type'    => 'refresh_token',
+					),
+				)
+			);
+		} else {
+			// Broker mode
+			$res = wp_remote_post(
+				self::BROKER_URL . '/oauth/google/refresh',
+				array(
+					'timeout' => 30,
+					'headers' => array( 'Content-Type' => 'application/json' ),
+					'body'    => wp_json_encode( array(
+						'refresh_token' => $refresh,
+						'service'       => 'seo',
+					) ),
+				)
+			);
+
+			// Fallback to direct Google if custom credentials exist and broker failed
+			if ( ( is_wp_error( $res ) || wp_remote_retrieve_response_code( $res ) !== 200 ) && ! empty( $client_id ) && ! empty( $client_secret ) ) {
+				$res = wp_remote_post(
+					'https://oauth2.googleapis.com/token',
+					array(
+						'timeout' => 30,
+						'body'    => array(
+							'client_id'     => $client_id,
+							'client_secret' => $client_secret,
+							'refresh_token' => $refresh,
+							'grant_type'    => 'refresh_token',
+						),
+					)
+				);
+			}
+		}
+
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
@@ -165,34 +258,141 @@ class VMSB_Google {
 		return $data['access_token'];
 	}
 
+	public function user_profile( $force_refresh = false ) {
+		$email   = VMSB_Settings::get( 'google_account_email' );
+		$name    = VMSB_Settings::get( 'google_account_name' );
+		$picture = VMSB_Settings::get( 'google_account_picture' );
 
-	/**
-	 * Human-readable state for the Settings screen, so a plain "Not connected"
-	 * warning (which told the operator nothing about *why*) can become an
-	 * actionable list.
-	 */
+		if ( ( $force_refresh || empty( $email ) ) && $this->is_connected() ) {
+			$res = $this->request( 'https://www.googleapis.com/oauth2/v2/userinfo' );
+			if ( is_array( $res ) && ! empty( $res['email'] ) ) {
+				$email   = sanitize_email( $res['email'] );
+				$name    = sanitize_text_field( $res['name'] ?? '' );
+				$picture = esc_url_raw( $res['picture'] ?? '' );
+				VMSB_Settings::update( array(
+					'google_account_email'   => $email,
+					'google_account_name'    => $name,
+					'google_account_picture' => $picture,
+				) );
+			}
+		}
+
+		return array(
+			'email'   => $email,
+			'name'    => $name,
+			'picture' => $picture,
+		);
+	}
+
+	public function disconnect() {
+		delete_transient( 'vmsb_google_access' );
+		delete_transient( 'vmsb_google_oauth_state' );
+		VMSB_Settings::update( array(
+			'google_refresh_token'   => '',
+			'google_account_email'   => '',
+			'google_account_name'    => '',
+			'google_account_picture' => '',
+			'google_connect_mode'    => 'broker',
+		) );
+		return true;
+	}
+
+	public function ga4_properties() {
+		$res = $this->request( 'https://analyticsadmin.googleapis.com/v1beta/accountSummaries' );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+
+		$properties = array();
+		if ( ! empty( $res['accountSummaries'] ) && is_array( $res['accountSummaries'] ) ) {
+			foreach ( $res['accountSummaries'] as $acc ) {
+				$acc_name = $acc['displayName'] ?? 'Account';
+				if ( ! empty( $acc['propertySummaries'] ) && is_array( $acc['propertySummaries'] ) ) {
+					foreach ( $acc['propertySummaries'] as $prop ) {
+						$raw_id = $prop['property'] ?? '';
+						$num_id = preg_replace( '/\D/', '', $raw_id );
+						$properties[] = array(
+							'id'           => $num_id,
+							'raw_id'       => $raw_id,
+							'name'         => $prop['displayName'] ?? 'GA4 Property',
+							'account_name' => $acc_name,
+						);
+					}
+				}
+			}
+		}
+
+		return $properties;
+	}
+
+	public function auto_configure_properties() {
+		$current_host = wp_parse_url( home_url(), PHP_URL_HOST );
+		if ( ! $current_host ) {
+			return;
+		}
+		$clean_host = preg_replace( '/^www\./i', '', strtolower( $current_host ) );
+
+		// Auto match Search Console property
+		if ( empty( VMSB_Settings::get( 'gsc_property' ) ) ) {
+			$sites = $this->gsc_sites();
+			if ( is_array( $sites ) && ! empty( $sites ) ) {
+				$matched = '';
+				foreach ( $sites as $site ) {
+					$site_clean = str_replace( array( 'sc-domain:', 'http://', 'https://' ), '', rtrim( strtolower( $site ), '/' ) );
+					$site_clean = preg_replace( '/^www\./i', '', $site_clean );
+					if ( $site_clean === $clean_host ) {
+						$matched = $site;
+						break;
+					}
+				}
+				if ( ! $matched && 1 === count( $sites ) ) {
+					$matched = $sites[0];
+				}
+				if ( $matched ) {
+					VMSB_Settings::update( array( 'gsc_property' => $matched ) );
+				}
+			}
+		}
+
+		// Auto match GA4 property
+		if ( empty( VMSB_Settings::get( 'ga4_property_id' ) ) ) {
+			$props = $this->ga4_properties();
+			if ( is_array( $props ) && ! empty( $props ) ) {
+				$matched_ga4 = '';
+				foreach ( $props as $p ) {
+					if ( false !== stripos( $p['name'], $clean_host ) ) {
+						$matched_ga4 = $p['id'];
+						break;
+					}
+				}
+				if ( ! $matched_ga4 && 1 === count( $props ) ) {
+					$matched_ga4 = $props[0]['id'];
+				}
+				if ( $matched_ga4 ) {
+					VMSB_Settings::update( array( 'ga4_property_id' => $matched_ga4 ) );
+				}
+			}
+		}
+	}
+
 	public function connection_status() {
 		$has_id     = ! empty( VMSB_Settings::get( 'google_client_id' ) );
 		$has_secret = ! empty( VMSB_Settings::get( 'google_client_secret' ) );
 		$has_token  = ! empty( VMSB_Settings::get( 'google_refresh_token' ) );
+		$mode       = VMSB_Settings::get( 'google_connect_mode', 'broker' );
 		$failed     = (bool) get_option( 'vmsb_decryption_failed' );
 
 		$reasons = array();
-		if ( ! $has_id ) {
-			$reasons[] = 'Add your OAuth <strong>Client ID</strong> below and save it.';
-		}
-		if ( $has_id && ! $has_secret ) {
-			$reasons[] = 'Add your OAuth <strong>Client Secret</strong> below and save it.';
+		if ( ! $has_token ) {
+			$reasons[] = 'Click <strong>Sign in with Google (1-Click)</strong> to authenticate instantly.';
 		}
 		if ( $failed ) {
-			$reasons[] = 'A stored credential could not be decrypted - your <code>AUTH_KEY</code> changed since it was saved. Save the Client Secret again, then re-authorize.';
-		}
-		if ( $has_id && $has_secret && ! $has_token ) {
-			$reasons[] = 'Client credentials are saved. Click <strong>Authorize Google Access</strong> below to finish the connection.';
+			$reasons[] = 'A stored credential could not be decrypted - your <code>AUTH_KEY</code> changed. Please reconnect Google.';
 		}
 
 		return array(
 			'connected'      => $this->is_connected(),
+			'mode'           => $mode,
 			'has_client_id'  => $has_id,
 			'has_secret'     => $has_secret,
 			'has_token'      => $has_token,
@@ -201,20 +401,15 @@ class VMSB_Google {
 		);
 	}
 
-	/**
-	 * Prove the connection actually works end to end: refresh the access
-	 * token (a network round trip), then hit the Search Console site list -
-	 * the same read scope the SEO screens depend on.
-	 */
 	public function test_connection() {
 		if ( ! $this->is_connected() ) {
-			return array( 'ok' => false, 'detail' => 'No refresh token is stored - complete the Google authorization below first.' );
+			return array( 'ok' => false, 'detail' => 'No refresh token is stored - complete Google authorization first.' );
 		}
 		$token = $this->access_token();
 		if ( is_wp_error( $token ) ) {
 			$msg = strtolower( (string) $token->get_error_message() );
 			if ( strpos( $msg, 'refresh' ) !== false || strpos( $msg, 'invalid_grant' ) !== false || strpos( $msg, 'inactive' ) !== false ) {
-				return array( 'ok' => false, 'detail' => 'The saved token was rejected by Google when refreshed. Re-authorize below to store a fresh token.' );
+				return array( 'ok' => false, 'detail' => 'The saved token was rejected by Google when refreshed. Re-authorize to store a fresh token.' );
 			}
 			return array( 'ok' => false, 'detail' => $token->get_error_message() );
 		}
