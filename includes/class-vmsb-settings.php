@@ -282,6 +282,18 @@ class VMSB_Settings {
 		$all = self::all();
 		$val = array_key_exists( $key, $all ) ? $all[ $key ] : $fallback;
 
+		// Cross-Plugin Credential Sync: If missing here, check VM Social AI
+		if ( ( empty( $val ) || '' === $val ) && class_exists( 'VMSAI_Settings' ) ) {
+			$vmsai_val = VMSAI_Settings::credential( $key );
+			if ( ! empty( $vmsai_val ) ) {
+				return $vmsai_val;
+			}
+			$vmsai_setting = VMSAI_Settings::get( $key );
+			if ( ! empty( $vmsai_setting ) ) {
+				return $vmsai_setting;
+			}
+		}
+
 		// License Enforcement
 		if ( 'posts_per_day' === $key && class_exists('VMSB_License') ) {
 			$limits = VMSB_License::limits();
