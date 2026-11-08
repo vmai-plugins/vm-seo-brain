@@ -508,9 +508,9 @@ class VMSB_Image_Engine {
 	 * result, and downloads the rendered image as raw bytes.
 	 *
 	 * Settings used:
-	 *   comfy_url      – base URL, e.g. http://127.0.0.1:8188
-	 *   comfy_key      – optional Bearer token for proxied instances
-	 *   comfy_workflow  – saved API-format workflow JSON with placeholders:
+	 *   comfy_url      ï¿½ base URL, e.g. http://127.0.0.1:8188
+	 *   comfy_key      ï¿½ optional Bearer token for proxied instances
+	 *   comfy_workflow  ï¿½ saved API-format workflow JSON with placeholders:
 	 *                     {{prompt}}, {{negative}}, {{width}}, {{height}}, {{seed}}
 	 *
 	 * If no custom workflow is supplied, a default SDXL txt2img graph is used.
@@ -549,9 +549,10 @@ class VMSB_Image_Engine {
 			return new WP_Error( 'vmsb_comfyui', 'ComfyUI did not return a prompt_id.' );
 		}
 
-		// Poll history – budget-aware to avoid exceeding max_execution_time.
+		// Poll history - cap at 45s max to prevent 504/524 reverse proxy gateway timeouts.
 		$budget   = (int) ini_get( 'max_execution_time' );
-		$deadline = time() + ( $budget > 0 ? max( 15, $budget - 10 ) : 60 );
+		$headroom = $budget > 0 ? max( 15, min( 45, $budget - 10 ) ) : 45;
+		$deadline = time() + $headroom;
 
 		while ( time() < $deadline ) {
 			sleep( 3 );

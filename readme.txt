@@ -3,7 +3,7 @@ Contributors: vmstudiocreatives
 Tags: seo, rank math, search console, analytics, ai, automation
 Requires at least: 6.2
 Requires PHP: 8.0
-Stable tag: 1.7.0
+Stable tag: 1.7.1
 License: GPLv2 or later
 
 An autonomous SEO layer for WordPress: it reads the business, researches keywords,
@@ -61,6 +61,13 @@ content in the priority order.
 * At least one working AI provider in the chain
 
 == Changelog ==
+
+= 1.7.1 =
+* Fixed PHP 8 TypeError crash in VMSB_Content when internal link hints contain structured arrays.
+* Fixed 504 Gateway Timeout during ComfyUI rendering by capping synchronous polling to 45s maximum.
+* Fixed database full table scan in Task Runner by adding MD5 hash matching on queued payloads.
+* Fixed postmeta timestamp string comparison in Link Indexer by casting meta_value to numeric UNSIGNED.
+* Fixed blocking Google Indexing API calls during interactive post save by dispatching via single async event.
 
 = 1.7.0 =
 * Added 1-Click Google Sign-In with auto-discovery for Google Search Console verified domains and GA4 properties.

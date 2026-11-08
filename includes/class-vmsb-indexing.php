@@ -10,6 +10,7 @@ class VMSB_Indexing {
 	public function __construct() {
 		add_action( 'wp_insert_post', array( $this, 'on_post_update' ), 10, 3 );
 		add_action( 'vmsb_post_produced', array( $this, 'submit' ) );
+		add_action( 'vmsb_async_indexing_submit', array( $this, 'submit' ) );
 	}
 
 	public function on_post_update( $post_id, $post, $update ) {
@@ -23,6 +24,14 @@ class VMSB_Indexing {
 		// Rate limit manual updates to once per hour per post.
 		$last_submit = get_post_meta( $post_id, '_vmsb_indexed_at', true );
 		if ( $last_submit && ( time() - (int) $last_submit ) < HOUR_IN_SECONDS ) {
+			return;
+		}
+
+		// Offload to single background event to avoid blocking interactive post save HTTP requests
+		if ( ! wp_doing_cron() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			if ( ! wp_next_scheduled( 'vmsb_async_indexing_submit', array( (int) $post_id ) ) ) {
+				wp_schedule_single_event( time() + 5, 'vmsb_async_indexing_submit', array( (int) $post_id ) );
+			}
 			return;
 		}
 

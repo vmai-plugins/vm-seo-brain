@@ -643,7 +643,17 @@ class VMSB_Content {
 
 		$link_context = array();
 		foreach ( $links as $hint ) {
-			$found = get_posts( array( 's' => $hint, 'posts_per_page' => 1, 'post_status' => 'publish' ) );
+			if ( is_array( $hint ) ) {
+				$query_term = (string) ( $hint['title'] ?? $hint['keyword'] ?? $hint['anchor'] ?? '' );
+			} elseif ( is_string( $hint ) || is_numeric( $hint ) ) {
+				$query_term = trim( (string) $hint );
+			} else {
+				continue;
+			}
+			if ( '' === $query_term ) {
+				continue;
+			}
+			$found = get_posts( array( 's' => $query_term, 'posts_per_page' => 1, 'post_status' => 'publish' ) );
 			if ( $found ) {
 				$link_context[] = array( 'title' => $found[0]->post_title, 'url' => get_permalink( $found[0] ) );
 			}

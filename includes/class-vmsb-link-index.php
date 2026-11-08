@@ -119,7 +119,7 @@ class VMSB_Link_Index {
 				"SELECT p.ID FROM {$wpdb->posts} p
 				 LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s
 				 WHERE p.post_status = 'publish' AND p.post_type IN ({$in})
-				   AND ( m.meta_value IS NULL OR m.meta_value < UNIX_TIMESTAMP( p.post_modified_gmt ) )
+				   AND ( m.meta_value IS NULL OR CAST( m.meta_value AS UNSIGNED ) < UNIX_TIMESTAMP( p.post_modified_gmt ) )
 				 ORDER BY p.post_modified_gmt DESC
 				 LIMIT %d",
 				self::SCAN_META,
@@ -137,7 +137,7 @@ class VMSB_Link_Index {
 				"SELECT COUNT(*) FROM {$wpdb->posts} p
 				 LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s
 				 WHERE p.post_status = 'publish' AND p.post_type IN ({$in})
-				   AND ( m.meta_value IS NULL OR m.meta_value < UNIX_TIMESTAMP( p.post_modified_gmt ) )",
+				   AND ( m.meta_value IS NULL OR CAST( m.meta_value AS UNSIGNED ) < UNIX_TIMESTAMP( p.post_modified_gmt ) )",
 				self::SCAN_META
 			)
 		);

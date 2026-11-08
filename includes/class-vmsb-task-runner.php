@@ -22,9 +22,12 @@ class VMSB_Task_Runner {
 		global $wpdb;
 
 		// Don't double-queue the same task type if already pending
+		$json_payload = wp_json_encode( $payload );
+		$payload_hash = md5( $json_payload );
+
 		$existing = $wpdb->get_var( $wpdb->prepare(
-			"SELECT id FROM " . self::table() . " WHERE task_type = %s AND status IN ('queued', 'running', 'retrying') AND payload = %s",
-			$task_type, wp_json_encode($payload)
+			"SELECT id FROM " . self::table() . " WHERE task_type = %s AND status IN ('queued', 'running', 'retrying') AND ( MD5(payload) = %s OR payload = %s ) LIMIT 1",
+			$task_type, $payload_hash, $json_payload
 		) );
 
 		if ( $existing ) return (int) $existing;
