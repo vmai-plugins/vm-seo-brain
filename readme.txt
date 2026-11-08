@@ -3,7 +3,7 @@ Contributors: vmstudiocreatives
 Tags: seo, rank math, search console, analytics, ai, automation
 Requires at least: 6.2
 Requires PHP: 8.0
-Stable tag: 1.6.2
+Stable tag: 1.7.0
 License: GPLv2 or later
 
 An autonomous SEO layer for WordPress: it reads the business, researches keywords,
@@ -61,6 +61,13 @@ content in the priority order.
 * At least one working AI provider in the chain
 
 == Changelog ==
+
+= 1.7.0 =
+* Added 1-Click Google Sign-In with auto-discovery for Google Search Console verified domains and GA4 properties.
+* Redesigned Google Integration settings with live connected profile cards and property dropdown selectors.
+* Added bidirectional cross-plugin credential sync with VM Social AI.
+* Hardened SQL IN-clause queries with parameterized placeholders in VMSB_Content and VMSB_Fixer.
+* Preserved expandable developer custom app fallback for enterprise white-label installations.
 
 = 1.6.2 =
 * Auto-calibrated Rank Math score persistence into postmeta 'rank_math_seo_score' on optimization and publishing.
