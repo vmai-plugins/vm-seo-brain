@@ -1334,7 +1334,8 @@ class VMSB_Fixer {
 
 		switch ( $action ) {
 			case 'dismiss':
-				$count = $wpdb->query( "UPDATE {$this->table()} SET status = 'dismissed' WHERE id IN (" . implode( ',', $ids ) . ") AND status = 'open'" );
+				$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+				$count        = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'dismissed' WHERE id IN ({$placeholders}) AND status = 'open'", $ids ) );
 				break;
 
 			case 'fix':

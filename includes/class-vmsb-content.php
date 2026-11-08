@@ -1844,12 +1844,14 @@ class VMSB_Content {
 				// was visible on 25 topics and worked on none of them. Exactly
 				// the same status-filter mismatch documented on 'bulk-produce'
 				// below; the fix was never carried across to this case.
-				$now   = current_time( 'mysql', true );
-				$count = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', scheduled_for = %s, updated_at = %s WHERE id IN (" . implode( ',', $ids ) . ") AND status IN ('planned', 'suggested')", $now, $now ) );
+				$now          = current_time( 'mysql', true );
+				$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+				$count        = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', scheduled_for = %s, updated_at = %s WHERE id IN ({$placeholders}) AND status IN ('planned', 'suggested')", array_merge( array( $now, $now ), $ids ) ) );
 				break;
 
 			case 'bulk-delete':
-				$count = $wpdb->query( "DELETE FROM {$this->table()} WHERE id IN (" . implode( ',', $ids ) . ") AND status != 'published'" );
+				$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+				$count        = $wpdb->query( $wpdb->prepare( "DELETE FROM {$this->table()} WHERE id IN ({$placeholders}) AND status != 'published'", $ids ) );
 				break;
 
 			case 'bulk-produce':
