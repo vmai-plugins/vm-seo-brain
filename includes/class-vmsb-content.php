@@ -405,6 +405,9 @@ class VMSB_Content {
 
 		$tab = VMSB_Settings::get( 'sheet_tab' );
 		$existing_data = $this->google->sheet_read( $tab . '!A:A' );
+		if ( is_wp_error( $existing_data ) ) {
+			return $existing_data;
+		}
 		$existing_uids = array();
 		if ( is_array( $existing_data ) ) {
 			foreach ( $existing_data as $idx => $r ) {

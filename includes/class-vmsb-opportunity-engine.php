@@ -128,8 +128,10 @@ class VMSB_Opportunity_Engine {
 			if ( $url && $google->is_connected() ) {
 				$now  = $google->gsc_page_metrics( $url, 28, 0 );
 				$prev = $google->gsc_page_metrics( $url, 28, 29 );
-				if ( ! is_wp_error( $now ) && ! is_wp_error( $prev ) && (int) $prev['clicks'] > 0 ) {
-					$drop_pct = round( ( 1 - ( $now['clicks'] / $prev['clicks'] ) ) * 100 );
+				$prev_clicks = (int) ( $prev['clicks'] ?? 0 );
+				if ( ! is_wp_error( $now ) && ! is_wp_error( $prev ) && $prev_clicks > 0 ) {
+					$now_clicks = (int) ( $now['clicks'] ?? 0 );
+					$drop_pct   = round( ( 1 - ( $now_clicks / $prev_clicks ) ) * 100 );
 				}
 			}
 

@@ -82,8 +82,10 @@ class VMSB_Decay {
 			$rapid_metrics = $this->google->gsc_page_metrics( $url, 7, 0 );
 			$prev_7_metrics = $this->google->gsc_page_metrics( $url, 7, 8 );
 
-			if ( ! is_wp_error( $rapid_metrics ) && ! is_wp_error( $prev_7_metrics ) && ! empty($prev_7_metrics) && $prev_7_metrics['clicks'] > 10 ) {
-				if ( ($rapid_metrics['clicks'] / $prev_7_metrics['clicks']) < 0.5 ) {
+			if ( ! is_wp_error( $rapid_metrics ) && ! is_wp_error( $prev_7_metrics ) && ! empty($prev_7_metrics) && (int) ( $prev_7_metrics['clicks'] ?? 0 ) > 10 ) {
+				$rapid_clicks = (int) ( $rapid_metrics['clicks'] ?? 0 );
+				$prev_clicks  = (int) ( $prev_7_metrics['clicks'] ?? 0 );
+				if ( $prev_clicks > 0 && ( $rapid_clicks / $prev_clicks ) < 0.5 ) {
 					( new VMSB_Fixer() )->record( 'post', $post_id, 'rapid_decay', 'critical', 'Critical: This page lost 50%+ of its traffic in the last 7 days.' );
 					$found++;
 					continue;
@@ -94,9 +96,9 @@ class VMSB_Decay {
 			if ( $clicks_now < 30 ) continue;
 
 			$prev_metrics = $this->google->gsc_page_metrics( $url, 30, 31 );
-			if ( empty( $prev_metrics ) || is_wp_error( $prev_metrics ) || (int)$prev_metrics['clicks'] === 0 ) continue;
+			if ( empty( $prev_metrics ) || is_wp_error( $prev_metrics ) || (int) ( $prev_metrics['clicks'] ?? 0 ) === 0 ) continue;
 
-			$clicks_prev = (int) $prev_metrics['clicks'];
+			$clicks_prev = (int) ( $prev_metrics['clicks'] ?? 0 );
 
 			if ( ( $clicks_now / $clicks_prev ) < 0.8 ) {
 				$drop_pct = round( ( 1 - ( $clicks_now / $clicks_prev ) ) * 100 );

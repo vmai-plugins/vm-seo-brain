@@ -69,7 +69,8 @@ class VMSB_Model_Sync {
 		if ( ! $key ) return new WP_Error( 'no_key', 'OpenAI key missing' );
 
 		$res = wp_remote_get( 'https://api.openai.com/v1/models', array(
-			'headers' => array( 'Authorization' => 'Bearer ' . $key )
+			'headers' => array( 'Authorization' => 'Bearer ' . $key ),
+			'timeout' => 20,
 		) );
 
 		if ( is_wp_error( $res ) ) return $res;
@@ -91,7 +92,7 @@ class VMSB_Model_Sync {
 		if ( ! $key ) return new WP_Error( 'no_key', 'Gemini key missing' );
 
 		$url = "https://generativelanguage.googleapis.com/v1beta/models?key=" . rawurlencode( $key );
-		$res = wp_remote_get( $url );
+		$res = wp_remote_get( $url, array( 'timeout' => 20 ) );
 
 		if ( is_wp_error( $res ) ) return $res;
 		$body = json_decode( wp_remote_retrieve_body( $res ), true );
@@ -118,7 +119,8 @@ class VMSB_Model_Sync {
 		if ( ! $key ) return new WP_Error( 'no_key', 'OpenRouter key missing' );
 
 		$res = wp_remote_get( 'https://openrouter.ai/api/v1/models', array(
-			'headers' => array( 'Authorization' => 'Bearer ' . $key )
+			'headers' => array( 'Authorization' => 'Bearer ' . $key ),
+			'timeout' => 20,
 		) );
 
 		if ( is_wp_error( $res ) ) return $res;

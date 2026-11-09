@@ -139,6 +139,13 @@ class VMSB_CTR {
 		$rm = new VMSB_RankMath();
 
 		foreach ( $due as $exp ) {
+			if ( ! get_post( $exp->post_id ) ) {
+				$wpdb->update( $this->table(), array(
+					'status'       => 'cancelled',
+					'concluded_at' => current_time( 'mysql' ),
+				), array( 'id' => $exp->id ) );
+				continue;
+			}
 			$metrics = $this->google->gsc_page_metrics( get_permalink( $exp->post_id ), 14 );
 			$result_ctr = is_wp_error( $metrics ) ? 0 : (float) ( $metrics['ctr'] ?? 0 );
 

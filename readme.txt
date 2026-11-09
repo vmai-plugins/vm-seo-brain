@@ -3,7 +3,7 @@ Contributors: vmstudiocreatives
 Tags: seo, rank math, search console, analytics, ai, automation
 Requires at least: 6.2
 Requires PHP: 8.0
-Stable tag: 1.7.2
+Stable tag: 1.7.3
 License: GPLv2 or later
 
 An autonomous SEO layer for WordPress: it reads the business, researches keywords,
@@ -61,6 +61,12 @@ content in the priority order.
 * At least one working AI provider in the chain
 
 == Changelog ==
+
+= 1.7.3 =
+* Fixed Google Sheet duplication risk by validating API response in VMSB_Content::push_to_sheet() before appending rows.
+* Handled deleted/trashed posts gracefully in CTR experiment conclusion to prevent null permalinks and orphan brain memories.
+* Added safe null coalescing to GSC click calculations in Decay Monitor and Opportunity Engine to prevent PHP 8.2+ notices.
+* Added 20s timeout parameters to OpenAI, Gemini, and OpenRouter discovery requests in VMSB_Model_Sync.
 
 = 1.7.2 =
 * Fixed mutual infinite recursion loop between VM SEO Brain and VM Social AI credential resolution during wp-admin update checks.
