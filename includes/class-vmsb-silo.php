@@ -483,7 +483,9 @@ class VMSB_Silo {
 
 		if ( class_exists('AILG_Core') ) {
 			global $wpdb;
-			$broken = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ailg_broken_links WHERE status='broken'" );
+			$ailg_tbl = $wpdb->prefix . 'ailg_broken_links';
+			$has_tbl  = $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $ailg_tbl ) );
+			$broken   = $has_tbl ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$ailg_tbl} WHERE status='broken'" ) : 0;
 			if ( $broken > 0 ) {
 				$fixer = new VMSB_Fixer();
 				$fixer->record( 'site', 0, 'broken_links_found', 'high', "AI Link Genius found {$broken} broken internal links that need repair." );

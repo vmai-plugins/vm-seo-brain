@@ -440,8 +440,8 @@ if ( ! in_array( $active_tab, array( 'identity', 'ai-images', 'google', 'autonom
 						</div>
 
 						<!-- Developer Custom Google Cloud App (Expandable Details) -->
-						<details style="margin-top:24px; padding:16px 18px; background:rgba(255,255,255,0.02); border:1px solid var(--vmsb-border); border-radius:10px;">
-							<summary style="font-size:13px; font-weight:600; cursor:pointer; color:var(--vmsb-muted);">⚙️ Advanced: Use Custom Google Cloud Project (Developer / White-Label Mode)</summary>
+						<details <?php echo empty( $s[\x27google_refresh_token\x27] ) ? \x27open\x27 : \x27\x27; ?> style="margin-top:24px; padding:16px 18px; background:rgba(255,255,255,0.02); border:1px solid var(--vmsb-border); border-radius:10px;">
+							<summary style="font-size:13px; font-weight:600; cursor:pointer; color:var(--vmsb-muted);">⚙️ Direct OAuth: Custom Google Cloud Project (Direct Connect)</summary>
 							<div style="margin-top:16px;">
 								<p class="vmsb-note" style="margin-bottom:12px;">If you prefer using your own Google Cloud Console client credentials rather than 1-Click Connect, enter them below:</p>
 								<div class="vmsb-form-grid">

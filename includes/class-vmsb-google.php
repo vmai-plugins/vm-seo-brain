@@ -45,6 +45,17 @@ class VMSB_Google {
 	/**
 	 * Instant 1-Click Connect URL via Connect Hub broker.
 	 */
+	public static function broker_url() {
+		if ( defined( 'VMSB_BROKER_URL' ) && VMSB_BROKER_URL ) {
+			return rtrim( VMSB_BROKER_URL, '/' );
+		}
+		$custom = VMSB_Settings::get( 'google_broker_url' );
+		if ( ! empty( $custom ) ) {
+			return rtrim( $custom, '/' );
+		}
+		return self::BROKER_URL;
+	}
+
 	public function one_click_connect_url() {
 		$state = hash( 'sha256', random_bytes( 32 ) . time() );
 		set_transient( 'vmsb_google_oauth_state', $state, self::OAUTH_STATE_TTL );
@@ -56,7 +67,7 @@ class VMSB_Google {
 			'state'        => $state,
 		);
 
-		return self::BROKER_URL . '/oauth/google/start?' . http_build_query( $params );
+		return self::broker_url() . '/oauth/google/start?' . http_build_query( $params );
 	}
 
 	/**
@@ -218,7 +229,7 @@ class VMSB_Google {
 		} else {
 			// Broker mode
 			$res = wp_remote_post(
-				self::BROKER_URL . '/oauth/google/refresh',
+				self::broker_url() . '/oauth/google/refresh',
 				array(
 					'timeout' => 30,
 					'headers' => array( 'Content-Type' => 'application/json' ),

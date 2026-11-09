@@ -279,18 +279,27 @@ class VMSB_Settings {
 	}
 
 	public static function get( $key, $fallback = null ) {
+		static $resolving = array();
+
 		$all = self::all();
 		$val = array_key_exists( $key, $all ) ? $all[ $key ] : $fallback;
 
-		// Cross-Plugin Credential Sync: If missing here, check VM Social AI
-		if ( ( empty( $val ) || '' === $val ) && class_exists( 'VMSAI_Settings' ) ) {
-			$vmsai_val = VMSAI_Settings::credential( $key );
-			if ( ! empty( $vmsai_val ) ) {
-				return $vmsai_val;
-			}
-			$vmsai_setting = VMSAI_Settings::get( $key );
-			if ( ! empty( $vmsai_setting ) ) {
-				return $vmsai_setting;
+		// Cross-Plugin Credential Sync: If missing here, check VM Social AI (with recursion guard)
+		if ( empty( $resolving[ $key ] ) && ( empty( $val ) || '' === $val ) && class_exists( 'VMSAI_Settings' ) ) {
+			$resolving[ $key ] = true;
+			try {
+				$vmsai_val = VMSAI_Settings::credential( $key );
+				if ( ! empty( $vmsai_val ) ) {
+					unset( $resolving[ $key ] );
+					return $vmsai_val;
+				}
+				$vmsai_setting = VMSAI_Settings::get( $key );
+				if ( ! empty( $vmsai_setting ) ) {
+					unset( $resolving[ $key ] );
+					return $vmsai_setting;
+				}
+			} finally {
+				unset( $resolving[ $key ] );
 			}
 		}
 

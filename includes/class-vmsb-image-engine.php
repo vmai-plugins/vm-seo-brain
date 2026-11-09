@@ -192,7 +192,7 @@ class VMSB_Image_Engine {
 				'seed'     => wp_rand( 1, 999999 ),
 			)
 		);
-		return $this->fetch_bytes( $url, 120 );
+		return $this->fetch_bytes( $url, 35 );
 	}
 
 	private function from_google( $prompt, $subject, $meta ) {

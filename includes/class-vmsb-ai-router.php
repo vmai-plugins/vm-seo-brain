@@ -911,8 +911,8 @@ class VMSB_AI_Router {
 					}
 
 					// Extended timeout for deep long-form generation (prevent cURL 28 timeout)
-					$t_filter = function($t) { return 240; };
-					$a_filter = function($args, $url) { $args['timeout'] = 240; return $args; };
+					$t_filter = function($t) { return 75; };
+					$a_filter = function($args, $url) { $args['timeout'] = 75; return $args; };
 					add_filter('http_request_timeout', $t_filter);
 					add_filter('http_request_args', $a_filter, 10, 2);
 

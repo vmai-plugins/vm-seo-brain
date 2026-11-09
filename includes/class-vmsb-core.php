@@ -128,7 +128,7 @@ final class VMSB_Core {
 
 		if ( class_exists( 'VMSB_Task_Runner' ) && VMSB_Task_Runner::pending_count() > 0 ) {
 			set_transient( 'vmsb_heartbeat_tick', time(), 3600 );
-			VMSB_Task_Runner::process( 1 ); // Just one task per heartbeat to keep it snappy
+			if ( ! wp_next_scheduled( 'vmsb_cron_hourly' ) ) { wp_schedule_single_event( time(), 'vmsb_cron_hourly' ); }
 		}
 	}
 

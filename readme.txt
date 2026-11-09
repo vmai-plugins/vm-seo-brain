@@ -3,7 +3,7 @@ Contributors: vmstudiocreatives
 Tags: seo, rank math, search console, analytics, ai, automation
 Requires at least: 6.2
 Requires PHP: 8.0
-Stable tag: 1.7.1
+Stable tag: 1.7.2
 License: GPLv2 or later
 
 An autonomous SEO layer for WordPress: it reads the business, researches keywords,
@@ -61,6 +61,14 @@ content in the priority order.
 * At least one working AI provider in the chain
 
 == Changelog ==
+
+= 1.7.2 =
+* Fixed mutual infinite recursion loop between VM SEO Brain and VM Social AI credential resolution during wp-admin update checks.
+* Added static in-flight recursion guard with try-finally protection to VMSB_Settings::get().
+* Decoupled admin_init heartbeat task execution into non-blocking async cron dispatch.
+* Tuned AI Router and Image Engine provider timeouts to prevent Cloudflare 524 gateway timeouts.
+* Guarded AI Link Genius broken links table query against missing database table errors.
+* Added configurable Google broker endpoint and default direct OAuth visibility in settings.
 
 = 1.7.1 =
 * Fixed PHP 8 TypeError crash in VMSB_Content when internal link hints contain structured arrays.
