@@ -24,9 +24,8 @@ class VMSB_GitHub_Updater {
 	 * Boot the updater hooks.
 	 */
 	public static function init() {
-		// WordPress update hooks
+		// WordPress update hooks (pre_set only, avoids redundant remote checks on transient read)
 		add_filter( 'pre_set_site_transient_update_plugins', array( __CLASS__, 'filter_update_plugins_transient' ) );
-		add_filter( 'site_transient_update_plugins', array( __CLASS__, 'filter_update_plugins_transient' ) );
 		add_filter( 'plugins_api', array( __CLASS__, 'filter_plugins_api' ), 20, 3 );
 		add_filter( 'upgrader_source_selection', array( __CLASS__, 'filter_upgrader_source_selection' ), 10, 4 );
 		add_action( 'upgrader_process_complete', array( __CLASS__, 'on_upgrader_process_complete' ), 10, 2 );

@@ -147,12 +147,14 @@ class VMSB_RankMath {
 			$table = "{$p}rank_math_analytics_keywords";
 			$col   = 'query';
 
-			if ( $wpdb->get_var("SHOW TABLES LIKE '$table'") !== $table ) {
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) !== $table ) {
 				$table = "{$p}rank_math_analytics_gsc";
 			}
 		}
 
-		if ( $wpdb->get_var("SHOW TABLES LIKE '$table'") !== $table ) return array();
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) !== $table ) {
+			return array();
+		}
 
 		$results = $wpdb->get_results( $wpdb->prepare(
 			"SELECT * FROM $table ORDER BY impressions DESC LIMIT %d",

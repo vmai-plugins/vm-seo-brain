@@ -3,7 +3,7 @@ Contributors: vmstudiocreatives
 Tags: seo, rank math, search console, analytics, ai, automation
 Requires at least: 6.2
 Requires PHP: 8.0
-Stable tag: 1.7.3
+Stable tag: 1.7.4
 License: GPLv2 or later
 
 An autonomous SEO layer for WordPress: it reads the business, researches keywords,
@@ -61,6 +61,15 @@ content in the priority order.
 * At least one working AI provider in the chain
 
 == Changelog ==
+
+= 1.7.4 =
+* Added Google Indexing API authorization scope (https://www.googleapis.com/auth/indexing) to OAuth consent permissions.
+* Fixed error concealment in Google OAuth token refresh by surfacing upstream error_description messages.
+* Added fallback support for VMSAI_OAUTH_BROKER_URL to unify broker endpoints with VM Social AI.
+* Removed duplicate site_transient_update_plugins filter registration in GitHub Updater to eliminate redundant remote network calls on admin page loads.
+* Tuned AI Router and Image Engine provider timeouts (35s web / 60s cron) to prevent Cloudflare 524 gateway timeouts.
+* Registered google_broker_url default setting and added strict type checks in Content Decay monitor.
+* Prepared RankMath analytics table discovery with escaped SQL queries.
 
 = 1.7.3 =
 * Fixed Google Sheet duplication risk by validating API response in VMSB_Content::push_to_sheet() before appending rows.

@@ -1134,7 +1134,12 @@ class VMSB_AI_Router {
 		return $messages;
 	}
 
-	private function post( $url, $body, $headers = array(), $timeout = 90 ) {
+	private function post( $url, $body, $headers = array(), $timeout = 0 ) {
+		if ( $timeout <= 0 ) {
+			// Fast fail on interactive web requests (35s) to stay far under Cloudflare's 100s ceiling.
+			// Cron and CLI processes get 60s.
+			$timeout = ( wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) || 'cli' === PHP_SAPI ) ? 60 : 35;
+		}
 		$args = array(
 			'timeout'    => $timeout,
 			'user-agent' => 'VM-SEO-Brain/' . VMSB_VERSION . '; ' . home_url(),

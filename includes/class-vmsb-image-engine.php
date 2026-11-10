@@ -378,7 +378,7 @@ class VMSB_Image_Engine {
 
 			// Remote or Local Loopback fallback
 			$res = wp_remote_post( $url, array(
-				'timeout' => 120,
+				'timeout' => ( ( defined( 'WP_CLI' ) && WP_CLI ) || wp_doing_cron() ) ? 60 : 40,
 				'headers' => array(
 					'Content-Type'  => 'application/json',
 					'Authorization' => 'Bearer ' . $key,
@@ -425,7 +425,7 @@ class VMSB_Image_Engine {
 		);
 
 		$res = wp_remote_post( $url . '/v1/images/generations', array(
-			'timeout' => 120,
+			'timeout' => ( ( defined( 'WP_CLI' ) && WP_CLI ) || wp_doing_cron() ) ? 60 : 40,
 			'headers' => array(
 				'Content-Type'  => 'application/json',
 				'Authorization' => 'Bearer ' . $key,

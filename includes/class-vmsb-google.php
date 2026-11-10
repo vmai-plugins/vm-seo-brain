@@ -14,7 +14,7 @@ class VMSB_Google {
 	// enabled it for OAuth clients, the consent screen can refuse the whole
 	// authorization outright (invalid_scope) - which is exactly the "stuck at
 	// Not connected" state this panel is meant to explain.
-	const SCOPES = 'https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
+	const SCOPES = 'https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/indexing';
 
 	/** Connect Hub Broker endpoint for zero-config 1-Click OAuth. */
 	const BROKER_URL = 'https://connect.vmstudio.digital';
@@ -48,6 +48,9 @@ class VMSB_Google {
 	public static function broker_url() {
 		if ( defined( 'VMSB_BROKER_URL' ) && VMSB_BROKER_URL ) {
 			return rtrim( VMSB_BROKER_URL, '/' );
+		}
+		if ( defined( 'VMSAI_OAUTH_BROKER_URL' ) && VMSAI_OAUTH_BROKER_URL ) {
+			return rtrim( VMSAI_OAUTH_BROKER_URL, '/' );
 		}
 		$custom = VMSB_Settings::get( 'google_broker_url' );
 		if ( ! empty( $custom ) ) {
@@ -262,7 +265,8 @@ class VMSB_Google {
 		}
 		$data = json_decode( wp_remote_retrieve_body( $res ), true );
 		if ( empty( $data['access_token'] ) ) {
-			return new WP_Error( 'vmsb_oauth', 'Token refresh failed. Reconnect Google in Settings.' );
+			$err_msg = ! empty( $data['error_description'] ) ? $data['error_description'] : ( ! empty( $data['error'] ) ? $data['error'] : 'Token refresh failed. Reconnect Google in Settings.' );
+			return new WP_Error( 'vmsb_oauth', $err_msg );
 		}
 		$ttl = isset( $data['expires_in'] ) ? max( 60, (int) $data['expires_in'] - 60 ) : 3540;
 		set_transient( 'vmsb_google_access', $data['access_token'], $ttl );

@@ -46,7 +46,9 @@ class VMSB_Decay {
 			}
 
 			$url = $row['keys'][0];
-			if ( in_array($url, $processed_urls) ) continue;
+			if ( in_array( $url, $processed_urls, true ) ) {
+				continue;
+			}
 			$processed_urls[] = $url;
 
 			$post_id = url_to_postid( $url );

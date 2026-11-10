@@ -111,6 +111,7 @@ class VMSB_Settings {
 			'google_account_name'    => '',
 			'google_account_picture' => '',
 			'google_connect_mode'    => 'broker',
+			'google_broker_url'      => 'https://connect.vmstudio.digital',
 			'gsc_property'         => '',
 			'ga4_property_id'      => '',
 			'sheet_id'             => '',
