@@ -324,7 +324,7 @@ class VMSB_Silo {
 			"SELECT p.ID FROM {$wpdb->posts} p
 			 LEFT JOIN {$wpdb->postmeta} m ON p.ID = m.post_id AND m.meta_key = '_vmsb_last_mesh'
 			 WHERE p.post_status = 'publish' AND p.post_type IN ({$types_sql})
-			 ORDER BY m.meta_value ASC, p.post_date DESC LIMIT %d",
+			 ORDER BY (m.meta_value IS NOT NULL), CAST(m.meta_value AS UNSIGNED) ASC, p.post_date DESC LIMIT %d",
 			(int) $limit
 		) );
 

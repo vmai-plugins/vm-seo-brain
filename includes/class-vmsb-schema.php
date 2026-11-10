@@ -109,13 +109,13 @@ class VMSB_Schema {
 			return array( 'skipped' => 'no peers in this category yet' );
 		}
 
-		$mentions = array_map( static fn( $p ) => array( '@type' => 'Thing', 'name' => $p->post_title, 'url' => get_permalink( $p ) ), $peers );
+		$mentions = array_map( static fn( $p ) => array( '@type' => 'Thing', 'name' => wp_strip_all_tags( $p->post_title ), 'url' => get_permalink( $p ) ), $peers );
 
 		$schema = array(
 			'@context'   => 'https://schema.org',
 			'@type'      => 'WebPage',
 			'@id'        => get_permalink( $post_id ) . '#webpage',
-			'mainEntity' => array( '@type' => 'Article', 'headline' => $post->post_title, 'mentions' => $mentions ),
+			'mainEntity' => array( '@type' => 'Article', 'headline' => wp_strip_all_tags( $post->post_title ), 'mentions' => $mentions ),
 		);
 		update_post_meta( $post_id, '_vmsb_graph_schema', $schema );
 		return array( 'linked_peers' => count( $peers ) );
@@ -160,7 +160,7 @@ class VMSB_Schema {
 			}
 			$schema = get_post_meta( $post_id, $key, true );
 			if ( $schema ) {
-				echo '<script type="application/ld+json">' . wp_json_encode( $schema ) . '</script>' . "\n";
+				echo '<script type="application/ld+json">' . wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP ) . '</script>' . "\n";
 			}
 		}
 	}

@@ -87,7 +87,8 @@ class VMSB_Actions {
 			case 'internal_link':
 			case 'tactical_injection':
 			case 'consolidate_content':
-				$ok = wp_update_post( array( 'ID' => $row->object_id, 'post_content' => $before ) );
+				$content_to_restore = is_string( $before ) ? $before : ( is_scalar( $before ) ? (string) $before : (string) $row->before_value );
+				$ok = wp_update_post( array( 'ID' => $row->object_id, 'post_content' => $content_to_restore ) );
 				// The link index is derived from content, so undoing a content
 				// change has to undo the edges that change created.
 				if ( $ok && class_exists( 'VMSB_Link_Index' ) ) {

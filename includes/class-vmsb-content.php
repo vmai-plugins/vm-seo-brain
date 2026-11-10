@@ -965,8 +965,14 @@ class VMSB_Content {
 			if ( ! $term ) {
 				$term = wp_insert_term( $data['suggested_category'], 'category' );
 			}
-			if ( ! is_wp_error( $term ) ) {
-				wp_set_post_categories( $post_id, array( (int) ( is_array( $term ) ? $term['term_id'] : $term ) ) );
+			$cat_id = 0;
+			if ( is_wp_error( $term ) && 'term_exists' === $term->get_error_code() ) {
+				$cat_id = (int) $term->get_error_data();
+			} elseif ( ! is_wp_error( $term ) ) {
+				$cat_id = (int) ( is_array( $term ) ? ( $term['term_id'] ?? 0 ) : $term );
+			}
+			if ( $cat_id > 0 ) {
+				wp_set_post_categories( $post_id, array( $cat_id ) );
 			}
 		}
 		if ( ! empty( $data['suggested_tags'] ) ) {
@@ -1040,8 +1046,10 @@ class VMSB_Content {
 					. ( ! empty($sge['table_html']) ? $sge['table_html'] : '' )
 					. "</div>\n<!-- /wp:group -->\n\n";
 
-				// Inject after the Key Takeaways or first paragraph
-				$html = preg_replace( '/(<p[^>]*>.*?<\/p>)/is', '$1' . $sge_block, $html, 1 );
+				// Inject after the Key Takeaways or first paragraph using callback to prevent PCRE $1 backreference issues
+				$html = preg_replace_callback( '/(<p[^>]*>.*?<\/p>)/is', static function( $m ) use ( $sge_block ) {
+					return $m[1] . $sge_block;
+				}, $html, 1 );
 				wp_update_post( array( 'ID' => $post_id, 'post_content' => $html ) );
 			}
 		}
@@ -1051,7 +1059,11 @@ class VMSB_Content {
 		// one write with no model call in between.
 		$silo = new VMSB_Silo();
 		foreach ( $link_context as $target ) {
-			$target_id = url_to_postid( $target['url'] );
+			$target_url = is_array( $target ) ? ( $target['url'] ?? '' ) : (string) $target;
+			if ( empty( $target_url ) ) {
+				continue;
+			}
+			$target_id = url_to_postid( $target_url );
 			if ( $target_id ) {
 				$silo->insert_internal_link( $target_id, $post_id, '', array( 'reason' => 'Planned internal link on publish' ) );
 			}

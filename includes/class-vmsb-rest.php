@@ -1470,22 +1470,23 @@ class VMSB_REST {
 		$q = sanitize_text_field( $request->get_param( 'q' ) );
 		if ( strlen($q) < 3 ) return array();
 
+		$like = '%' . $wpdb->esc_like( $q ) . '%';
 		$results = array();
 
 		// 1. Keywords
-		$kws = $wpdb->get_results( $wpdb->prepare( "SELECT keyword, position FROM {$wpdb->prefix}vmsb_keywords WHERE keyword LIKE %s LIMIT 5", '%' . $q . '%' ) );
+		$kws = $wpdb->get_results( $wpdb->prepare( "SELECT keyword, position FROM {$wpdb->prefix}vmsb_keywords WHERE keyword LIKE %s LIMIT 5", $like ) );
 		foreach ( $kws as $k ) $results[] = array( 'type' => 'Keyword', 'label' => $k->keyword, 'note' => "Pos #{$k->position}", 'url' => admin_url('admin.php?page=vmsb-seo&tab=keywords') );
 
 		// 2. Posts
-		$posts = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_title FROM {$wpdb->posts} WHERE post_title LIKE %s AND post_status = 'publish' LIMIT 5", '%' . $q . '%' ) );
+		$posts = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_title FROM {$wpdb->posts} WHERE post_title LIKE %s AND post_status = 'publish' LIMIT 5", $like ) );
 		foreach ( $posts as $p ) $results[] = array( 'type' => 'Page', 'label' => $p->post_title, 'note' => 'Published', 'url' => get_edit_post_link($p->ID) );
 
 		// 3. Tasks
-		$tasks = $wpdb->get_results( $wpdb->prepare( "SELECT id, task_type, reason FROM {$wpdb->prefix}vmsb_tasks WHERE reason LIKE %s LIMIT 3", '%' . $q . '%' ) );
+		$tasks = $wpdb->get_results( $wpdb->prepare( "SELECT id, task_type, reason FROM {$wpdb->prefix}vmsb_tasks WHERE reason LIKE %s LIMIT 3", $like ) );
 		foreach ( $tasks as $t ) $results[] = array( 'type' => 'Task', 'label' => VMSB_Strategist::agent_label($t->task_type), 'note' => $t->reason, 'url' => admin_url('admin.php?page=vmsb-production') );
 
 		// 4. Competitors
-		$comps = $wpdb->get_results( $wpdb->prepare( "SELECT domain, label FROM {$wpdb->prefix}vmsb_competitors WHERE domain LIKE %s OR label LIKE %s LIMIT 3", '%' . $q . '%', '%' . $q . '%' ) );
+		$comps = $wpdb->get_results( $wpdb->prepare( "SELECT domain, label FROM {$wpdb->prefix}vmsb_competitors WHERE domain LIKE %s OR label LIKE %s LIMIT 3", $like, $like ) );
 		foreach ( $comps as $c ) $results[] = array( 'type' => 'Competitor', 'label' => $c->label ?: $c->domain, 'note' => $c->domain, 'url' => admin_url('admin.php?page=vmsb-seo&tab=competitors') );
 
 		return rest_ensure_response( $results );

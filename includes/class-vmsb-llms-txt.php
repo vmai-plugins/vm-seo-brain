@@ -160,7 +160,7 @@ class VMSB_LLMS_Txt {
 
 		foreach ( $posts as $p ) {
 			$output .= "---\n\n";
-			$output .= "## " . esc_html( $p->post_title ) . "\n\n";
+			$output .= "## " . wp_strip_all_tags( $p->post_title ) . "\n\n";
 			$output .= "URL: " . get_permalink( $p->ID ) . "\n\n";
 			$clean_content = wp_strip_all_tags( strip_shortcodes( $p->post_content ) );
 			$clean_content = preg_replace( "/\n{3,}/", "\n\n", trim( $clean_content ) );

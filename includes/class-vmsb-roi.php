@@ -225,7 +225,7 @@ class VMSB_ROI {
 		}
 
 		$pages_with_cta = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_vmsb_cta_inserted'" );
-		$total_posts    = (int) wp_count_posts( 'post' )->publish;
+		$total_posts    = (int) ( wp_count_posts( 'post' )->publish ?? 0 );
 		$cta_coverage   = $total_posts > 0 ? round( $pages_with_cta / $total_posts * 100 ) : 0;
 
 		$brain  = new VMSB_Brain();

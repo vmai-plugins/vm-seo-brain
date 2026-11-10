@@ -3,7 +3,7 @@ Contributors: vmstudiocreatives
 Tags: seo, rank math, search console, analytics, ai, automation
 Requires at least: 6.2
 Requires PHP: 8.0
-Stable tag: 1.7.4
+Stable tag: 1.7.5
 License: GPLv2 or later
 
 An autonomous SEO layer for WordPress: it reads the business, researches keywords,
@@ -61,6 +61,18 @@ content in the priority order.
 * At least one working AI provider in the chain
 
 == Changelog ==
+
+= 1.7.5 =
+* Fixed PCRE dollar sign / price replacement corruption in SGE block injection by using preg_replace_callback.
+* Fixed category assignment collision by retrieving existing term ID on term_exists errors.
+* Added JSON_HEX_TAG and JSON_HEX_AMP flags to JSON-LD schema output to prevent script tag injection.
+* Fixed chronological sorting in Semantic Mesh post query by casting epoch timestamps to UNSIGNED and ordering un-meshed posts first.
+* Escaped SQL LIKE patterns in Global Search using esc_like.
+* Replaced HTML entity escaping with plaintext stripping in llms-full.txt markdown feed.
+* Reduced synchronous video generation timeout in VMSB_Video_Agent to prevent gateway timeouts.
+* Fixed newline literal escaping and case-insensitive DB keyword mapping in AI keyword clustering.
+* Prevented string type errors during Action Log rollbacks of post content.
+* Added null-safe property access in ROI engine post count calculation.
 
 = 1.7.4 =
 * Added Google Indexing API authorization scope (https://www.googleapis.com/auth/indexing) to OAuth consent permissions.

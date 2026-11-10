@@ -44,7 +44,7 @@ class VMSB_Video_Agent {
 		if ( $omni_base && $omni_key ) {
 			$this->log->info( 'video', "Pushing video generation to OmniRoute for post #{$post_id}." );
 			$omni_res = wp_remote_post( $omni_base . '/v1/videos/generations', array(
-				'timeout' => 300,
+				'timeout' => ( ( defined( 'WP_CLI' ) && WP_CLI ) || 'cli' === PHP_SAPI ) ? 120 : 45,
 				'headers' => array( 'Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $omni_key ),
 				'body'    => wp_json_encode( array(
 					'prompt' => $data['shorts_script'],

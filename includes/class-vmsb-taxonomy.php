@@ -293,8 +293,11 @@ class VMSB_Taxonomy {
 
 		$brain = new VMSB_Brain();
 		$map   = (array) $brain->recall( 'redirects', 'map', array() );
-		$map[ untrailingslashit( wp_parse_url( $from, PHP_URL_PATH ) ) ] = $to;
-		$brain->remember( 'redirects', 'map', $map, 1.0, 'taxonomy' );
+		$path  = (string) wp_parse_url( $from, PHP_URL_PATH );
+		if ( '' !== $path ) {
+			$map[ untrailingslashit( $path ) ] = $to;
+			$brain->remember( 'redirects', 'map', $map, 1.0, 'taxonomy' );
+		}
 		return true;
 	}
 

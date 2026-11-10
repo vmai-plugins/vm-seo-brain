@@ -501,28 +501,30 @@ if ( ! $this->google->is_connected() ) {
 			. "Reproduce each query in \"keywords\" EXACTLY character-for-character as given below - do not paraphrase, reorder words, fix spelling/grammar, or change capitalization. "
 			. "A query that doesn't match what was given verbatim cannot be matched back to its record.\n\n"
 			. "Queries:\n- " . implode( "\n- ", $unclustered )
-			. '\n\nReturn JSON: {"clusters":[{"name":"","intent":"","keywords":[]}]}',
+			. "\n\nReturn JSON: {\"clusters\":[{\"name\":\"\",\"intent\":\"\",\"keywords\":[]}]}",
 			array( 'system' => $this->brain->context_prompt(), 'max_tokens' => 3000, 'temperature' => 0.3 )
 		);
 
-		// Match against the exact set sent to the model, not the whole table -
-		// anything the model returns that isn't in this set didn't survive the
-		// round trip verbatim and can't be safely applied to a specific row.
-		$sendable = array_flip( array_map( 'mb_strtolower', $unclustered ) );
+		// Match against the exact set sent to the model, mapping lowercase back to the exact DB casing
+		$orig_map = array();
+		foreach ( $unclustered as $u_kw ) {
+			$orig_map[ mb_strtolower( trim( $u_kw ) ) ] = $u_kw;
+		}
 
 		$n         = 0;
 		$unmatched = array();
 		foreach ( ( isset( $data['clusters'] ) ? $data['clusters'] : array() ) as $cluster ) {
 			foreach ( ( isset( $cluster['keywords'] ) ? $cluster['keywords'] : array() ) as $kw ) {
 				$norm = mb_strtolower( trim( $kw ) );
-				if ( ! isset( $sendable[ $norm ] ) ) {
+				if ( ! isset( $orig_map[ $norm ] ) ) {
 					$unmatched[] = $kw;
 					continue;
 				}
-				$updated = $wpdb->update(
+				$exact_kw = $orig_map[ $norm ];
+				$updated  = $wpdb->update(
 					$this->table(),
 					array( 'cluster' => $cluster['name'], 'intent' => isset( $cluster['intent'] ) ? $cluster['intent'] : null ),
-					array( 'keyword' => $norm )
+					array( 'keyword' => $exact_kw )
 				);
 				// Only count what actually landed - not everything the model
 				// echoed back - so the caller isn't told more got clustered
@@ -709,8 +711,8 @@ if ( ! $this->google->is_connected() ) {
 
 		$mapped = 0;
 		foreach ( $keywords as $kw ) {
-			// 1. Exact Match by Title
-			$post_id = $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM $wpdb->posts WHERE post_title = %s AND post_status = 'publish' LIMIT 1", $kw->keyword ) );
+			// 1. Exact Match by Title (Posts & Pages only)
+			$post_id = $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM $wpdb->posts WHERE post_title = %s AND post_status = 'publish' AND post_type IN ('post', 'page') LIMIT 1", $kw->keyword ) );
 
 			// 2. Exact Match by Rank Math Focus Keyword
 			if ( ! $post_id && class_exists( 'VMSB_RankMath' ) ) {
