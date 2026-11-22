@@ -576,9 +576,16 @@ class VMSB_Content {
 			   AND updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)"
 		);
 
+		// Also self-heal rows stuck in 'writing' past 30 mins that had dead post_ids
+		$wpdb->query(
+			"UPDATE {$this->table()} SET status = 'approved', post_id = NULL, updated_at = UTC_TIMESTAMP()
+			 WHERE status = 'writing' AND post_id > 0
+			   AND updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)"
+		);
+
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$this->table()} WHERE status = 'approved' AND (scheduled_for IS NULL OR scheduled_for <= UTC_TIMESTAMP()) ORDER BY priority DESC, scheduled_for ASC LIMIT %d",
+				"SELECT * FROM {$this->table()} WHERE status = 'approved' AND (post_id IS NULL OR post_id = 0) AND (scheduled_for IS NULL OR scheduled_for <= UTC_TIMESTAMP()) ORDER BY priority DESC, scheduled_for ASC LIMIT %d",
 				(int) $limit
 			)
 		);
@@ -635,14 +642,20 @@ class VMSB_Content {
 			}
 		}
 
-		// A previous attempt already created a post for this row (the link
-		// below is written immediately after wp_insert_post(), not at the end
-		// of this method) and was interrupted before finishing - a fatal error
-		// mid-pipeline, or a manual reset back to 'approved' after that.
-		// Creating a second post here would orphan the first as an untracked
-		// duplicate; surface it instead.
+		// If a previous attempt recorded a post_id for this row, verify whether
+		// the post actually exists before either reclaiming or regenerating it.
 		if ( ! empty( $item->post_id ) ) {
-			return new WP_Error( 'vmsb_content_duplicate', "Plan row #{$item->id} already has post #{$item->post_id} from a previous attempt. Resolve or clear it manually before retrying." );
+			$existing_post = get_post( (int) $item->post_id );
+			if ( $existing_post && 'trash' !== $existing_post->post_status ) {
+				// The post actually exists on the site! Mark row published/drafted so it stops clogging the queue.
+				$proper_status = ( 'publish' === $existing_post->post_status ) ? 'published' : 'drafted';
+				$wpdb->update( $this->table(), array( 'status' => $proper_status, 'updated_at' => current_time( 'mysql', true ) ), array( 'id' => $item->id ) );
+				return array( 'post_id' => $existing_post->ID, 'already_existed' => true, 'status' => $proper_status );
+			} else {
+				// The post was deleted, trashed, or never completed. Clear the dead post_id reference and proceed fresh.
+				$wpdb->update( $this->table(), array( 'post_id' => null, 'updated_at' => current_time( 'mysql', true ) ), array( 'id' => $item->id ) );
+				$item->post_id = null;
+			}
 		}
 
 		$raw_sec = (string) ( $item->secondary_keywords ?? '' );

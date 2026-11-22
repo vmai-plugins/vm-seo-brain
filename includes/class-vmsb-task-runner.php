@@ -310,13 +310,17 @@ class VMSB_Task_Runner {
 				$payload = json_decode( (string) $row->payload, true ) ?: array();
 				$plan_id = (int) ( $payload['id'] ?? 0 );
 				if ( $plan_id ) {
+					$update_fields = array(
+						'status'     => $give_up ? 'failed' : 'approved',
+						'last_error' => $give_up ? 'Abandoned after repeated stalling.' : 'Reclaimed from stalled writing lock.',
+						'updated_at' => current_time( 'mysql', true ),
+					);
+					if ( ! $give_up ) {
+						$update_fields['post_id'] = null;
+					}
 					$wpdb->update(
 						$wpdb->prefix . 'vmsb_plan',
-						array(
-							'status'     => $give_up ? 'failed' : 'approved',
-							'last_error' => $give_up ? 'Abandoned after repeated stalling.' : 'Reclaimed from stalled writing lock.',
-							'updated_at' => current_time( 'mysql', true ),
-						),
+						$update_fields,
 						array( 'id' => $plan_id, 'status' => 'writing' )
 					);
 				}

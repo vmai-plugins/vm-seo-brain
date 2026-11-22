@@ -53,8 +53,11 @@ class VMSB_Quality_Gate {
 			'score'  => $words >= $min ? 100 : (int) max( 0, $words / max( 1, $min ) * 100 ),
 			'detail' => "{$words} words (min {$min}).",
 		);
-		if ( $words < $min * 0.6 ) {
-			$blocking[] = 'Far below minimum length - would publish as thin content.';
+		$thin_content = false;
+		if ( $words < 200 ) {
+			$blocking[] = 'Critically short or empty content - cannot publish.';
+		} elseif ( $words < $min * 0.6 ) {
+			$thin_content = true;
 		}
 
 		// 2. Near-duplicate against the site's own content (vector-first).
@@ -155,6 +158,9 @@ class VMSB_Quality_Gate {
 		}
 		if ( $alignment['originality_score'] > 0 && $alignment['originality_score'] < (int) VMSB_Settings::get( 'quality_min_originality' ) ) {
 			return self::verdict( self::REVIEW, $score, $checks, array(), 'Stylistic generic patterns found. Held as draft for review.' );
+		}
+		if ( $thin_content ) {
+			return self::verdict( self::REVIEW, $score, $checks, array(), "Below target length ({$words} words, target {$min}). Held as draft for editorial review." );
 		}
 		return self::verdict( self::PASS, $score, $checks, array(), "Passed at {$score}." );
 	}
