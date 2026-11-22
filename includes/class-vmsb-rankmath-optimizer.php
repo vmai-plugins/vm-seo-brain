@@ -498,7 +498,7 @@ class VMSB_RankMath_Optimizer {
 	/**
 	 * Ensure title contains a power word and year/number for high Rank Math CTR scoring.
 	 */
-	private function boost_title_elements( $post_id, $keyword ) {
+	public function boost_title_elements( $post_id, $keyword ) {
 		$title = (string) get_post_meta( $post_id, 'rank_math_title', true );
 		if ( '' === $title ) {
 			$title = get_the_title( $post_id );
