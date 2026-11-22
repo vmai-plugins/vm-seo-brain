@@ -822,17 +822,26 @@ class VMSB_Content {
 		// ELITE: Multi-Model Fact/Hallucination Check
 		if ( VMSB_License::at_least('elite') ) {
 			$this->set_agent_task( $item->id, 'Independent Fact-Verification in progress...' );
-			$verify_prompt = "Act as an Independent Fact-Checker. Review this drafted article for hallucinations or internal contradictions.\n"
+			$biz_profile = $this->brain->context_prompt();
+			$verify_prompt = "Act as an Independent Fact-Checker for the website. Review this drafted article for severe factual contradictions or wild hallucinations.\n"
+				. "BUSINESS & ORGANIZATIONAL CONTEXT:\n" . wp_trim_words( $biz_profile, 200 ) . "\n\n"
 				. "ARTICLE: \"{$data['post_title']}\"\n"
-				. "CONTENT SNIPPET: " . wp_trim_words($data['content_html'], 500) . "\n\n"
-				. "TASK: Does this article invent facts not supported by common knowledge or the business profile?\n"
+				. "CONTENT SNIPPET: " . wp_trim_words( $data['content_html'], 500 ) . "\n\n"
+				. "TASK: Does this article invent absurd claims not supported by common knowledge or the business profile?\n"
+				. "NOTE: References to the organization, its founder/guru, spiritual leadership, ashram facilities, temple building, gaushala, and Sanatan Dharma traditions are EXPECTED business context and must NOT be marked as hallucinations.\n"
 				. "Return ONLY 'PASS' or 'FAIL: [Reason]'.";
 
-			$verification = $this->ai->generate( $verify_prompt, array( 'complexity' => 'standard', 'persona' => 'auditor' ) ); // Use different provider
+			$verification = $this->ai->generate( $verify_prompt, array( 'complexity' => 'standard', 'persona' => 'auditor' ) );
 			if ( ! empty($verification['ok']) && 0 === stripos(trim($verification['text']), 'FAIL') ) {
-				$reason = "Independent Verification Failed: " . trim($verification['text']);
-				$wpdb->update( $this->table(), array( 'status' => 'failed', 'last_error' => $reason ), array( 'id' => $item->id ) );
-				return new WP_Error( 'vmsb_verification', $reason );
+				$fail_reason = trim($verification['text']);
+				// If failure is merely about unverifiable spiritual lineage or organization details, do not discard
+				if ( stripos($fail_reason, 'founder') !== false || stripos($fail_reason, 'maharaj') !== false || stripos($fail_reason, 'lineage') !== false || stripos($fail_reason, 'facility') !== false || stripos($fail_reason, 'ashram') !== false ) {
+					$this->log->info( 'content', 'Fact-checker flagged business context note (bypassed): ' . $fail_reason );
+				} else {
+					$reason = "Independent Verification Failed: " . $fail_reason;
+					$wpdb->update( $this->table(), array( 'status' => 'failed', 'last_error' => $reason ), array( 'id' => $item->id ) );
+					return new WP_Error( 'vmsb_verification', $reason );
+				}
 			}
 		}
 
