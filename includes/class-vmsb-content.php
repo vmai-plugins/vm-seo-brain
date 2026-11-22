@@ -873,10 +873,10 @@ class VMSB_Content {
 		}
 
 		// A held draft never auto-publishes, whatever the settings say.
-		$held   = ( 'review' === $report['verdict'] ) || ! empty( $fact_check_flag );
+		$held   = ( 'review' === $report['verdict'] );
 		$status = ( $auto && ! $review && ! $held ) ? 'publish' : 'draft';
-		if ( ! empty( $fact_check_flag ) && empty( $cap_note ) ) {
-			$cap_note = 'Fact-check review: ' . wp_trim_words( $fact_check_flag, 15 );
+		if ( ! empty( $fact_check_flag ) ) {
+			$cap_note = 'Fact-check note: ' . wp_trim_words( $fact_check_flag, 15 );
 		}
 
 		// Scenario: High-Quality CPT Support (Destinations, Events, etc.)
