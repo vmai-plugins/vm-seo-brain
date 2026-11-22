@@ -119,8 +119,9 @@ class VMSB_Quality_Gate {
 				? 'Generic patterns found: ' . implode( '; ', $alignment['generic_patterns'] )
 				: 'Reads as distinctive, not generic AI filler.',
 		);
-		if ( $alignment['originality_score'] > 0 && $alignment['originality_score'] < (int) VMSB_Settings::get( 'quality_min_originality' ) ) {
-			$blocking[] = 'Reads as generic AI filler rather than genuine expertise: ' . implode( '; ', $alignment['generic_patterns'] );
+		// Extreme generic filler check: only hard-block if originality is critically low and saturated with patterns
+		if ( $alignment['originality_score'] > 0 && $alignment['originality_score'] < 25 && count( (array) $alignment['generic_patterns'] ) >= 10 ) {
+			$blocking[] = 'Reads as completely generic AI filler without substantive expertise: ' . implode( '; ', array_slice( (array) $alignment['generic_patterns'], 0, 3 ) );
 		}
 
 		// 8. Unicode & Serialization Artifact Sanitization Guard.
@@ -151,6 +152,9 @@ class VMSB_Quality_Gate {
 		}
 		if ( ! empty( $alignment['unverified_claims'] ) ) {
 			return self::verdict( self::REVIEW, $score, $checks, array(), 'Contains claims that need checking before publishing.' );
+		}
+		if ( $alignment['originality_score'] > 0 && $alignment['originality_score'] < (int) VMSB_Settings::get( 'quality_min_originality' ) ) {
+			return self::verdict( self::REVIEW, $score, $checks, array(), 'Stylistic generic patterns found. Held as draft for review.' );
 		}
 		return self::verdict( self::PASS, $score, $checks, array(), "Passed at {$score}." );
 	}
