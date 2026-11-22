@@ -67,10 +67,16 @@ class VMSB_Image_Engine {
 
 		$prompt = $this->build_prompt( $subject, $meta );
 		$chain  = (array) VMSB_Settings::get( 'image_chain' );
+		if ( empty( $chain ) ) {
+			$chain = array( 'pollinations', 'pexels' );
+		}
 
-		// 2026 Optimization: OmniRoute takes priority for Elite/Self-Hosted setups
-		if ( VMSB_Settings::get( 'omniroute_url' ) && ! in_array( 'omniroute', $chain, true ) ) {
+		// OmniRoute image priority if explicitly configured
+		if ( VMSB_Settings::get( 'omniroute_url' ) && ! in_array( 'omniroute', $chain, true ) && (int) VMSB_Settings::get( 'feature_omniroute_images', 0 ) ) {
 			array_unshift( $chain, 'omniroute' );
+		}
+		if ( ! in_array( 'pollinations', $chain, true ) ) {
+			$chain[] = 'pollinations';
 		}
 
 		$errors = array();

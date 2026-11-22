@@ -568,6 +568,14 @@ class VMSB_Content {
 
 	public function due_items( $limit = 5 ) {
 		global $wpdb;
+
+		// Self-healing: release rows stuck in 'writing' past 30 minutes without a live post.
+		$wpdb->query(
+			"UPDATE {$this->table()} SET status = 'approved', updated_at = UTC_TIMESTAMP()
+			 WHERE status = 'writing' AND (post_id IS NULL OR post_id = 0)
+			   AND updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)"
+		);
+
 		return $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT * FROM {$this->table()} WHERE status = 'approved' AND (scheduled_for IS NULL OR scheduled_for <= UTC_TIMESTAMP()) ORDER BY priority DESC, scheduled_for ASC LIMIT %d",
@@ -582,6 +590,13 @@ class VMSB_Content {
 	public function produce( $plan_id, $args = array() ) {
 		if ( ! (int) VMSB_Settings::get( 'feature_production', 1 ) ) {
 			return new WP_Error( 'vmsb_production', 'Automated Content Production is currently disabled in Settings.' );
+		}
+
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 300 );
+		}
+		if ( function_exists( 'ignore_user_abort' ) ) {
+			@ignore_user_abort( true );
 		}
 
 		// Global Drip Cap Check (Best of Autopilot).
@@ -1672,10 +1687,19 @@ class VMSB_Content {
 	public function claim_plan_row( $plan_id ) {
 		global $wpdb;
 
+		$now = current_time( 'mysql', true );
 		$locked = $wpdb->query( $wpdb->prepare(
 			"UPDATE {$this->table()} SET status = 'writing', updated_at = %s WHERE id = %d AND status = 'approved'",
-			current_time( 'mysql', true ), (int) $plan_id
+			$now, (int) $plan_id
 		) );
+
+		// If not locked directly, check if the row was abandoned in 'writing' past 30 minutes or failed
+		if ( ! $locked ) {
+			$locked = $wpdb->query( $wpdb->prepare(
+				"UPDATE {$this->table()} SET status = 'writing', updated_at = %s WHERE id = %d AND (status = 'failed' OR (status = 'writing' AND updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)))",
+				$now, (int) $plan_id
+			) );
+		}
 
 		if ( ! $locked ) {
 			return new WP_Error( 'vmsb_content', 'Task already claimed or not approved.' );
@@ -1871,7 +1895,7 @@ class VMSB_Content {
 				// below; the fix was never carried across to this case.
 				$now          = current_time( 'mysql', true );
 				$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-				$count        = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', scheduled_for = %s, updated_at = %s WHERE id IN ({$placeholders}) AND status IN ('planned', 'suggested')", array_merge( array( $now, $now ), $ids ) ) );
+				$count        = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', scheduled_for = %s, updated_at = %s WHERE id IN ({$placeholders}) AND status IN ('planned', 'suggested', 'rejected', 'writing', 'failed')", array_merge( array( $now, $now ), $ids ) ) );
 				break;
 
 			case 'bulk-delete':
@@ -1881,17 +1905,9 @@ class VMSB_Content {
 
 			case 'bulk-produce':
 				// Mark for immediate production by boosting priority and approving.
-				// The status filter used to omit 'approved' - so selecting rows
-				// that were already approved (the overwhelmingly common case:
-				// most of a real backlog sits in 'approved' waiting its turn,
-				// and "Write Selected Now" exists specifically to jump that
-				// queue) matched zero rows and silently did nothing, with no
-				// error surfaced anywhere. It already sets status = 'approved'
-				// unconditionally below, so re-approving an already-approved
-				// row is a harmless no-op - the whole point was always to let
-				// this work from any pre-production state, not just two of them.
+				// Accepts any pre-production state, including stalled writing or failed tasks.
 				$now = current_time( 'mysql', true );
-				$count = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', priority = 30, scheduled_for = %s WHERE id IN (" . implode( ',', $ids ) . ") AND status IN ('planned', 'approved', 'rejected')", $now ) );
+				$count = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'approved', priority = 30, scheduled_for = %s WHERE id IN (" . implode( ',', $ids ) . ") AND status IN ('planned', 'suggested', 'approved', 'rejected', 'writing', 'failed')", $now ) );
 				break;
 		}
 

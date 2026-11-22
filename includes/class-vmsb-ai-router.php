@@ -353,12 +353,23 @@ class VMSB_AI_Router {
 		}
 
 		if ( 'premium' === $complexity ) {
-			// Deep reasoning models for long-form content
-			if ( VMSB_Settings::get( 'openrouter_key' ) ) {
-				$full_chain = array_merge( array( array( 'openrouter', VMSB_Settings::get( 'openrouter_model' ) ) ), $full_chain );
-			} elseif ( VMSB_Settings::get( 'gemini_key' ) && $gemini_model ) {
-				$full_chain = array_merge( array( array( 'gemini', $gemini_model ) ), $full_chain );
+			// Deep reasoning models for long-form content.
+			// Prioritize working primary provider and avoid locking the chain to a single failing provider.
+			$premium_tiers = array();
+			if ( 'gemini' === $primary && VMSB_Settings::get( 'gemini_key' ) && $gemini_model ) {
+				$premium_tiers[] = array( 'gemini', $gemini_model );
+			} elseif ( 'aipuffer' === $primary && VMSB_Settings::get( 'aipuffer_key' ) ) {
+				$premium_tiers[] = 'aipuffer';
+			} elseif ( VMSB_Settings::get( 'openrouter_key' ) && VMSB_AI_Circuit::is_available( 'openrouter' ) ) {
+				$premium_tiers[] = array( 'openrouter', VMSB_Settings::get( 'openrouter_model' ) );
 			}
+			if ( VMSB_Settings::get( 'gemini_key' ) && $gemini_model ) {
+				$premium_tiers[] = array( 'gemini', $gemini_model );
+			}
+			if ( VMSB_Settings::get( 'openrouter_key' ) ) {
+				$premium_tiers[] = array( 'openrouter', VMSB_Settings::get( 'openrouter_model' ) );
+			}
+			$full_chain = array_merge( $premium_tiers, $full_chain );
 		}
 
 		return array_values( array_unique( array_filter( $full_chain ), SORT_REGULAR ) );

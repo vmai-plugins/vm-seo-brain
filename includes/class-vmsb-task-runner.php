@@ -303,6 +303,25 @@ class VMSB_Task_Runner {
 				),
 				array( 'id' => (int) $row->id, 'status' => 'running' )
 			);
+
+			// Synchronize with content plan: release 'writing' lock on stalled post generation
+			$task_type = $row->task_type ?? '';
+			if ( 'produce_post' === $task_type ) {
+				$payload = json_decode( (string) $row->payload, true ) ?: array();
+				$plan_id = (int) ( $payload['id'] ?? 0 );
+				if ( $plan_id ) {
+					$wpdb->update(
+						$wpdb->prefix . 'vmsb_plan',
+						array(
+							'status'     => $give_up ? 'failed' : 'approved',
+							'last_error' => $give_up ? 'Abandoned after repeated stalling.' : 'Reclaimed from stalled writing lock.',
+							'updated_at' => current_time( 'mysql', true ),
+						),
+						array( 'id' => $plan_id, 'status' => 'writing' )
+					);
+				}
+			}
+
 			self::log_event(
 				(int) $row->id,
 				$give_up ? 'Abandoned after stalling' : 'Reclaimed after stalling',
