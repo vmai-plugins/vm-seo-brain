@@ -832,15 +832,16 @@ class VMSB_Content {
 				. "Return ONLY 'PASS' or 'FAIL: [Reason]'.";
 
 			$verification = $this->ai->generate( $verify_prompt, array( 'complexity' => 'standard', 'persona' => 'auditor' ) );
+			$fact_check_flag = '';
 			if ( ! empty($verification['ok']) && 0 === stripos(trim($verification['text']), 'FAIL') ) {
 				$fail_reason = trim($verification['text']);
-				// If failure is merely about unverifiable spiritual lineage or organization details, do not discard
+				// If failure is merely about unverifiable spiritual lineage or organization details, note and proceed
 				if ( stripos($fail_reason, 'founder') !== false || stripos($fail_reason, 'maharaj') !== false || stripos($fail_reason, 'lineage') !== false || stripos($fail_reason, 'facility') !== false || stripos($fail_reason, 'ashram') !== false ) {
 					$this->log->info( 'content', 'Fact-checker flagged business context note (bypassed): ' . $fail_reason );
 				} else {
-					$reason = "Independent Verification Failed: " . $fail_reason;
-					$wpdb->update( $this->table(), array( 'status' => 'failed', 'last_error' => $reason ), array( 'id' => $item->id ) );
-					return new WP_Error( 'vmsb_verification', $reason );
+					$this->log->warn( 'content', 'Fact-checker flagged claim: ' . $fail_reason );
+					// Hold as editorial draft for review rather than aborting production and discarding content
+					$fact_check_flag = $fail_reason;
 				}
 			}
 		}
@@ -872,8 +873,11 @@ class VMSB_Content {
 		}
 
 		// A held draft never auto-publishes, whatever the settings say.
-		$held   = ( 'review' === $report['verdict'] );
+		$held   = ( 'review' === $report['verdict'] ) || ! empty( $fact_check_flag );
 		$status = ( $auto && ! $review && ! $held ) ? 'publish' : 'draft';
+		if ( ! empty( $fact_check_flag ) && empty( $cap_note ) ) {
+			$cap_note = 'Fact-check review: ' . wp_trim_words( $fact_check_flag, 15 );
+		}
 
 		// Scenario: High-Quality CPT Support (Destinations, Events, etc.)
 		//
@@ -953,6 +957,10 @@ class VMSB_Content {
 
 		if ( $item->content_language ) {
 			update_post_meta( $post_id, '_vmsb_content_language', $item->content_language );
+		}
+
+		if ( ! empty( $fact_check_flag ) ) {
+			update_post_meta( $post_id, '_vmsb_fact_check_note', $fact_check_flag );
 		}
 
 		if ( $held && class_exists( 'VMSB_Webhooks' ) ) {
