@@ -28,7 +28,7 @@ class VMSB_Forecaster {
 
 		$rows = $wpdb->get_results(
 			"SELECT snapshot_date, clicks, impressions, indexed_pages FROM {$wpdb->prefix}vmsb_metrics
-			 WHERE source = 'gsc' ORDER BY snapshot_date DESC LIMIT 60"
+			 WHERE source = 'gsc' AND NOT (clicks = 0 AND impressions > 500) ORDER BY snapshot_date DESC LIMIT 60"
 		);
 
 		if ( count( $rows ) < 7 ) {

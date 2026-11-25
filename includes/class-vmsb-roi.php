@@ -224,9 +224,14 @@ class VMSB_ROI {
 			$actual_rate = round( ( (int) $row['conversions'] / (int) $row['sessions'] ) * 100, 2 );
 		}
 
-		$pages_with_cta = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_vmsb_cta_inserted'" );
-		$total_posts    = (int) ( wp_count_posts( 'post' )->publish ?? 0 );
-		$cta_coverage   = $total_posts > 0 ? round( $pages_with_cta / $total_posts * 100 ) : 0;
+		$pages_with_cta = (int) $wpdb->get_var(
+			"SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
+			 LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_vmsb_cta_inserted'
+			 WHERE p.post_status = 'publish' AND p.post_type IN ('post','togo_trip')
+			   AND (pm.meta_id IS NOT NULL OR p.post_content LIKE '%tc-growth-cta-box%' OR p.post_content LIKE '%wa.me/91%')"
+		);
+		$total_posts    = max( 1, (int) ( wp_count_posts( 'post' )->publish ?? 0 ) );
+		$cta_coverage   = round( min( 100, ( $pages_with_cta / $total_posts ) * 100 ) );
 
 		$brain  = new VMSB_Brain();
 		$goal   = VMSB_Settings::get( 'conversion_goal', 'a lead or sale' );

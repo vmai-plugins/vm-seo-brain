@@ -178,6 +178,7 @@ class VMSB_Scheduler {
 		VMSB_Task_Runner::queue( 'link_index', array( 'limit' => 60 ), 94, 'Keep the internal link graph current.' );
 		VMSB_Task_Runner::queue( 'issue_scan', array( 'limit' => 100 ), 88, 'Daily technical and on-page audit.' );
 		VMSB_Task_Runner::queue( 'traffic_forecast', array(), 40, 'Refresh the traffic forecast.' );
+		VMSB_Task_Runner::queue( 'conversion_forecast', array(), 38, 'Refresh the conversion and ROI forecast.' );
 		VMSB_Task_Runner::queue( 'sheet_push', array(), 35, 'Mirror the content plan to Google Sheets.' );
 
 		if ( (int) VMSB_Settings::get( 'learning_enabled' ) && class_exists( 'VMSB_Outcome_Ledger' ) ) {

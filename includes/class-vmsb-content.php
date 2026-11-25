@@ -174,7 +174,7 @@ class VMSB_Content {
 		$uid = substr( md5( $keyword ), 0, 24 );
 		$now = current_time( 'mysql', true );
 
-		$status = VMSB_Settings::get('posts_per_day') >= 10 ? 'approved' : 'planned';
+		$status = self::default_plan_status();
 
 		$wpdb->query( $wpdb->prepare(
 			"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, secondary_keywords, cluster, intent, content_type, brief, internal_links, target_words, priority, scheduled_for, status, created_at, updated_at)
@@ -272,7 +272,7 @@ class VMSB_Content {
 			}
 
 			$uid = substr( md5( $suggested_kw ), 0, 24 );
-			$status = VMSB_Settings::get('posts_per_day') >= 10 ? 'approved' : 'planned';
+			$status = self::default_plan_status();
 
 			$inserted = $wpdb->query( $wpdb->prepare(
 				"INSERT INTO {$this->table()} (row_uid, title, primary_keyword, secondary_keywords, cluster, intent, content_language, content_type, brief, internal_links, target_words, priority, status, created_at, updated_at)
@@ -566,6 +566,19 @@ class VMSB_Content {
 
 	/* ---------------------------------------------------------------- writing */
 
+	public static function default_plan_status() {
+		$auto_pub = (int) VMSB_Settings::get( 'auto_publish', 0 );
+		$review   = (int) VMSB_Settings::get( 'require_review', 1 );
+		return ( $auto_pub && ! $review ) || (int) VMSB_Settings::get( 'posts_per_day' ) >= 10 ? 'approved' : 'planned';
+	}
+
+	private static function is_operational_checklist_title( $title ) {
+		return (bool) preg_match(
+			'/^(?:fix\s+404|compress\s+images|optimize\s+page\s+speed|rewrite\s+meta|update\s+h1\/?h2|internal\s+linking\s+campaign|refresh\s+content\s+on\s+pages|add\s+faq\s+schema)/i',
+			trim( (string) $title )
+		);
+	}
+
 	public function due_items( $limit = 5 ) {
 		global $wpdb;
 
@@ -583,12 +596,39 @@ class VMSB_Content {
 			   AND updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)"
 		);
 
-		return $wpdb->get_results(
+		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT * FROM {$this->table()} WHERE status = 'approved' AND (post_id IS NULL OR post_id = 0) AND (scheduled_for IS NULL OR scheduled_for <= UTC_TIMESTAMP()) ORDER BY priority DESC, scheduled_for ASC LIMIT %d",
 				(int) $limit
 			)
 		);
+
+		// In autonomous hands-off mode, promote due 'planned' items automatically when approved queue empties.
+		if ( empty( $rows ) && 'approved' === self::default_plan_status() ) {
+			$planned_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT id FROM {$this->table()} WHERE status = 'planned' AND (post_id IS NULL OR post_id = 0) ORDER BY priority DESC, scheduled_for ASC LIMIT %d",
+					(int) $limit
+				)
+			);
+			foreach ( $planned_ids as $pid ) {
+				$wpdb->update(
+					$this->table(),
+					array( 'status' => 'approved', 'scheduled_for' => gmdate( 'Y-m-d H:i:s' ), 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ),
+					array( 'id' => (int) $pid )
+				);
+			}
+			if ( ! empty( $planned_ids ) ) {
+				$rows = $wpdb->get_results(
+					$wpdb->prepare(
+						"SELECT * FROM {$this->table()} WHERE status = 'approved' AND (post_id IS NULL OR post_id = 0) AND (scheduled_for IS NULL OR scheduled_for <= UTC_TIMESTAMP()) ORDER BY priority DESC, scheduled_for ASC LIMIT %d",
+						(int) $limit
+					)
+				);
+			}
+		}
+
+		return $rows;
 	}
 
 	/**
@@ -1551,6 +1591,9 @@ class VMSB_Content {
 	 * with post_type_exists()) should ever pass one.
 	 */
 	public function plan_specific( $title, $keyword, $brief, $cluster = '', $is_pillar = 0, $status = 'approved', $content_type = '' ) {
+		if ( self::is_operational_checklist_title( $title ) ) {
+			return 0;
+		}
 		global $wpdb;
 		$uid = substr( md5( $keyword . '|' . $title ), 0, 24 );
 		$now = current_time( 'mysql', true );

@@ -487,8 +487,9 @@ class VMSB_Task_Runner {
 				$faq    = ( new VMSB_Schema() )->sweep( 5 );
 				$entity = ( new VMSB_Schema_Entity() )->sweep( 10 );
 				return array( 'schema' => $faq, 'entity' => $entity );
-			case 'roi_scan':         return ( new VMSB_ROI() )->find_leaks( 15 );
-			case 'roi_sweep':        return ( new VMSB_ROI() )->sweep( 3 );
+			case 'roi_scan':             return ( new VMSB_ROI() )->find_leaks( 15 );
+			case 'roi_sweep':            return ( new VMSB_ROI() )->sweep( 3 );
+			case 'conversion_forecast':  return ( new VMSB_ROI() )->forecast();
 			case 'ctr_conclude':     return ( new VMSB_CTR() )->conclude_due();
 			case 'backlink_shield':  return ( new VMSB_Backlinks() )->shield_scan( 20 );
 			case 'weekly_roadmap':   return ( new VMSB_Commander() )->execute( '/report' );

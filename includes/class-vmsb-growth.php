@@ -94,6 +94,16 @@ class VMSB_Growth {
 						if ( empty( $r->snap_date ) ) {
 							continue;
 						}
+						// Do not overwrite higher-completeness native GSC metrics (e.g., direct export/API backfill).
+						$existing = $wpdb->get_row(
+							$wpdb->prepare(
+								"SELECT clicks, impressions FROM {$this->table()} WHERE snapshot_date = %s AND source = 'gsc' LIMIT 1",
+								$r->snap_date
+							)
+						);
+						if ( $existing && ( (int) $existing->clicks > (int) $r->clicks || (int) $existing->impressions > (int) $r->impressions * 1.15 ) ) {
+							continue;
+						}
 						$wpdb->replace(
 							$this->table(),
 							array(
