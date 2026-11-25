@@ -1120,7 +1120,10 @@ class VMSB_AI_Router {
 		if ( ! $url || ! $key ) {
 			return $this->fail( 'OmniRoute is not configured.' );
 		}
-		$model = isset( $args['forced_model'] ) ? $args['forced_model'] : VMSB_Settings::get( 'omniroute_text_model', 'auto' );
+		$model = isset( $args['forced_model'] ) ? $args['forced_model'] : VMSB_Settings::get( 'omniroute_text_model', 'antigravity/gemini-3-flash' );
+		if ( in_array( $model, array( 'auto', 'auto/best-chat', 'agy/claude-sonnet-4-6' ), true ) ) {
+			$model = 'antigravity/gemini-3-flash';
+		}
 		$body = array(
 			'model'       => $model,
 			'messages'    => $this->messages( $prompt, $args ),
@@ -1130,8 +1133,14 @@ class VMSB_AI_Router {
 		if ( $args['json'] ) {
 			$body['response_format'] = array( 'type' => 'json_object' );
 		}
-		$res = $this->post( $url . '/v1/chat/completions', $body, array( 'Authorization' => 'Bearer ' . $key ) );
-		return $this->from_openai_shape( $res, $model );
+		$res    = $this->post( $url . '/v1/chat/completions', $body, array( 'Authorization' => 'Bearer ' . $key ) );
+		$parsed = $this->from_openai_shape( $res, $model );
+		if ( empty( $parsed['ok'] ) && 'antigravity/gemini-3-flash' !== $model && false !== stripos( (string) ( $parsed['error'] ?? '' ), 'not found' ) ) {
+			$body['model'] = 'antigravity/gemini-3-flash';
+			$res           = $this->post( $url . '/v1/chat/completions', $body, array( 'Authorization' => 'Bearer ' . $key ) );
+			$parsed        = $this->from_openai_shape( $res, 'antigravity/gemini-3-flash' );
+		}
+		return $parsed;
 	}
 
 	/* ---------------------------------------------------------------- plumbing */

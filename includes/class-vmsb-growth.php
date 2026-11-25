@@ -33,6 +33,8 @@ class VMSB_Growth {
 	public function snapshot() {
 		global $wpdb;
 
+		$gsc_synced = false;
+
 		if ( $this->google->is_connected() ) {
 			$sessions = $this->google->ga4_sessions_by_day( 3 );
 			if ( ! is_wp_error( $sessions ) ) {
@@ -57,7 +59,8 @@ class VMSB_Growth {
 			}
 
 			$rows = $this->google->gsc_query( array( 'date' ), 7, 30 );
-			if ( ! is_wp_error( $rows ) ) {
+			if ( ! is_wp_error( $rows ) && ! empty( $rows ) ) {
+				$gsc_synced = true;
 				foreach ( $rows as $row ) {
 					$wpdb->replace(
 						$this->table(),
@@ -69,6 +72,39 @@ class VMSB_Growth {
 							'avg_position'  => (float) $row['position'],
 						)
 					);
+				}
+			}
+		}
+
+		// Fallback to Rank Math's local Search Console analytics mirror whenever
+		// Broker OAuth is disconnected or expired so Growth & Forecaster never go blind.
+		if ( ! $gsc_synced ) {
+			$rm_gsc = $wpdb->prefix . 'rank_math_analytics_gsc';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $rm_gsc ) ) === $rm_gsc ) {
+				$rm_rows = $wpdb->get_results(
+					"SELECT DATE(created) AS snap_date, SUM(clicks) AS clicks, SUM(impressions) AS impressions, AVG(position) AS avg_pos
+					 FROM {$rm_gsc}
+					 WHERE created >= DATE_SUB(CURDATE(), INTERVAL 45 DAY)
+					 GROUP BY DATE(created)
+					 ORDER BY snap_date DESC
+					 LIMIT 45"
+				);
+				if ( ! empty( $rm_rows ) ) {
+					foreach ( $rm_rows as $r ) {
+						if ( empty( $r->snap_date ) ) {
+							continue;
+						}
+						$wpdb->replace(
+							$this->table(),
+							array(
+								'snapshot_date' => $r->snap_date,
+								'source'        => 'gsc',
+								'clicks'        => (int) $r->clicks,
+								'impressions'   => (int) $r->impressions,
+								'avg_position'  => round( (float) $r->avg_pos, 2 ),
+							)
+						);
+					}
 				}
 			}
 		}
@@ -138,6 +174,47 @@ class VMSB_Growth {
 
 		$last_7 = (int) $wpdb->get_var( "SELECT COALESCE(SUM(sessions),0) FROM {$this->table()} WHERE source = 'ga4' AND snapshot_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)" );
 		$prev_7 = (int) $wpdb->get_var( "SELECT COALESCE(SUM(sessions),0) FROM {$this->table()} WHERE source = 'ga4' AND snapshot_date BETWEEN DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND DATE_SUB(CURDATE(), INTERVAL 8 DAY)" );
+
+		// If GA4 telemetry is disconnected/empty, fall back cleanly to GSC organic
+		// clicks so VMSB_Growth & VMSB_Goal never treat real traffic as zero.
+		if ( 0 === $last_7 && 0 === $since_install ) {
+			$baseline = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COALESCE(SUM(clicks),0) FROM {$this->table()} WHERE source = 'gsc' AND snapshot_date < %s AND snapshot_date >= DATE_SUB(%s, INTERVAL 30 DAY)",
+					gmdate( 'Y-m-d', $installed_at ),
+					gmdate( 'Y-m-d', $installed_at )
+				)
+			);
+			$since_install = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COALESCE(SUM(clicks),0) FROM {$this->table()} WHERE source = 'gsc' AND snapshot_date >= %s",
+					gmdate( 'Y-m-d', $installed_at )
+				)
+			);
+			$last_7 = (int) $wpdb->get_var( "SELECT COALESCE(SUM(clicks),0) FROM {$this->table()} WHERE source = 'gsc' AND snapshot_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)" );
+			$prev_7 = (int) $wpdb->get_var( "SELECT COALESCE(SUM(clicks),0) FROM {$this->table()} WHERE source = 'gsc' AND snapshot_date BETWEEN DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND DATE_SUB(CURDATE(), INTERVAL 8 DAY)" );
+
+			// If the newest GSC row is stale (no rows in the last 7 days), use the latest available 14-day GSC window.
+			if ( 0 === $last_7 ) {
+				$latest_gsc = $wpdb->get_var( "SELECT MAX(snapshot_date) FROM {$this->table()} WHERE source = 'gsc'" );
+				if ( $latest_gsc ) {
+					$last_7 = (int) $wpdb->get_var(
+						$wpdb->prepare(
+							"SELECT COALESCE(SUM(clicks),0) FROM {$this->table()} WHERE source = 'gsc' AND snapshot_date BETWEEN DATE_SUB(%s, INTERVAL 6 DAY) AND %s",
+							$latest_gsc,
+							$latest_gsc
+						)
+					);
+					$prev_7 = (int) $wpdb->get_var(
+						$wpdb->prepare(
+							"SELECT COALESCE(SUM(clicks),0) FROM {$this->table()} WHERE source = 'gsc' AND snapshot_date BETWEEN DATE_SUB(%s, INTERVAL 13 DAY) AND DATE_SUB(%s, INTERVAL 7 DAY)",
+							$latest_gsc,
+							$latest_gsc
+						)
+					);
+				}
+			}
+		}
 
 		$weekly_growth = $prev_7 > 0 ? ( ( $last_7 - $prev_7 ) / $prev_7 ) : 0;
 		$daily_now     = $last_7 / 7;

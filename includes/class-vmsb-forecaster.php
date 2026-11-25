@@ -17,6 +17,15 @@ class VMSB_Forecaster {
 	 */
 	public function forecast() {
 		global $wpdb;
+
+		// Ensure recent GSC metrics exist (backfilling from Rank Math GSC if Google OAuth lapsed).
+		$latest_gsc = $wpdb->get_var( "SELECT MAX(snapshot_date) FROM {$wpdb->prefix}vmsb_metrics WHERE source = 'gsc'" );
+		if ( ! $latest_gsc || strtotime( $latest_gsc ) < ( time() - 3 * DAY_IN_SECONDS ) ) {
+			if ( class_exists( 'VMSB_Growth' ) ) {
+				( new VMSB_Growth() )->snapshot();
+			}
+		}
+
 		$rows = $wpdb->get_results(
 			"SELECT snapshot_date, clicks, impressions, indexed_pages FROM {$wpdb->prefix}vmsb_metrics
 			 WHERE source = 'gsc' ORDER BY snapshot_date DESC LIMIT 60"
@@ -63,7 +72,7 @@ class VMSB_Forecaster {
 			$projected_90 += $v;
 		}
 
-		$trend = $slope > 0.5 ? 'growing' : ( $slope < -0.5 ? 'declining' : 'flat' );
+		$trend = $slope > 0.2 ? 'growing' : ( $slope < -0.2 ? 'declining' : 'flat' );
 
 		// Confidence tracks how much of the historical window actually has
 		// variation - a flat, sparse series should not be reported with false

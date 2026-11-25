@@ -140,16 +140,16 @@ class VMSB_Settings {
 			// these bounds - it never touches auto_publish or require_review.
 			'goal_autopilot'    => 1,
 			'goal_min_posts'    => 1,
-			'goal_max_posts'    => 12,
+			'goal_max_posts'    => 4,
 			'staleness_threshold_days' => 365,
 
-			// Vector memory. Thresholds at 0 auto-calibrate to the embedding model.
+			// Vector memory. Safe anti-cannibalization defaults.
 			'vector_enabled'         => 1,
 			'embedding_provider'     => 'auto', // auto|openai|gemini|ollama|local
 			'embedding_model'        => '',
-			'vector_dup_threshold'   => 0,
-			'vector_cannibal_threshold' => 0,
-			'vector_related_threshold'  => 0,
+			'vector_dup_threshold'   => 0.85,
+			'vector_cannibal_threshold' => 0.78,
+			'vector_related_threshold'  => 0.65,
 
 			// Quality gate. Nothing generated reaches a URL without passing.
 			'quality_gate'          => 1,
@@ -237,9 +237,10 @@ class VMSB_Settings {
 
 			'omniroute_url'        => '',
 			'omniroute_key'        => '',
-			'omniroute_text_model' => 'auto',
-			'omniroute_image_model'=> 'flux',
+			'omniroute_text_model' => 'antigravity/gemini-3-flash',
+			'omniroute_image_model'=> 'antigravity/gemini-3.1-flash-image',
 			'omniroute_video_model'=> 'luma-ray',
+			'feature_omniroute_images' => 1,
 
 			// Feature Toggles (Granular Control)
 			'feature_aeo'        => 1,

@@ -78,6 +78,13 @@ class VMSB_Silo {
 			return array( 'silos' => array() );
 		}
 
+		// Sanitize quotes in titles to prevent JSON corruption in memory
+		array_walk_recursive( $map, function( &$val ) {
+			if ( is_string( $val ) ) {
+				$val = str_replace( array( '\\"', '"' ), "'", $val );
+			}
+		} );
+
 		$this->brain->remember( 'silo', 'map', $map, 0.8, 'silo' );
 		$this->log->info( 'silo', 'Silo map generated.', array( 'silos' => count( $map['silos'] ) ) );
 		return $map;

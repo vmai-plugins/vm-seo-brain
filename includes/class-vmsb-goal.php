@@ -205,6 +205,19 @@ class VMSB_Goal {
 
 		$current = max( 1, (int) VMSB_Settings::get( 'posts_per_day', 3 ) );
 
+		// Quality/Cannibalization Guardrail: when telemetry is offline (daily_now <= 0)
+		// or many existing pages are stuck in striking distance / low CTR, stop scaling
+		// new-post volume blindly so the system harvests quick wins instead of creating clones.
+		$harvest_priority = false;
+		if ( (float) ( $s['daily_now'] ?? 0 ) <= 0 ) {
+			$harvest_priority = true;
+		} elseif ( ! empty( $s['levers'] ) && is_array( $s['levers'] ) ) {
+			$sd_count = (int) ( $s['levers'][0]['count'] ?? 0 ) + (int) ( $s['levers'][1]['count'] ?? 0 );
+			if ( $sd_count >= 25 ) {
+				$harvest_priority = true;
+			}
+		}
+
 		switch ( $s['posture'] ) {
 			case 'ahead':
 				// Comfortably clear: ease off and let the compounding work.
@@ -218,19 +231,26 @@ class VMSB_Goal {
 				break;
 
 			case 'behind':
-				$pace = min( $ceiling, $current + 1 );
-				$note = 'Behind pace. Raising publishing one step and prioritising quick wins.';
+				if ( $harvest_priority ) {
+					$pace = max( $floor, min( $current, 3 ) );
+					$note = 'Behind pace with high striking-distance / CTR backlog. Capping new posts and prioritizing existing-page wins first.';
+				} else {
+					$pace = min( $ceiling, $current + 1 );
+					$note = 'Behind pace. Raising publishing one step and prioritising quick wins.';
+				}
 				break;
 
 			case 'unreachable':
 			default:
-				// The point of the whole design: stop climbing.
-				$pace = $ceiling;
-				$note = sprintf(
-					'This phase needs about %s sessions/day against the %s/day running now - beyond what organic search compounds to in the time left. Holding the maximum sustainable pace; the phase will be re-based when the window closes.',
-					number_format_i18n( (float) $s['required_daily'], 1 ),
-					number_format_i18n( (float) $s['daily_now'], 1 )
-				);
+				// Stop climbing blindly when existing optimization levers are unharvested.
+				$pace = $harvest_priority ? max( $floor, min( $current, 3 ) ) : $ceiling;
+				$note = $harvest_priority
+					? 'Target gap is wide while striking-distance & CTR backlog remains open. Holding sustainable pace (max 3 new/day) and focusing on quick-win rewrites.'
+					: sprintf(
+						'This phase needs about %s sessions/day against the %s/day running now - beyond what organic search compounds to in the time left. Holding the maximum sustainable pace; the phase will be re-based when the window closes.',
+						number_format_i18n( (float) $s['required_daily'], 1 ),
+						number_format_i18n( (float) $s['daily_now'], 1 )
+					);
 				break;
 		}
 

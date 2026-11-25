@@ -457,11 +457,16 @@ class VMSB_RankMath_Optimizer {
 
 		$sep = false !== mb_strpos( $title, ':' ) ? ' - ' : ': ';
 		$new = $this->title_case( $keyword ) . $sep . $title;
-		if ( mb_strlen( $new ) > 120 ) {
-			return false; // Would be truncated in the SERP anyway.
+		if ( mb_strlen( $new ) > 62 ) {
+			$kw_tc = $this->title_case( $keyword );
+			if ( mb_strlen( $kw_tc ) <= 52 ) {
+				$new = $kw_tc . ' (2026 Guide)';
+			} else {
+				return false; // Avoid Google SERP truncation (>62 chars kills CTR).
+			}
 		}
 
-		update_post_meta( $post_id, 'rank_math_title', $new );
+		update_post_meta( $post_id, 'rank_math_title', mb_substr( $new, 0, 62 ) );
 		return true;
 	}
 
@@ -529,8 +534,13 @@ class VMSB_RankMath_Optimizer {
 		}
 
 		$new_title = trim( $title ) . $suffix;
-		if ( mb_strlen( $new_title ) > 115 ) {
-			$new_title = mb_substr( $title, 0, 85 ) . $suffix;
+		if ( mb_strlen( $new_title ) > 62 ) {
+			if ( mb_strlen( trim( $title ) ) <= 60 ) {
+				return false; // Keep readable non-truncated title over forced suffix bloat.
+			}
+			$cut       = mb_substr( trim( $title ), 0, max( 25, 62 - mb_strlen( $suffix ) ) );
+			$cut       = preg_replace( '/\s+\S*$/u', '', $cut );
+			$new_title = trim( $cut ) . $suffix;
 		}
 
 		update_post_meta( $post_id, 'rank_math_title', $new_title );

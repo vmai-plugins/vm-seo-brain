@@ -420,8 +420,15 @@ class VMSB_Image_Engine {
 			return new WP_Error( 'vmsb_omniroute', 'OmniRoute is not configured.' );
 		}
 
-		$model = VMSB_Settings::get( 'omniroute_image_model', 'flux' );
-		$size  = (int) VMSB_Settings::get( 'image_width', 1200 ) . 'x' . (int) VMSB_Settings::get( 'image_height', 675 );
+		$model = VMSB_Settings::get( 'omniroute_image_model', 'antigravity/gemini-3.1-flash-image' );
+		if ( empty( $model ) || in_array( $model, array( 'flux', 'aihorde/stable_diffusion', 'nvidia/black-forest-labs/flux.1-schnell' ), true ) ) {
+			$model = 'antigravity/gemini-3.1-flash-image';
+		}
+
+		$w     = (int) VMSB_Settings::get( 'image_width', 1200 );
+		$h     = (int) VMSB_Settings::get( 'image_height', 675 );
+		$ratio = $w / max( 1, $h );
+		$size  = ( $ratio > 1.35 ) ? '1200x630' : ( ( $ratio < 0.75 ) ? '1080x1350' : '1024x1024' );
 
 		$body = array(
 			'prompt'          => $prompt,
