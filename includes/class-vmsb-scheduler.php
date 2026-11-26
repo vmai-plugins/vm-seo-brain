@@ -110,7 +110,14 @@ class VMSB_Scheduler {
 		// instead of 3 hours. process(4) further down this same method drains
 		// the queue, so throughput is unchanged - what changes is that a crash
 		// now costs one retryable task rather than the run plus the row.
-		$due = $content->due_items( max( 1, (int) ceil( (int) VMSB_Settings::get( 'posts_per_day' ) / 8 ) ) );
+		$slice = max( 1, (int) ceil( (int) VMSB_Settings::get( 'posts_per_day', 3 ) / 8 ) );
+		if ( (int) VMSB_Settings::get( 'auto_publish' ) && ! (int) VMSB_Settings::get( 'require_review' ) ) {
+			$published_today = (int) get_option( 'vmsb_pub_' . gmdate( 'Ymd' ), 0 );
+			$cap             = max( 1, (int) VMSB_Settings::get( 'posts_per_day', 3 ) );
+			$remaining       = max( 0, $cap - $published_today );
+			$slice           = min( $slice, $remaining );
+		}
+		$due = $slice > 0 ? $content->due_items( $slice ) : array();
 		foreach ( $due as $item ) {
 			VMSB_Task_Runner::queue(
 				'produce_post',

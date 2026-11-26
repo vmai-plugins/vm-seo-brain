@@ -574,7 +574,7 @@ class VMSB_Content {
 
 	private static function is_operational_checklist_title( $title ) {
 		return (bool) preg_match(
-			'/^(?:fix\s+404|compress\s+images|optimize\s+page\s+speed|rewrite\s+meta|update\s+h1\/?h2|internal\s+linking\s+campaign|refresh\s+content\s+on\s+pages|add\s+faq\s+schema)/i',
+			'/^(?:fix\s+404|compress\s+images|optimize\s+page\s+speed|rewrite\s+meta|update\s+h1\/?h2|internal\s+linking\s+campaign|refresh\s+content\s+on\s+pages|add\s+faq\s+schema|mindfulness\s+and\s+leadership)|(?:\btech\s+founders\b|\bplanetary\s+shantis\b|\bastrological\s+tourism\b|\bobservatories\s+and\s+jyotish\b)/i',
 			trim( (string) $title )
 		);
 	}
@@ -734,7 +734,11 @@ class VMSB_Content {
 
 		// 2026 Strategy: Cannibalization & Semantic Guard
 		if ( class_exists('VMSB_Vector_Store') && (int) VMSB_Settings::get('vector_enabled') ) {
-			$dupe_check = VMSB_Vector_Store::search( $item->title . ' ' . $item->primary_keyword, array( 'limit' => 1, 'threshold' => 0.90 ) );
+			$dup_thresh = (float) VMSB_Settings::get( 'vector_dup_threshold', 0.85 );
+			if ( $dup_thresh <= 0 || $dup_thresh > 0.90 ) {
+				$dup_thresh = 0.85;
+			}
+			$dupe_check = VMSB_Vector_Store::search( $item->title . ' ' . $item->primary_keyword, array( 'limit' => 1, 'threshold' => $dup_thresh ) );
 			if ( ! empty($dupe_check) ) {
 				$other_id = $dupe_check[0]['object_id'];
 
@@ -1705,6 +1709,11 @@ class VMSB_Content {
 		// 1. Instant Indexing
 		if ( class_exists('VMSB_Indexing') ) {
 			( new VMSB_Indexing() )->submit( $post_id );
+		}
+
+		// 1b. Immediate Semantic Vector Indexing so subsequent hourly runs detect this post
+		if ( class_exists('VMSB_Vector_Store') && method_exists('VMSB_Vector_Store', 'index_post') ) {
+			VMSB_Vector_Store::index_post( $post_id );
 		}
 
 		// 2. Internal Linking Autopilot (Link Genius Integration)
