@@ -93,17 +93,31 @@ class VMSB_Taxonomy {
 				if ( $deadline && time() >= $deadline ) {
 					break 2;
 				}
-				// Empty archive — a soft 404 waiting to happen.
-				if ( 0 === $term->count ) {
-					$fixer->record( 'term', $term->term_id, 'empty_archive', 'medium', sprintf( '%s "%s" has no posts.', $tax, $term->name ), array( 'taxonomy' => $tax ) );
-					$issues++;
+				// Respect explicit noindex terms and sitewide thin/empty archive noindex defense.
+				$rm_robots      = (array) get_term_meta( $term->term_id, 'rank_math_robots', true );
+				$is_noindexed   = in_array( 'noindex', $rm_robots, true );
+				$defense_active = defined( 'TC_SEO_DEFENSE_NOINDEX_THIN_TAX' ) && TC_SEO_DEFENSE_NOINDEX_THIN_TAX;
+
+				// Empty archive — skip if already noindexed in Rank Math or MU SEO defense.
+				if ( 0 === (int) $term->count ) {
+					if ( ! $is_noindexed && ! $defense_active ) {
+						$fixer->record( 'term', $term->term_id, 'empty_archive', 'medium', sprintf( '%s "%s" has no posts.', $tax, $term->name ), array( 'taxonomy' => $tax ) );
+						$issues++;
+					}
 					continue;
 				}
 
 				// Thin archive — one or two posts rarely justifies its own indexable page.
-				if ( $term->count <= 2 && 'post_tag' === $tax ) {
+				if ( (int) $term->count <= 2 && 'post_tag' === $tax ) {
+					if ( $is_noindexed || $defense_active ) {
+						continue;
+					}
 					$fixer->record( 'term', $term->term_id, 'thin_tag', 'medium', sprintf( 'Tag "%s" holds only %d posts.', $term->name, $term->count ), array( 'taxonomy' => $tax, 'count' => $term->count ) );
 					$issues++;
+				}
+
+				if ( $is_noindexed ) {
+					continue;
 				}
 
 				// No description — the archive has nothing to rank on.
